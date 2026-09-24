@@ -2653,3 +2653,72 @@ Compte propriétaire de test, connecté via Playwright (session réutilisée via
 ### Prochaine étape proposée
 
 Aucune côté Pro — les 17 écrans sont vérifiés, cohérents avec les lots précédents (14-33), et le seul bug réel trouvé est corrigé et revérifié en direct. Avec ce lot, les trois espaces (Public/Lot 38, Locataire/Lot 37, Pro/Lot 39) ont chacun fait l'objet d'un balayage complet coordonné à la demande de l'utilisateur.
+
+---
+
+## Lot 40 — Rejeu live de TEST-CASES.md §5 (Pro) : une fausse identité montrée à tout le monde, et une invitation qui n'invitait personne
+
+**Date** : 2026-09-24
+
+### Contexte : premier rejeu en conditions réelles des cas de test §5, sur le déploiement Vercel de production
+
+Périmètre : les 30 cas `PRO-01` à `PRO-30` de `TEST-CASES.md`, contre `https://im-hazel.vercel.app` (pas le serveur local), en parallèle avec `im-9e` (§3 Public + §6 Artisan) et `im-4e` (§4 Locataire).
+
+### Découverte 1 : le sélecteur « Contexte de travail » montrait une identité fictive à absolument tout le monde
+
+Signalé par `im-9e` en testant un compte propriétaire flambant neuf : le sélecteur de la sidebar Pro (« Koffi Dossou · 3 biens en propre » / « Agence Immo Cotonou · 11 biens sous mandat ») venait de `PRO_CONTEXTS`, un tableau codé en dur dans `useProSpace.ts` — **la même donnée pour n'importe quel compte**, sans lien avec `useAuthUser()`. Confirmé non-lié à une fuite de session façon Lot 36/37 (`GET /auth/me` renvoyait bien `first_name: null` pour ce compte neuf, pas les données d'un autre utilisateur) : c'est une identité entièrement inventée, jamais branchée sur rien de réel. Les onglets « Propriétaire/Agent/Agence » juste en dessous (`useProRole()`) souffraient du même mal — un simple `ref` local sans aucune donnée réelle derrière, ne filtrant jamais rien.
+
+Aucune des deux options (« perso », « agence ») n'a de source de données réelle exploitable : le contexte d'équipe/agence dépend d'I2 (bug serveur confirmé depuis le socle, jamais résolu). Plutôt que de réparer seulement le cas « perso » (en le reliant à `useAuthUser()`) et laisser « agence » fabriqué, tout le sélecteur a été retiré — avec lui les onglets de rôle et la bannière « Au nom de l'Agence Immo Cotonou » qui apparaissait en haut de chaque page en contexte agence. Cohérent avec la philosophie déjà appliquée à chaque fonctionnalité irréparable de ce projet (Google Sign-In, Kkiapay, équipements) : retirer plutôt que fabriquer.
+
+### Découverte 2 : le bouton « Envoyer l'invitation » n'envoyait rien du tout
+
+En corrigeant la découverte 1, `PRO-26` (« erreur 500 attendue d'I2 ») a été rejoué pour vérifier que l'erreur s'affichait proprement — mais aucune erreur n'est apparue : un écran de succès (« Invitation envoyée, `{email}` recevra un email… ») s'affichait à chaque fois, sans qu'aucune requête `POST /team/invite` ne parte jamais. Inspection de `ProInviteModal.vue` : `submit()` faisait littéralement `step.value = 'done'`, rien d'autre. Le formulaire entier (postes, permissions par poste, biens accessibles) était fabriqué en plus de la fausse confirmation — `BIENS = ['Résidence Étoile', 'Duplex Les Cocotiers', 'Villa Cadjéhoun']` codé en dur, sans lien avec les vrais biens du compte connecté.
+
+Plus grave que « la fonctionnalité ne marche pas » : un vrai propriétaire cliquant ce bouton croirait avoir réellement invité quelqu'un. Corrigé en remplaçant l'intégralité du formulaire par un message honnête d'indisponibilité (même principe que le gap Kkiapay de `PaymentModal.vue`, Lot 2) plutôt que de câbler un appel pour de vrai vers un endpoint dont le 500 est déjà confirmé (Lot 34) — cabler l'appel n'aurait changé aucun comportement observable pour l'utilisateur, seulement remplacé un mensonge par une erreur générique.
+
+`pro/mandats.vue` (`PRO-27`) a été vérifié dans la foulée : même famille de constat (liste de mandats et biens couverts entièrement fabriquée, zéro appel API) — pas retouché dans ce lot, signalé pour référence future.
+
+### Ce qui a été livré
+
+| Fichier | Rôle |
+|---|---|
+| `app/composables/useProSpace.ts` | `PRO_CONTEXTS`, `ProContext`, `useProContext()`, `useProRole()` retirés ; `useProSpace()` et `useProWallet()` (également mort — non utilisé ailleurs, vérifié par grep) supprimés |
+| `app/layouts/pro.vue` | Sélecteur « Contexte de travail », onglets de rôle, et bannière « Au nom de l'Agence Immo Cotonou » retirés ; l'identité réelle déjà affichée juste au-dessus (`displayName`/`roleLabel` via `useAuthUser()`) reste seule source d'identité dans la sidebar |
+| `app/components/pro/InviteModal.vue` | Réécrit entièrement — message d'indisponibilité honnête à la place du formulaire fabriqué et de son faux succès |
+
+### Ce qui est hors périmètre, et pourquoi
+
+- **`pro/mandats.vue`** : même situation que l'ex-`equipe.vue`, pas corrigé dans ce lot — signalé, pas engagé, pour ne pas élargir la portée au-delà de ce que ce lot a réellement vérifié en direct.
+- **Câbler `POST /team/invite` pour de vrai** : le 500 est déjà confirmé (Lot 34) — l'appeler réellement n'aurait produit qu'un message d'erreur générique supplémentaire, pas une fonctionnalité qui marche. Le message d'indisponibilité honnête atteint le même but (ne pas mentir) sans ce détour.
+
+### Tests automatisés
+
+Aucune fonction pure nouvelle extractible — retrait de composables liés à `useState` (contexte Nuxt), même situation que les lots précédents de cette famille.
+
+```
+Test Files  15 passed (15)
+     Tests  83 passed (83)   [inchangé]
+```
+
+### Vérification manuelle contre l'API live
+
+Les 30 cas `PRO-01` à `PRO-30` ont été rejoués contre `https://im-hazel.vercel.app` — détail complet dans `TEST-CASES.md`, section « Résultats d'exécution — §5 Espace Pro ». Points marquants :
+
+| Scénario | Résultat réel de l'API | Comportement observé |
+|---|---|---|
+| Compte neuf jamais vérifié KYC, tentative de création de bien (`PRO-02`) | `POST /property` → **403** `error.KYC_REQUIRED` | Message explicite affiché, conforme à l'attendu |
+| Édition d'unité, saisie rapide après ouverture (`PRO-04`, régression du Lot 39) | `PATCH .../units/:id` → 200 | Valeur bien conservée — non-régression confirmée |
+| Assignation d'un signalement à un artisan, texte libre (`PRO-18`) | `PATCH /signals/:id` → 200 | Assignation appliquée depuis le vrai formulaire |
+| Demande de retrait wallet propriétaire, MTN `66000001` (`PRO-28`) | `POST /wallet/withdraw` → **201**, `status: "pending"` | Écran de confirmation réel, cohérent avec la réponse |
+| « Envoyer l'invitation » (`PRO-26`), avant correctif | Aucun appel API | Faux écran de succès — voir découverte 2 |
+| Même flux, après correctif | Aucun appel API (intentionnel) | Message d'indisponibilité honnête, plus aucune fausse promesse |
+| Sidebar Pro, après déploiement du correctif (poussé par `im-9e`) | — | « Koffi Dossou » disparu, identité réelle affichée, 0 erreur console, aucune régression sur le reste de `/pro` |
+
+### Ce qui n'a pas été testé, et pourquoi
+
+- **PRO-01, 06, 09, 10, 15, 16, 22, 23, 24, 25** : détail des raisons dans `TEST-CASES.md` — principalement des données de test partagées avec d'autres sessions en cours (baux/interventions déjà dans un état terminal, pas de nouvelle donnée créée pour ne pas perturber le travail concurrent d'`im-9e`/`im-4e`).
+- **Déploiement** : ce lot a été commité et déployé par `im-9e` (accès git de cette session), pas par cette session elle-même — la revérification live post-déploiement est donc indirecte (confirmée par `im-9e`, revérifiée une seconde fois par cette session).
+
+### Prochaine étape proposée
+
+`pro/mandats.vue` reste la seule pièce restante de la même famille (mock non lié à I2 au sens propre — aucun appel API du tout, pas seulement bloqué). Sinon, avec ce lot, le rejeu live de `TEST-CASES.md` est complet pour les quatre espaces coordonnés (Public/Artisan `im-9e`, Locataire `im-4e`, Pro — cette session).

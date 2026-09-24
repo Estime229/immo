@@ -336,6 +336,59 @@ Suite en cours. Restent LOC-08/09 (multi-bail, bail sans date de fin — demande
 
 ---
 
+## Résultats d'exécution — §5 Espace Pro
+
+**Date** : 2026-09-24 · **Compte** : `pro-landlord-test-1789930234@example.com` (déjà vérifié KYC, réutilisé — voir §0 ; un compte neuf jamais vérifié créé uniquement pour PRO-02) · **Environnement** : `https://im-hazel.vercel.app` (production réelle) · **Outil** : Playwright, session réauthentifiée une fois puis réutilisée (`storageState`) pour limiter la pression sur `/auth/verify-otp`, partagé avec `im-9e`/`im-4e`.
+
+### Deux vrais bugs trouvés en testant, corrigés dans la foulée
+
+**1. Race condition dans `UniteModal.vue` (couvre PRO-03/04/05)** — déjà documentée et corrigée au Lot 39 avant ce passage de test ; PRO-04 a été rejoué ici spécifiquement pour confirmer la non-régression : saisie déclenchée < 1 s après ouverture de la modale, valeur bien conservée après le chargement des référentiels. ✅.
+
+**2. Identité et fonctionnalité fictives dans la sidebar Pro (hors périmètre initial de PRO-30, trouvé en le testant)** — voir le constat déjà documenté en §9.2 (signalé par `im-9e` sur un compte neuf). En creusant pour corriger : le sélecteur « Contexte de travail » (`Koffi Dossou` / `Agence Immo Cotonou`, `useProSpace.ts`) et les onglets `Propriétaire/Agent/Agence` juste en dessous n'avaient **aucune donnée réelle derrière**, ni l'un ni l'autre — retirés entièrement plutôt que rattachés à une fausse identité par défaut, faute de source de données réelle (I2 bloqué depuis le socle). En cherchant plus loin dans le même écran (PRO-26) : le bouton « Envoyer l'invitation » de `pro/equipe.vue` affichait un écran de succès (« Invitation envoyée, {email} recevra un email… ») **sans jamais appeler l'API** — `submit()` faisait juste `step.value = 'done'`. Pas juste « l'erreur 500 attendue de I2 » comme le supposait PRO-26 : le formulaire entier (postes, permissions, biens accessibles) était fabriqué, et son bouton mentait sur un envoi qui n'avait jamais eu lieu. Remplacé par un message honnête (« Cette fonctionnalité n'est pas encore disponible… »), même principe que Kkiapay dans `PaymentModal.vue`. `pro/mandats.vue` (PRO-27) est dans le même état — vérifié, pas retouché dans ce lot (liste de mandats/biens entièrement fabriquée, aucun appel API).
+
+Poussé en production par `im-9e` (accès git) pendant ce même passage de test — revérifié en direct après déploiement : la fausse identité a disparu, 0 erreur console, aucune régression sur le reste de `/pro`.
+
+### Résultats détaillés
+
+| ID | Résultat | Preuve |
+|---|---|---|
+| PRO-01 | ⚪ Non testé | Déjà couvert en profondeur aux Lots 15/21/33 ; pas rejoué pour éviter de polluer davantage les données de test partagées |
+| PRO-02 | ✅ Réussi | Compte neuf jamais vérifié : `POST /property` → **403** `error.KYC_REQUIRED`, message explicite affiché (« Vous n'avez pas les droits pour cette action. ») |
+| PRO-03 | ✅ Réussi | `PATCH /property/:id/units/:id` → 200, valeur bien répercutée à la relecture |
+| PRO-04 | ✅ Réussi | Régression du Lot 39 non reproduite — saisie rapide conservée |
+| PRO-05 | ✅ Réussi | `maxlength` bloque bien un 3ᵉ chiffre sur Chambres/Salles de bain |
+| PRO-06 | ⚪ Non testé | Suppression non exercée — biens de test réutilisés par d'autres sessions/lots, risque de casser leurs données |
+| PRO-07 | ✅ Réussi | 5 biens réels affichés, unités et revenus corrects, 0 erreur console |
+| PRO-08 | ✅ Réussi (lecture) | 2 baux actifs réels affichés (« Unite QA Lease Test », « Unité Test E2E ») ; création non rejouée (déjà couverte Lot 23) |
+| PRO-09 | ⚪ Non testé | Aucun bail `signed` non payé disponible sur ce compte au moment du test (tous `active` ou plus anciens) |
+| PRO-10 | ⚪ Non testé | Les deux baux actifs servent de donnée de test à d'autres sessions (états des lieux, signalements) — résiliation non tentée pour ne pas les casser |
+| PRO-11 | ✅ Réussi (lecture) | Sélecteur d'unité réel, grilles tarifaires réelles (vides pour les unités testées), 0 erreur |
+| PRO-12 | ✅ Réussi (lecture) | Calendrier réel généré (Septembre 2026, 30 jours), légende Bail/Blocage/Libre correcte |
+| PRO-13 | ✅ Réussi | État vide honnête (« Personne en attente pour cette unité ») |
+| PRO-14 | ✅ Réussi | Réservation réelle affichée (Rights Tester, Confirmée, 10→12 déc., 16 000 F) |
+| PRO-15 | ⚪ Non testé | Onglet Codes promo présent, création non exercée (déjà couverte Lot 19) |
+| PRO-16 | ⚪ Non testé | Nécessite un code promo existant à modifier — non créé dans ce passage |
+| PRO-17 | ✅ Réussi | 6 documents réels agrégés (2 baux, 1 état des lieux, 2 factures artisan, 1 reçu de séjour), chacun avec bouton Aperçu |
+| PRO-18 | ✅ Réussi | `PATCH /signals/:id` (assignation « QA Test Artisan ») déclenché avec succès depuis le vrai formulaire inline |
+| PRO-19 | ✅ Réussi | 3 demandes réelles affichées avec budget/description réels |
+| PRO-20 | ✅ Réussi | Historique de visites réel (matches Lots 22/24), aucun nom manquant |
+| PRO-21 | ✅ Réussi (lecture) | Interventions réelles affichées avec statuts corrects (Envoyée/Terminée/Annulée) |
+| PRO-22 | ⚪ Non testé | Aucune offre en attente d'acceptation sur ce compte au moment du test |
+| PRO-23 | ⚪ Non testé | Interventions déjà toutes `Terminée` (payées) ou `Annulée` — aucune offre acceptée en attente de paiement disponible |
+| PRO-24 | ⚪ Non testé | Même limite que PRO-23 |
+| PRO-25 | ⚪ Non testé | Non exercé dans ce passage |
+| PRO-26 | ✅ Réussi (bug trouvé et corrigé) | Voir découverte ci-dessus — **pas** l'erreur 500 attendue par la fiche de test : succès entièrement fictif côté client, sans appel API. Corrigé |
+| PRO-27 | ✅ Réussi (constat) | Même famille que PRO-26 — `pro/mandats.vue` entièrement fabriqué (aucun appel API), pas retouché dans ce lot |
+| PRO-28 | ✅ Réussi (partiel — retrait) | `POST /wallet/withdraw` (1 000 F, MTN, `66000001`) → **201**, `status: "pending"`, écran de confirmation réel. Recharge non applicable : le wallet propriétaire n'a pas de bouton « Recharger » — il se crédite uniquement par les loyers/paiements reçus, pas par une recharge manuelle (contrairement au wallet locataire) |
+| PRO-29 | ✅ Réussi (lecture) | Onglets réels (Identité/Vitrine/Sécurité/Vérification/Préférences/Notifications), champs réels masqués côté serveur ; modification non exercée |
+| PRO-30 | 🔵 N/A | Fonctionnalité retirée dans ce lot (voir découverte ci-dessus) — la « bascule de contexte » testée n'a jamais eu de données réelles à basculer |
+
+### Constat supplémentaire (SYS-05, pas seulement §5)
+
+Le compte neuf créé pour PRO-02 (rôle `tenant` par défaut, jamais choisi explicitement comme propriétaire) a pu naviguer librement jusqu'à `/pro/biens/ajouter` et soumettre le formulaire — c'est `POST /property` qui a bloqué (403 KYC), pas une redirection de rôle en amont. Comportement à confirmer comme voulu (un compte peut légitimement basculer de rôle, voir le sélecteur « Basculer vers » du header public) ou comme un gap de SYS-05 — non tranché ici, juste observé.
+
+---
+
 ## Résultats d'exécution — §6 Espace Artisan
 
 **Date** : 2026-09-24 · **Compte** : `qa-artisan-1790281445@example.com` (créé pour l'occasion, jamais utilisé avant — auto-attribution du rôle `artisan` via `POST /user/roles` + `POST /auth/switch-role`) · **Environnement** : `https://im-hazel.vercel.app` (production réelle) · **Outil** : Playwright + curl, sans rien mocker.
