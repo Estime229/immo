@@ -14,10 +14,10 @@ Document de référence pour tester manuellement la plateforme en conditions ré
 
 Fuite de session SSR entre utilisateurs (Lot 36), identité codée en dur dans le layout locataire (Lot 37) et dans le sélecteur de contexte Pro (« Koffi Dossou »), *race condition* dans l'édition d'unité (Lot 39), fil d'avancement du bail décalé d'une étape, formulaires fantômes qui simulaient un succès sans appeler l'API (invitation d'équipe, pièce d'identité, wallet/avis artisan), et l'absence totale de garde d'authentification sur les routes (`/locataire`, `/pro`, `/artisan`, `/kyc` chargeaient leur coquille même sans session valide).
 
-### 🔴 Priorité haute — reste à corriger
+### 🔴 Priorité haute
 
-1. **Paiement d'intervention artisan sans confirmation** (`app/pages/pro/artisans.vue:248`, `doPay`) — la seule action de toute la plateforme qui déplace de l'argent réel en un clic isolé, sans récapitulatif ni « Êtes-vous sûr ? ». Recommandation : réutiliser le patron à deux temps déjà présent ailleurs (suppression de compte, fin d'intervention artisan).
-2. **I2 — bug serveur confirmé** : `POST /team/invite` renvoie systématiquement une 500, quel que soit le contenu envoyé. Bloque tout l'espace équipe/mandats pour les comptes agence. Ne peut pas être corrigé côté front (déjà contourné honnêtement par un message d'indisponibilité) — à remonter à l'équipe backend.
+1. ~~**Paiement d'intervention artisan sans confirmation**~~ — **corrigé.** `app/pages/pro/artisans.vue` ouvre maintenant `ProPayInterventionModal` (`app/components/pro/PayInterventionModal.vue`) au lieu d'appeler `doPay()` directement : récapitulatif réel (montant total, part immédiate, part retenue en garantie avec % et durée, solde après paiement), bouton de confirmation désactivé si le solde est insuffisant. Vérifié en direct sur production, deux scénarios réels : solde insuffisant (montant réel affiché, bouton bloqué, rien envoyé à l'API) et solde suffisant (récapitulatif exact — « 18 000 FCFA / 15 300 versés / 2 700 retenus (15 %, 5 j) / 7 000 restants » — confirmé identique après coup par une relecture directe de l'API : `status: in_progress`, `retained_amount: 2700.00`).
+2. **I2 — bug serveur confirmé** : `POST /team/invite` renvoie systématiquement une 500, quel que soit le contenu envoyé. Bloque tout l'espace équipe/mandats pour les comptes agence. Ne peut pas être corrigé côté front (déjà contourné honnêtement par un message d'indisponibilité) — à remonter à l'équipe backend. **Seul point rouge restant.**
 
 ### 🟠 Priorité moyenne — vrais bugs/manques, non corrigés
 
@@ -511,7 +511,7 @@ Recherche systématique de tout `@click` déclenchant une action irréversible o
 
 | Action | Fichier | Ce qui se passe aujourd'hui | Risque réel |
 |---|---|---|---|
-| **Payer une intervention artisan** (débit wallet, peut être un montant important) | `app/pages/pro/artisans.vue:248` (`doPay`) | Un clic sur « Payer l'intervention » dans une liste débite immédiatement, aucun récapitulatif du montant | 🔴 Argent réel débité sans étape de recul |
+| ~~**Payer une intervention artisan**~~ | `app/components/pro/PayInterventionModal.vue` | **Corrigé** — récapitulatif réel + confirmation avant tout appel API, voir « Bilan final » en tête de document | ✅ |
 | **Demander un retrait** (wallet → Mobile Money) | `app/components/pro/RetraitModal.vue`, `app/components/artisan/RetraitModal.vue` | La modale elle-même sert de semi-confirmation, mais le bouton final (« Demander le retrait ») exécute directement — pas de récapitulatif « 50 000 F vers +229 97 XX XX XX, confirmer ? » | 🟠 Erreur de saisie (montant, numéro) non rattrapable avant envoi |
 | **Annuler une demande d'intervention artisan** | `app/pages/pro/artisans.vue:247` (`doCancel`) | Un clic annule directement | 🟡 |
 | **Annuler une visite** | `app/pages/locataire/visites.vue` | Un clic sur « Annuler » déclenche `PATCH /visits/:id/cancel` immédiatement | 🟡 Même patron, confirmé aussi côté Locataire — pas une exception Pro/Artisan |
@@ -549,4 +549,6 @@ Recherche systématique de tout `@click` déclenchant une action irréversible o
 
 ~~L'absence de garde d'authentification sur les routes (AUTH-08/SYS-04)~~ — **corrigée** (`app/middleware/auth.global.ts`, un seul fichier, déployé et revérifié en production).
 
-Il reste **le paiement d'intervention artisan sans confirmation** (§9.1, premier item) — la seule action de toute cette liste qui déplace de l'argent réel en un clic isolé, sans aucun garde-fou. C'est maintenant la priorité n°1 restante de cet audit.
+~~Le paiement d'intervention artisan sans confirmation~~ — **corrigé** (`app/components/pro/PayInterventionModal.vue`), déployé et revérifié en production avec un scénario réel de bout en bout.
+
+Il reste les autres actions sans confirmation listées en §9.1 (retrait, annulation de réservation/bail, suppression de document) — même patron à généraliser, priorité moyenne plutôt que haute puisqu'aucune n'engage un montant aussi direct que le paiement artisan. Le seul point réellement bloquant qui subsiste est **I2** (bug backend, hors de portée du front).
