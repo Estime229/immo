@@ -310,8 +310,9 @@ Pour chaque cas exécuté, noter : **ID**, **date**, **compte utilisé**, **Réu
 | LOC-16 | ✅ Réussi | Signature tenant sur l'EDL → `PATCH /inventories/:id/sign` **200**, `status` passe à `signed`, `tenant_signature` et `landlord_signature` tous deux renseignés |
 | LOC-17 | ✅ Réussi | Après signature complète : la fiche repasse en lecture seule, badge « Signé », date de signature affichée, plus aucun contrôle de signature visible |
 | LOC-24 | ✅ Réussi | « Publier une demande de logement » (demande générale, pas une candidature sur une annonce précise) → `POST /housing-requests` **201**, `status: "open"`, confirmation claire (« Les propriétaires correspondants peuvent maintenant vous répondre ») |
+| LOC-27 | ✅ Réussi | Message envoyé depuis une conversation existante (créée plus tôt via une demande de contact) → `POST /messaging/conversations/:id/messages` **201**, relu côté propriétaire (`GET` sur la même conversation avec le token du propriétaire) : le message apparaît bien dans son fil |
 
-**19/32 cas exécutés à ce stade.**
+**20/32 cas exécutés à ce stade.**
 
 ### Bug trouvé et corrigé : fil d'avancement du bail toujours en retard d'une étape
 

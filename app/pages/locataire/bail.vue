@@ -15,8 +15,9 @@ const { openPay } = usePaymentModal()
 onMounted(ensureLoaded)
 
 const LEASE_STEP_LABELS = ['Brouillon', 'En attente de signature', 'Signature complète', 'Actif']
+/** `current` de FeedbackStepper est 1-indexé (voir Stepper.vue) — découvert en direct, Lot 40 : un bail `active` affichait « Signature complète » comme étape courante, jamais « Actif ». */
 function stepIndexFor(status: LeaseStatus): number {
-  return { draft: 0, pending_signature: 1, signed: 2, active: 3, terminated: 3 }[status]
+  return { draft: 1, pending_signature: 2, signed: 3, active: 4, terminated: 4 }[status]
 }
 
 function formatDate(iso: string) {

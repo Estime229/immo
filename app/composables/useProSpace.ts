@@ -1,32 +1,9 @@
-import { formatFcfa } from './useProperties'
-
 export const PRO_PHOTOS = [
   'radial-gradient(120% 80% at 20% 0%, rgba(255,255,255,.42), transparent 58%), linear-gradient(148deg, #cfe3d4, #7fb489 52%, #164c33)',
   'radial-gradient(120% 80% at 20% 0%, rgba(255,255,255,.42), transparent 58%), linear-gradient(148deg, #f5dcc5, #de9c68 52%, #895328)',
   'radial-gradient(120% 80% at 20% 0%, rgba(255,255,255,.4), transparent 58%), linear-gradient(148deg, #e9f1f4, #8fb9c6 52%, #2a6478)',
   'radial-gradient(120% 80% at 20% 0%, rgba(255,255,255,.4), transparent 58%), linear-gradient(148deg, #fce8ec, #e3506b 52%, #8a2440)'
 ]
-
-export interface ProContext {
-  id: 'perso' | 'agence'
-  name: string
-  tag: string
-  color: string
-  count: string
-}
-
-export const PRO_CONTEXTS: ProContext[] = [
-  { id: 'perso', name: 'Koffi Dossou', tag: 'KD', color: 'var(--color-green-700)', count: '3 biens en propre' },
-  { id: 'agence', name: 'Agence Immo Cotonou', tag: 'IC', color: 'var(--color-clay-500)', count: '11 biens sous mandat' }
-]
-
-export function useProContext() {
-  return useState<'perso' | 'agence'>('proContext', () => 'perso')
-}
-
-export function useProRole() {
-  return useState<'proprietaire' | 'agent' | 'agence'>('proRole', () => 'agent')
-}
 
 export const NAV_GROUPS = [
   {
@@ -79,19 +56,6 @@ export const PAGE_TITLES: Record<string, string> = {
   reservations: 'Réservations', baux: 'Baux', edl: 'États des lieux', equipe: 'Équipe', mandats: 'Mandats',
   artisans: 'Artisans', wallet: 'Wallet', signalements: 'Signalements', messages: 'Messages',
   addBien: 'Ajouter un bien', newBail: 'Créer un bail', bienFiche: 'Fiche du bien'
-}
-
-export function useProSpace() {
-  const context = useProContext()
-  const role = useProRole()
-  const current = computed(() => PRO_CONTEXTS.find(c => c.id === context.value) ?? PRO_CONTEXTS[0]!)
-  return { context, role, current, contexts: PRO_CONTEXTS, formatFcfa }
-}
-
-/* ---- Wallet ---- */
-export function useProWallet() {
-  const balance = useState('proWalletBalance', () => 418000)
-  return { balance }
 }
 
 export function useProModal() {
