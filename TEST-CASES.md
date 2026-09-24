@@ -314,6 +314,28 @@ Suite en cours — les cas dépendant d'un bail actif (LOC-02, 04-09, 14, 25) de
 
 ---
 
+## Résultats d'exécution — §6 Espace Artisan
+
+**Date** : 2026-09-24 · **Compte** : `qa-artisan-1790281445@example.com` (créé pour l'occasion, jamais utilisé avant — auto-attribution du rôle `artisan` via `POST /user/roles` + `POST /auth/switch-role`) · **Environnement** : `https://im-hazel.vercel.app` (production réelle) · **Outil** : Playwright + curl, sans rien mocker.
+
+| ID | Résultat | Preuve |
+|---|---|---|
+| ART-01 | ✅ Réussi | Rôle `artisan` auto-attribué et actif, espace `/artisan` accessible immédiatement, 0 erreur console |
+| ART-02 | ✅ Réussi | `/artisan/profil` accessible sur un compte tout juste créé, 0 erreur console |
+| ART-03 | ✅ Réussi | Point d'entrée upload réel (`<input type="file">`) présent sous l'onglet « Portfolio » — **piège de script, pas de bug produit** : invisible tant qu'on n'a pas cliqué l'onglet, ce qui a d'abord fait échouer ce test avant vérification manuelle |
+| ART-07 | ✅ Réussi | Solde wallet compte neuf : « 0 FCFA » (pas de chiffre fictif), 0 erreur console |
+| ART-11 | ✅ Réussi | Modale de retrait, saisie 5 000 F sur un solde à 0 : bouton « Demander le retrait » désactivé, jamais envoyé à l'API |
+| ART-13 | ✅ Réussi | « Historique et avis » compte neuf : « 0 avis », état vide honnête (« Aucun avis pour l'instant »), aucune note fictive |
+| ART-14 | ✅ Réussi (maquette assumée) | `/artisan/planning` toujours en maquette — attendu, aucun endpoint API n'existe pour ça, voir §0 |
+
+**7/15 cas exécutés à ce stade** (les cas restants — ART-04/05/06/08/09/10/12/15 — dépendent d'un cycle complet demande→offre→paiement, à rejouer avec un propriétaire comme pour le bail côté Locataire).
+
+### Constat UX (nouveau, pas seulement une re-confirmation de code) : les champs de dates de « Bloquer une indisponibilité » se comportent pire qu'un champ désactivé
+
+`app/components/artisan/BloquerModal.vue` était déjà identifié comme maquette pure au Lot 38 (dates statiques `value="10 sept. 2026"`, jamais reliées à `v-model`). Vérifié en direct ici avec l'inspecteur DOM plutôt que par lecture de code : les deux champs de date sont **`readonly: false`, `disabled: false`** — ils ont l'air parfaitement modifiables, invitent à taper une vraie date, mais toute saisie serait silencieusement ignorée à la soumission (aucun état réactif ne les lit). C'est un piège plus trompeur qu'un champ grisé : un champ désactivé dit « tu ne peux pas », un champ qui a l'air actif mais qui ignore la saisie dit « tu peux » et ment. À `app/components/artisan/BloquerModal.vue:20,24` — soit désactiver ces champs tant qu'ils ne sont pas réellement câblés, soit (mieux) les retirer du DOM et remplacer par un texte explicite « Fonctionnalité à venir », cohérent avec l'absence d'endpoint documentée en §0.
+
+---
+
 ## 9. Constats UX / Produit — zones d'ombre, parcours à revoir, clarté, validations sans confirmation
 
 Cette section répond à une question différente de « est-ce que ça marche ? » (couvert ci-dessus) : « est-ce que c'est compréhensible, et est-ce que ça protège l'utilisateur de ses propres erreurs ? ». Constats obtenus en relisant le code de chaque action irréversible/financière de la plateforme (pas une supposition — chaque ligne ci-dessous cite le fichier exact).
@@ -346,6 +368,7 @@ Recherche systématique de tout `@click` déclenchant une action irréversible o
 - **Erreur I2** (invitation d'équipe/agence, `pro/equipe.vue`) : le message affiché est probablement une erreur 500 brute mappée génériquement, pas une explication produit (« cette fonctionnalité est temporairement indisponible »). À vérifier visuellement — si c'est le cas, ça expose un problème backend interne à l'utilisateur final au lieu de l'abstraire proprement.
 - **Retenue de garantie artisan** : le montant retenu et sa date de libération sont visibles *après coup* dans `facturation.vue`, mais rien avant le paiement (côté propriétaire, `pro/artisans.vue`) n'explique qu'une partie de la somme sera retenue puis reversée à l'artisan plus tard.
 - **Le message d'erreur pousse l'utilisateur vers une confusion supplémentaire, pas seulement l'API qui bug** : reproduit en direct sur production (compte neuf, voir « Résultats d'exécution — §4 »). Après un 500 générique sur `POST /visits` (écriture en réalité appliquée côté serveur — bug d'API distinct, voir Lot 24), le front affiche *« Une erreur est survenue côté serveur. Réessayez dans un instant. »*, qui **invite explicitement à réessayer**. Sauf que la visite a déjà été créée : la seconde tentative percute la contrainte anti-doublon de l'API (« Vous avez deja une visite en attente pour ce logement. », 400) — un message qui semble contredire l'expérience de l'utilisateur, qui n'a, de son point de vue, jamais réussi. Un bug de fiabilité API se transforme ainsi en confusion produit évitable : le message générique après un 500 devrait suggérer de vérifier l'état actuel (« Mes visites ») avant de suggérer de réessayer.
+- **Champs de date « fantômes » dans le blocage de disponibilité artisan** (`app/components/artisan/BloquerModal.vue:20,24`) : vérifié en direct, `readonly: false` et `disabled: false` sur des champs dont la valeur ne peut en réalité jamais changer. Pire qu'un champ désactivé, qui dirait honnêtement « pas encore possible » — celui-ci a l'air de fonctionner et ne fonctionne pas, sans qu'aucun message ne le signale.
 
 ### 9.3 Parcours à revoir
 
