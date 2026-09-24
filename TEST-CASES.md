@@ -42,6 +42,7 @@ Tout autre numéro produit un comportement non défini côté bac à sable — n
 - **`artisan/planning.vue`** : le blocage de disponibilité est purement local (aucun endpoint API n'existe pour ça). Attendu.
 - **Un avis client sur un artisan** ne peut être laissé que sur une intervention **`closed`** (`closed_at` non nul), qui ne survient qu'après l'expiration du délai de garantie (~7 jours après `complete()`). Tenter de noter avant cette échéance renvoie un **400** attendu, pas un bug.
 - **Modes de paiement `widget`/`ussd_push`/`mock`** : seule la passerelle FedaPay en mode `redirect` (et `GSM_MTN`/`GSM_MOOV` en direct) est disponible sur cette instance. Les autres modes ne sont pas testables ici.
+- **Annulation d'une réservation courte durée déjà payée (`status: confirmed`)** : `PATCH /bookings/:id/cancel` renvoie un **400** explicite (« l'annulation d'une réservation confirmée n'est pas encore prise en charge, contactez le propriétaire directement ») — confirmé en direct, Lot 40. Le front est honnête sur ce point : le bouton « Annuler » n'est proposé que tant que `status === 'pending_payment'` (`locataire/reservations.vue`), jamais sur une réservation confirmée. LOC-23 (remboursement partiel via `booking_retention_percentage`) n'est donc pas testable — fonctionnalité pas encore implémentée côté API, pas un bug.
 
 ---
 
@@ -313,8 +314,12 @@ Pour chaque cas exécuté, noter : **ID**, **date**, **compte utilisé**, **Réu
 | LOC-27 | ✅ Réussi | Message envoyé depuis une conversation existante (créée plus tôt via une demande de contact) → `POST /messaging/conversations/:id/messages` **201**, relu côté propriétaire (`GET` sur la même conversation avec le token du propriétaire) : le message apparaît bien dans son fil |
 | LOC-26 | ✅ Réussi | `/locataire/signalements` liste les deux signalements créés plus haut avec une vraie frise de statut (« Déclaré » actif, le reste grisé — cohérent avec `status: "open"` côté API), badge « Pièce jointe 1 » affiché uniquement sur celui qui en a une |
 | LOC-28 | ✅ Réussi (voir bug backend ci-dessous) | Cloche de notifications : compteur exact (6), tri antichronologique correct, notifications réelles générées pour chaque action de ce lot (EDL signé, EDL à signer, paiement d'entrée, dépôt wallet, bail prêt à signer, compte vérifié) — mais une des notifications affiche la mauvaise devise, cf. ci-dessous |
+| LOC-21 | ✅ Réussi | Unité dédiée créée avec un tarif journalier réel (`POST /units/:id/pricing`, 15 000 F/nuit) → `POST /bookings` (3 nuits, 45 000 F, `pending_payment`) → `POST /bookings/:id/pay` → wallet débité de 100 000 à 55 000 F, réservation passe à `confirmed` |
+| LOC-22 | ✅ Réussi | « Prolonger » sur la réservation confirmée → `POST /bookings/:id/extend` crée un **nouveau** segment (2 nuits, 30 000 F, `pending_payment`, `extended_from_booking_id` renseigné, dates contiguës sans chevauchement) plutôt que de modifier l'original — payé ensuite, les deux réservations apparaissent correctement sur `/locataire/reservations` (badge « Confirmée », dates, montants, bouton « Prolonger ») |
+| LOC-23 | ⛔ Non testable — fonctionnalité pas encore implémentée | Voir « Limites connues » en tête de document : `PATCH /bookings/:id/cancel` refuse explicitement (400) sur une réservation `confirmed`, et le front n'affiche même pas le bouton « Annuler » dans ce cas — comportement honnête des deux côtés, mais le remboursement partiel décrit dans ce cas de test n'existe pas encore |
+| LOC-32 | ✅ Réussi | Compte **jetable dédié**, créé et supprimé dans la même minute (jamais utilisé pour autre chose) : onglet Sécurité → « Supprimer mon compte » → confirmation → `DELETE /user/delete` **200** `{"message":"Compte supprimé (anonymisé) avec succès.","status":"completed"}`, redirection vers l'accueil |
 
-**22/32 cas exécutés à ce stade.**
+**25/32 cas exécutés (24 réussis, 1 non testable — fonctionnalité absente côté API) à ce stade.**
 
 ### Bug backend trouvé (pas un problème front) : la notification de recharge wallet affiche « EUR » au lieu de FCFA
 
