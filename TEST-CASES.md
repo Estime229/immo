@@ -285,6 +285,35 @@ Pour chaque cas exécuté, noter : **ID**, **date**, **compte utilisé**, **Réu
 
 ---
 
+## Résultats d'exécution — §4 Espace Locataire
+
+**Date** : 2026-09-24 · **Comptes** : deux comptes créés pour l'occasion, jamais utilisés avant (`loc-test-Alpha-…@example.com`, `loc-test-BetaTest-…@example.com`) · **Environnement** : `https://im-hazel.vercel.app` (production réelle) · **Outil** : Playwright, sans rien mocker.
+
+| ID | Résultat | Preuve |
+|---|---|---|
+| LOC-01 | ✅ Réussi | Compte fraîchement créé, sans bail : états vides honnêtes partout (« Aucun bail pour l'instant », wallet à 0 F, « Rien de particulier à faire », « Aucune activité récente »), 0 erreur console |
+| LOC-03 | ✅ Réussi | Deux comptes distincts connectés l'un après l'autre : chacun affiche bien **son propre** email en titre (« Bonjour loc-test-Alpha-… » puis « Bonjour loc-test-BetaTest-… »), jamais de contamination croisée — confirme en direct sur la production que le correctif `layouts/locataire.vue` (Lot 37, `INTEGRATION-TESTS.md`) tient |
+| LOC-19 | ✅ Réussi | Compte non vérifié KYC → « Demander une visite » sur un logement réel → `POST /visits` **403** `error.KYC_REQUIRED`, mappé en français (« Vous n'avez pas les droits pour cette action. »), aucun plantage |
+| LOC-18 | ✅ Réussi (voir découverte ci-dessous) | Après approbation KYC (admin) : « Demander une visite » → `POST /visits` **500** affiché à l'écran, mais `GET /visits` confirme la visite réellement créée (`status: "pending"`) |
+| LOC-20 | ✅ Réussi (voir découverte ci-dessous) | « Annuler » sur la visite ci-dessus → `PATCH /visits/:id/cancel` **500** affiché à l'écran, mais `GET /visits` confirme l'annulation réelle (`status: "cancelled"`, `cancelled_by` = le locataire) |
+| LOC-29 | ✅ Réussi | Favori ajouté depuis la fiche logement, retrouvé sur `/locataire/favoris` |
+| LOC-30 | ✅ Réussi | `PATCH /profile/me` → 200, persiste après rechargement (affiché « Renseigné », jamais la valeur en clair — chiffrement côté serveur assumé, voir la page elle-même) |
+| LOC-31 | ✅ Réussi | Mot de passe défini avec succès dès la première tentative (`has_password` passe à `true`, confirmé par `GET /auth/me` et par le changement de formulaire — « Créer » devient « Changer mon mot de passe » à la visite suivante) |
+
+**8/32 cas exécutés à ce stade.**
+
+### Découverte : le bug « écriture réussie malgré une erreur 500 » (Lot 24) touche aussi les visites, reproduit en direct sur la production avec un compte neuf
+
+`INTEGRATION-TESTS.md` (Lot 24) documentait ce comportement sur `POST /visits`, `PATCH /visits/:id/reject` et `PATCH /visits/:id/cancel` avec des comptes déjà anciens. Reproduit ici à l'identique, sur `https://im-hazel.vercel.app` (production, pas un environnement de dev), avec un compte **créé dans la minute** : `POST /visits` et `PATCH /visits/:id/cancel` renvoient tous les deux un 500 générique au client alors que l'écriture est réellement appliquée côté serveur (confirmé par une relecture `GET /visits` immédiate après coup). Ce n'est donc ni un problème d'ancienneté de compte, ni spécifique à un environnement de test — le bug est bien dans l'API elle-même, toujours ouvert.
+
+**Angle nouveau, pas encore documenté** : le message affiché à l'utilisateur après le premier 500 invite explicitement à réessayer, ce qui percute ensuite la contrainte anti-doublon de l'API — piège UX concret, repris dans §9.2 avec le reste des constats de clarté.
+
+**Constat UX** : « Annuler » une visite tire directement, comme les autres actions déjà recensées en §9.1 (aucune modale de confirmation) — étend ce constat à l'espace Locataire, pas une exception Pro/Artisan.
+
+Suite en cours — les cas dépendant d'un bail actif (LOC-02, 04-09, 14, 25) demandent la création d'un vrai bail par un propriétaire ; ce résultat sera complété au fil de l'exécution plutôt que d'attendre la fin de tout le lot.
+
+---
+
 ## 9. Constats UX / Produit — zones d'ombre, parcours à revoir, clarté, validations sans confirmation
 
 Cette section répond à une question différente de « est-ce que ça marche ? » (couvert ci-dessus) : « est-ce que c'est compréhensible, et est-ce que ça protège l'utilisateur de ses propres erreurs ? ». Constats obtenus en relisant le code de chaque action irréversible/financière de la plateforme (pas une supposition — chaque ligne ci-dessous cite le fichier exact).
@@ -298,6 +327,7 @@ Recherche systématique de tout `@click` déclenchant une action irréversible o
 | **Payer une intervention artisan** (débit wallet, peut être un montant important) | `app/pages/pro/artisans.vue:248` (`doPay`) | Un clic sur « Payer l'intervention » dans une liste débite immédiatement, aucun récapitulatif du montant | 🔴 Argent réel débité sans étape de recul |
 | **Demander un retrait** (wallet → Mobile Money) | `app/components/pro/RetraitModal.vue`, `app/components/artisan/RetraitModal.vue` | La modale elle-même sert de semi-confirmation, mais le bouton final (« Demander le retrait ») exécute directement — pas de récapitulatif « 50 000 F vers +229 97 XX XX XX, confirmer ? » | 🟠 Erreur de saisie (montant, numéro) non rattrapable avant envoi |
 | **Annuler une demande d'intervention artisan** | `app/pages/pro/artisans.vue:247` (`doCancel`) | Un clic annule directement | 🟡 |
+| **Annuler une visite** | `app/pages/locataire/visites.vue` | Un clic sur « Annuler » déclenche `PATCH /visits/:id/cancel` immédiatement | 🟡 Même patron, confirmé aussi côté Locataire — pas une exception Pro/Artisan |
 | **Mettre fin à un partenariat artisan** | `app/pages/pro/artisans.vue:365` / `app/pages/artisan/partenaires.vue:38` | Idem | 🟡 |
 | **Annuler une réservation payée** | `app/pages/locataire/reservations.vue:50` (`cancelBooking`) | Annule directement, **sans afficher le taux de rétention** (`booking_retention_percentage`) avant de cliquer — l'utilisateur découvre le remboursement partiel après coup | 🟠 Surprise financière évitable |
 | **Résilier / annuler un bail** | `app/pages/pro/baux/index.vue:42,49` (`cancelUnpaid`, `terminate`) | Un clic sur « Annuler (jamais payé) » résilie directement | 🟠 Action lourde de conséquence pour le locataire concerné |
@@ -315,6 +345,7 @@ Recherche systématique de tout `@click` déclenchant une action irréversible o
 - **Vitrine « 0 biens publiés »** (PUB-06) : un vrai propriétaire peut avoir des unités bien réelles et réservables, mais si le *bien* parent n'est pas lui-même marqué publiquement listé (deux booléens distincts, `is_publicly_listed` au niveau bien ET au niveau unité), sa vitrine affiche « 0 biens » sans aucune explication. Rien dans `pro/biens/*` n'explique cette distinction à deux niveaux au propriétaire — il ne comprendra pas pourquoi son bien n'apparaît pas dans sa propre vitrine alors qu'il « l'a publié ».
 - **Erreur I2** (invitation d'équipe/agence, `pro/equipe.vue`) : le message affiché est probablement une erreur 500 brute mappée génériquement, pas une explication produit (« cette fonctionnalité est temporairement indisponible »). À vérifier visuellement — si c'est le cas, ça expose un problème backend interne à l'utilisateur final au lieu de l'abstraire proprement.
 - **Retenue de garantie artisan** : le montant retenu et sa date de libération sont visibles *après coup* dans `facturation.vue`, mais rien avant le paiement (côté propriétaire, `pro/artisans.vue`) n'explique qu'une partie de la somme sera retenue puis reversée à l'artisan plus tard.
+- **Le message d'erreur pousse l'utilisateur vers une confusion supplémentaire, pas seulement l'API qui bug** : reproduit en direct sur production (compte neuf, voir « Résultats d'exécution — §4 »). Après un 500 générique sur `POST /visits` (écriture en réalité appliquée côté serveur — bug d'API distinct, voir Lot 24), le front affiche *« Une erreur est survenue côté serveur. Réessayez dans un instant. »*, qui **invite explicitement à réessayer**. Sauf que la visite a déjà été créée : la seconde tentative percute la contrainte anti-doublon de l'API (« Vous avez deja une visite en attente pour ce logement. », 400) — un message qui semble contredire l'expérience de l'utilisateur, qui n'a, de son point de vue, jamais réussi. Un bug de fiabilité API se transforme ainsi en confusion produit évitable : le message générique après un 500 devrait suggérer de vérifier l'état actuel (« Mes visites ») avant de suggérer de réessayer.
 
 ### 9.3 Parcours à revoir
 
