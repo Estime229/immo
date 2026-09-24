@@ -6,6 +6,43 @@ Document de référence pour tester manuellement la plateforme en conditions ré
 
 ---
 
+## Bilan final — trous, recommandations, ce qu'il reste à corriger
+
+**Date** : 2026-09-24. Synthèse après la campagne de tests coordonnée sur les trois espaces (Public/Artisan, Locataire, Pro) contre la production (`im-hazel.vercel.app`).
+
+### Déjà corrigé et déployé pendant cette campagne
+
+Fuite de session SSR entre utilisateurs (Lot 36), identité codée en dur dans le layout locataire (Lot 37) et dans le sélecteur de contexte Pro (« Koffi Dossou »), *race condition* dans l'édition d'unité (Lot 39), fil d'avancement du bail décalé d'une étape, formulaires fantômes qui simulaient un succès sans appeler l'API (invitation d'équipe, pièce d'identité, wallet/avis artisan), et l'absence totale de garde d'authentification sur les routes (`/locataire`, `/pro`, `/artisan`, `/kyc` chargeaient leur coquille même sans session valide).
+
+### 🔴 Priorité haute — reste à corriger
+
+1. **Paiement d'intervention artisan sans confirmation** (`app/pages/pro/artisans.vue:248`, `doPay`) — la seule action de toute la plateforme qui déplace de l'argent réel en un clic isolé, sans récapitulatif ni « Êtes-vous sûr ? ». Recommandation : réutiliser le patron à deux temps déjà présent ailleurs (suppression de compte, fin d'intervention artisan).
+2. **I2 — bug serveur confirmé** : `POST /team/invite` renvoie systématiquement une 500, quel que soit le contenu envoyé. Bloque tout l'espace équipe/mandats pour les comptes agence. Ne peut pas être corrigé côté front (déjà contourné honnêtement par un message d'indisponibilité) — à remonter à l'équipe backend.
+
+### 🟠 Priorité moyenne — vrais bugs/manques, non corrigés
+
+3. **Écritures qui réussissent malgré une erreur 500** sur `POST /visits`/`PATCH /visits/:id/cancel` (bug backend, pas front) — et le message de retry du front pousse l'utilisateur vers une confusion supplémentaire (anti-doublon) après coup. Un correctif ciblé du message d'erreur (suggérer de vérifier l'état actuel plutôt que de réessayer) atténuerait l'impact sans attendre la correction backend.
+4. **Devise erronée dans une notification** (« 120000 EUR » au lieu de XOF/FCFA) — bug backend, chaîne déjà formée côté serveur, rien à faire côté front sinon le signaler.
+5. **Premier paiement d'un compte neuf** qui échoue si le wallet n'a jamais été lu via `GET /wallet/me` avant `POST /payment/verify-return` — incohérence backend, risque pratique faible (toutes les pages wallet du front lisent le solde avant de permettre un paiement).
+6. **Autres actions sans confirmation** : demande de retrait (wallet), annulation de réservation payée (sans afficher le remboursement réel avant de cliquer), annulation/résiliation de bail, suppression de document KYC, retrait de tarif. Même recommandation que le point 1 — généraliser le patron à deux temps.
+7. **Messages d'erreur trompeurs** : `/favoris` non connecté affiche une erreur qui ressemble à une panne serveur au lieu de « connectez-vous » ; la vitrine propriétaire affiche « 0 biens » sans expliquer la distinction bien/unité pour `is_publicly_listed`.
+
+### 🟡 Priorité basse — maquette assumée, non traitée par choix
+
+8. **`pro/mandats.vue`** : entièrement fabriqué (même famille que `pro/equipe.vue` avant correction), volontairement non retouché.
+9. **`artisan/planning.vue` / `BloquerModal.vue`** : blocage de disponibilité toujours factice — aucun endpoint API n'existe côté backend pour ça. Les champs de date de la modale ont l'air actifs (`readonly:false`) mais ignorent toute saisie — à minima les désactiver honnêtement en attendant un vrai endpoint.
+10. **Réservation courte durée confirmée** : pas d'annulation avec remboursement partiel — l'API renvoie une 400 explicite et le front cache honnêtement le bouton, fonctionnalité simplement pas encore développée côté backend.
+
+### ⚪ Trous de couverture — pas des bugs, juste jamais rejoués
+
+Création de bien (`PRO-01`, couverte historiquement aux Lots 15/21/33, pas rejouée pour ne pas polluer les données partagées), annulation/résiliation de bail (`PRO-09/10`), cycle complet d'offre artisan côté propriétaire (`PRO-22-25`, aucune donnée éligible disponible au moment du test), sélecteur multi-bail (`LOC-08/09`), avis artisan en conditions réelles (`ART-12`, structurellement bloqué ~7 jours), partenariats agence (`ART-15`, nécessite un compte agence dédié), et quelques cas transverses à faible risque (`AUTH-06/09`, `PAY-03`, `SYS-01/03/06/07`).
+
+### Un point observé mais non tranché
+
+**`SYS-05`** : un compte au rôle `tenant` par défaut peut naviguer librement jusqu'au formulaire de création de bien avant d'être bloqué par le KYC — à confirmer si c'est voulu (bascule de rôle légitime) ou s'il manque une garde de rôle en amont.
+
+---
+
 ## 0. Avant de commencer
 
 ### Comptes de test connus
