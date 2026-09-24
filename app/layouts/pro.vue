@@ -87,5 +87,6 @@ watch(() => route.path, () => { drawerOpen.value = false })
     <ProPromoModal />
     <ProArtisanReqModal />
     <ProTarifModal />
+    <ProPayInterventionModal />
   </div>
 </template>

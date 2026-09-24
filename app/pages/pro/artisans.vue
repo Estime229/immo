@@ -8,6 +8,7 @@ definePageMeta({ layout: 'pro' })
 const artisanApi = useArtisanRequestsApi()
 const refData = useReferenceData()
 const modal = useProModal()
+const modalTarget = useProModalTarget()
 const refresh = useArtisanRequestsRefresh()
 
 const tab = ref<'interventions' | 'annuaire' | 'partenariats'>('interventions')
@@ -105,17 +106,9 @@ async function doCancel(r: ArtisanRequestSummary) {
   }
 }
 
-async function doPay(r: ArtisanRequestSummary) {
-  busyId.value = r.id
-  actionError.value = ''
-  try {
-    await artisanApi.pay(r.id)
-    await block.load()
-  } catch (e) {
-    actionError.value = e instanceof ApiRequestError ? (e.mapped.bannerMessage ?? "Le paiement a échoué.") : "Le paiement a échoué."
-  } finally {
-    busyId.value = null
-  }
+function openPayModal(r: ArtisanRequestSummary) {
+  modalTarget.value = r.id
+  modal.value = 'payerIntervention'
 }
 
 /* ---- Avis (une fois l'intervention terminée) ---- */
@@ -245,7 +238,7 @@ async function invite(artisanId: string) {
 
           <div class="mt-4 flex flex-wrap gap-2 border-t border-sand-200 pt-4">
             <button v-if="r.status === 'open' || r.status === 'agreed'" type="button" class="rounded-sm border border-[var(--border-default)] bg-white px-4 py-2.5 text-[12.5px] font-bold" :disabled="busyId === r.id" @click.stop="doCancel(r)">Annuler la demande</button>
-            <button v-if="r.status === 'agreed'" type="button" class="rounded-sm bg-[image:var(--action-primary)] px-4 py-2.5 text-[12.5px] font-bold text-white" :disabled="busyId === r.id" @click.stop="doPay(r)">{{ busyId === r.id ? 'Paiement…' : "Payer l'intervention" }}</button>
+            <button v-if="r.status === 'agreed'" type="button" class="rounded-sm bg-[image:var(--action-primary)] px-4 py-2.5 text-[12.5px] font-bold text-white" @click.stop="openPayModal(r)">Payer l'intervention</button>
             <CoreBadge v-if="r.status === 'in_progress'" tone="ok" class="self-center">Payée, en attente de l'artisan</CoreBadge>
             <button v-if="r.status === 'completed'" type="button" class="rounded-sm border border-[var(--border-default)] bg-white px-4 py-2.5 text-[12.5px] font-bold" @click.stop="reviewingId = reviewingId === r.id ? null : r.id">Laisser un avis</button>
             <button type="button" class="rounded-sm border border-[var(--border-default)] bg-white px-4 py-2.5 text-[12.5px] font-bold" @click.stop="toggleExpand(r)">{{ expandedId === r.id ? 'Masquer les offres' : 'Voir les offres' }}</button>

@@ -59,7 +59,12 @@ export const PAGE_TITLES: Record<string, string> = {
 }
 
 export function useProModal() {
-  return useState<'' | 'retrait' | 'invite' | 'unite' | 'qr' | 'promo' | 'artisanReq' | 'tarif'>('proModal', () => '')
+  return useState<'' | 'retrait' | 'invite' | 'unite' | 'qr' | 'promo' | 'artisanReq' | 'tarif' | 'payerIntervention'>('proModal', () => '')
+}
+
+/** Demande d'intervention (`ArtisanRequestSummary.id`) ciblée par la modale de paiement — même motif que `useArtisanModalTarget()`. */
+export function useProModalTarget() {
+  return useState<string | null>('proModalTargetId', () => null)
 }
 
 /* ---- Modale flash (confirmation générique) ---- */
