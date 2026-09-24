@@ -299,8 +299,23 @@ Pour chaque cas exécuté, noter : **ID**, **date**, **compte utilisé**, **Réu
 | LOC-29 | ✅ Réussi | Favori ajouté depuis la fiche logement, retrouvé sur `/locataire/favoris` |
 | LOC-30 | ✅ Réussi | `PATCH /profile/me` → 200, persiste après rechargement (affiché « Renseigné », jamais la valeur en clair — chiffrement côté serveur assumé, voir la page elle-même) |
 | LOC-31 | ✅ Réussi | Mot de passe défini avec succès dès la première tentative (`has_password` passe à `true`, confirmé par `GET /auth/me` et par le changement de formulaire — « Créer » devient « Changer mon mot de passe » à la visite suivante) |
+| LOC-02 | ✅ Réussi | Bail actif réel créé de bout en bout (propriétaire dédié, propriété + unité neuves pour éviter tout conflit avec des baux déjà pris par d'autres sessions) : le tableau de bord affiche le bon logement (« Unite QA Lease Test — QA Lease Test Property 3 »), badge « Actif », loyer 40 000 F, wallet à jour, et un flux d'activité réel et cohérent (« Compte vérifié ! » → « Bail prêt à signer » → « Dépôt réussi ! » → « Paiement effectué — bail actif ») |
+| LOC-04 | ✅ Réussi (voir bug ci-dessous) | `Mon bail` affiche loyer (40 000 F), caution séquestrée (80 000 F), tampon d'avance rempli (40 000/40 000 F), dates, et un document de contrat téléchargeable (« Aperçu ») — mais le fil d'avancement (étapes Brouillon/En attente/Signature complète/Actif) reste bloqué sur « Signature complète » même bail réellement actif, cf. bug trouvé et corrigé |
+| LOC-05 | ✅ Réussi | `PATCH /leases/:id/sign` côté locataire → **200**, `status` passe de `pending_signature` à `signed`, `signed_at_landlord` et `signed_at_tenant` tous deux horodatés |
+| LOC-06 | ✅ Réussi | Wallet rechargé via FedaPay sandbox (MTN, numéro `66000001`, mode `ussd_push` réel — pas de mock) → 120 000 F crédités, puis `POST /leases/:id/entry-payment` → bail passe à `active`, `entry_paid_at` horodaté, tampon d'avance rempli à la cible, wallet débité exactement à 0 F (80 000 caution + 40 000 avance) |
+| LOC-14 | ✅ Réussi | `/locataire/wallet` : historique affiche les deux vraies transactions (« Épargne / recharge » +120 000 F, « Paiement d'entrée (bail) » −120 000 F, toutes deux « Terminé »), bandeau « 80 000 F séquestrés » avec explication claire, soldes disponible/tirelire corrects (0 F chacun après le paiement d'entrée) |
+| LOC-07 | ✅ Réussi | Modale « Donner mon préavis » → confirmation → `POST /leases/:id/give-notice` appliqué : `renewal_intent: "leave"`, `renewal_intent_date` renseigné, bail reste `active` (déclaratif, ne résilie rien immédiatement — conforme au texte affiché), et l'unité passe bien à `unit_status: "notice_given"` côté Pro |
+| LOC-25 | ✅ Réussi | Signalement plomberie avec pièce jointe réelle : upload photo → `POST /api/proxy/files` **201** (Cloudinary), puis `POST /signals` **201** avec `attachment_count: 1` — le fichier est bien rattaché, pas juste affiché localement |
+| LOC-15 | ✅ Réussi | État des lieux d'entrée créé par le propriétaire, envoyé pour signature : la fiche locataire affiche correctement titre, badge de statut, relevés de compteurs, pièces/objets avec badges d'état (« Bon état »), commentaires |
+| LOC-16 | ✅ Réussi | Signature tenant sur l'EDL → `PATCH /inventories/:id/sign` **200**, `status` passe à `signed`, `tenant_signature` et `landlord_signature` tous deux renseignés |
+| LOC-17 | ✅ Réussi | Après signature complète : la fiche repasse en lecture seule, badge « Signé », date de signature affichée, plus aucun contrôle de signature visible |
+| LOC-24 | ✅ Réussi | « Publier une demande de logement » (demande générale, pas une candidature sur une annonce précise) → `POST /housing-requests` **201**, `status: "open"`, confirmation claire (« Les propriétaires correspondants peuvent maintenant vous répondre ») |
 
-**8/32 cas exécutés à ce stade.**
+**19/32 cas exécutés à ce stade.**
+
+### Bug trouvé et corrigé : fil d'avancement du bail toujours en retard d'une étape
+
+`app/pages/locataire/bail.vue`, `stepIndexFor()` renvoyait un index **0-indexé** (`draft: 0 … active: 3`) alors que `FeedbackStepper` (`app/components/feedback/Stepper.vue`) attend explicitement un `current` **1-indexé** (documenté dans le composant lui-même). Conséquence vérifiée en direct : un bail réellement `active` (confirmé côté API : `status: "active"`, `entry_paid_at` renseigné, tampon d'avance au maximum) affichait « Signature complète » comme étape courante et « Actif » restait grisé — un locataire ne voyait donc jamais son bail marqué comme actif après paiement d'entrée. Un bail `draft` n'affichait même aucune étape en surbrillance. Corrigé : `{ draft: 1, pending_signature: 2, signed: 3, active: 4, terminated: 4 }`.
 
 ### Découverte : le bug « écriture réussie malgré une erreur 500 » (Lot 24) touche aussi les visites, reproduit en direct sur la production avec un compte neuf
 
@@ -310,7 +325,7 @@ Pour chaque cas exécuté, noter : **ID**, **date**, **compte utilisé**, **Réu
 
 **Constat UX** : « Annuler » une visite tire directement, comme les autres actions déjà recensées en §9.1 (aucune modale de confirmation) — étend ce constat à l'espace Locataire, pas une exception Pro/Artisan.
 
-Suite en cours — les cas dépendant d'un bail actif (LOC-02, 04-09, 14, 25) demandent la création d'un vrai bail par un propriétaire ; ce résultat sera complété au fil de l'exécution plutôt que d'attendre la fin de tout le lot.
+Suite en cours. Restent LOC-08/09 (multi-bail, bail sans date de fin — demandent un second bail actif), LOC-21/22/23 (réservations courte durée), LOC-24/26/27/28 (candidature, signalement suivi, messages, notifications), LOC-32 (suppression de compte, réservée à un compte jetable dédié).
 
 ---
 
@@ -327,8 +342,17 @@ Suite en cours — les cas dépendant d'un bail actif (LOC-02, 04-09, 14, 25) de
 | ART-11 | ✅ Réussi | Modale de retrait, saisie 5 000 F sur un solde à 0 : bouton « Demander le retrait » désactivé, jamais envoyé à l'API |
 | ART-13 | ✅ Réussi | « Historique et avis » compte neuf : « 0 avis », état vide honnête (« Aucun avis pour l'instant »), aucune note fictive |
 | ART-14 | ✅ Réussi (maquette assumée) | `/artisan/planning` toujours en maquette — attendu, aucun endpoint API n'existe pour ça, voir §0 |
+| ART-04/05 | ✅ Réussi | Cycle rejoué avec un propriétaire neuf dédié (`qa-landlord-1790282977@example.com`, KYC approuvé, un bien + une unité créés pour l'occasion) : demande ciblée créée, offre soumise (12 000 F, garantie 7 j, retenue 10 %) — `POST .../offers` → 201 |
+| ART-06 | ✅ Réussi | « Marquer terminée » **depuis la vraie UI** (deux clics réels, voir correction en §9.1) → `PATCH .../complete` → **200**, écran de confirmation affiché |
+| ART-08 | ✅ Réussi | `facturation.vue` après le cycle : « 10 800 FCFA » (12 000 − 10 % retenue), « 1 200 FCFA » retenus, « Plombier · libéré le 1 octobre » — tout réel, rien de figé |
+| ART-09 | ✅ Réussi (voir Lot 38) | Bouton Facture présent sur la mission réelle — flux déjà vérifié bout en bout au Lot 38, non rejoué intégralement ici |
+| ART-10 | ✅ Réussi | Retrait réel de 2 000 F **depuis la vraie UI** → `POST /wallet/withdraw` → **201**, écran de confirmation affiché |
 
-**7/15 cas exécutés à ce stade** (les cas restants — ART-04/05/06/08/09/10/12/15 — dépendent d'un cycle complet demande→offre→paiement, à rejouer avec un propriétaire comme pour le bail côté Locataire).
+**13/15 cas exécutés à ce stade.** Restent ART-12 (avis — bloqué par le délai de garantie de 7 jours, voir §0) et ART-15 (partenariats agence — nécessite un compte agence, hors périmètre de cette session).
+
+### Découverte : le tout premier paiement d'un compte neuf échoue si le wallet n'a encore jamais été lu
+
+En finançant le wallet du propriétaire neuf ci-dessus par le vrai bac à sable MTN (`POST /payment/checkout` puis `POST /payment/verify-return`, numéro `66000001`), le tout premier essai a échoué : `POST /payment/verify-return` → **400** `"Wallet introuvable pour cet utilisateur"`, alors que le compte venait tout juste d'être créé et n'avait **jamais** appelé `GET /wallet/me` auparavant. Un appel `GET /wallet/me` juste après a silencieusement créé la ligne de wallet manquante (réponse 200, solde 0) — et un second essai identique du cycle checkout → verify-return a alors réussi normalement. Donc : `GET /wallet/me` crée le wallet à la volée s'il n'existe pas, mais `POST /payment/verify-return` ne le fait pas et échoue sèchement si le wallet n'a jamais été « touché » avant. **Risque réel faible en pratique** : toutes les pages wallet de l'app appellent `GET /wallet/me` (`ensureLoaded()`) dès leur montage, avant qu'un bouton de paiement soit même cliquable — un utilisateur naviguant normalement ne devrait jamais rencontrer ce cas. Mais c'est une vraie incohérence backend entre deux endpoints du même sous-système, qui casserait immédiatement tout appel direct à l'API (intégration tierce, script, ou toute page future qui déclencherait un paiement sans être passée par la page wallet en premier).
 
 ### Constat UX (nouveau, pas seulement une re-confirmation de code) : les champs de dates de « Bloquer une indisponibilité » se comportent pire qu'un champ désactivé
 
@@ -356,12 +380,14 @@ Recherche systématique de tout `@click` déclenchant une action irréversible o
 | **Supprimer un document KYC** | `app/pages/kyc.vue:130` (`deleteDoc`) | Suppression immédiate | 🟡 |
 | **Retirer un tarif** | `app/pages/pro/tarifs.vue:84` (`removePricing`) | Suppression immédiate | 🟡 |
 | **Supprimer une photo de portfolio (artisan)** | `app/pages/artisan/profil.vue:103` | Suppression immédiate | ⚪ |
-| **Marquer une intervention terminée** | `app/components/artisan/TerminerModal.vue:32` | Déclenche le décompte de la garantie, un clic suffit | 🟡 |
 
-**La seule exception, et le bon modèle à généraliser** : la suppression de compte (`app/pages/locataire/profil.vue:317`, `app/pages/pro/profil.vue:246`) a un vrai état à deux temps (`deleteStep: 'idle' → 'confirm'`) avant d'appeler `DELETE /user/delete`. C'est exactement le patron à répliquer sur les actions ci-dessus — pas besoin d'inventer un nouveau composant, juste réutiliser celui-là.
+**Correction après exécution en direct** : « Marquer une intervention terminée » avait été classée ici par erreur (déduit d'un simple `grep` sur `artisanApi.complete()`, jamais vérifié en conditions réelles). En rejouant le cycle complet avec un compte artisan neuf (voir « Résultats d'exécution — §6 »), `app/components/artisan/TerminerModal.vue` s'est révélé avoir un **vrai** état à deux temps (`step: 'confirm' → 'done'`) : le bouton de la liste ouvre seulement la modale, qui explique la conséquence (« La part de garantie retenue... sera libérée à la date convenue ») avant qu'un second clic, à l'intérieur de la modale, déclenche réellement `PATCH .../complete`. C'est donc un deuxième bon exemple à généraliser, pas un exemple de plus à corriger.
+
+**Les deux exceptions, et le bon modèle à généraliser** : la suppression de compte (`app/pages/locataire/profil.vue:317`, `app/pages/pro/profil.vue:246`, `deleteStep: 'idle' → 'confirm'`) et « Marquer une intervention terminée » (`app/components/artisan/TerminerModal.vue`, `step: 'confirm' → 'done'`) ont toutes les deux un vrai état à deux temps avant l'appel API. C'est exactement le patron à répliquer sur les actions ci-dessus — pas besoin d'inventer un nouveau composant, juste réutiliser celui-là.
 
 ### 9.2 Clarté — messages qui induisent en erreur
 
+- **Identité fictive dans le sélecteur « Contexte de travail » de l'espace Pro** (`app/composables/useProSpace.ts:19-20`) : `PRO_CONTEXTS` est codé en dur — `{ name: 'Koffi Dossou', count: '3 biens en propre' }` pour tout compte perso, `{ name: 'Agence Immo Cotonou', count: '11 biens sous mandat' }` pour tout compte agence — **affiché tel quel à chaque propriétaire/agent/agence, quelle que soit son identité ou son vrai nombre de biens**. Découvert en direct avec un compte propriétaire flambant neuf (`qa-landlord-…@example.com`) : `GET /auth/me` confirme bien `first_name: null` (pas une fuite de session, contrairement au bug « Bonjour Sèdjro » des Lots 36/37) — c'est un nom purement inventé, jamais relié à `useAuthUser()`. Signalé pour correction dans le cadre du balayage §5 Pro, en cours par ailleurs.
 - **`/favoris` non connecté** (`app/pages/favoris.vue`) affiche *« Impossible de charger vos favoris pour le moment. Réessayer »* — un message qui sonne comme une panne technique, alors que la vraie raison est simplement « vous n'êtes pas connecté ». Un testeur qui tombe dessus par un lien direct (pas depuis le bouton ♥, qui redirige correctement) croira à un bug serveur. À corriger : détecter l'absence de session et afficher « Connectez-vous pour voir vos favoris » avec un bouton vers `/connexion`, plutôt que de laisser l'appel API échouer silencieusement en 401 et afficher un message d'échec générique.
 - **Clic sur ♥ non connecté** : redirige vers `/connexion` sans un mot d'explication. Rien n'indique à l'utilisateur *pourquoi* il vient d'être redirigé, ni que son intention (« mettre ce logement en favori ») sera reprise après connexion (ce qui, à vérifier, n'est peut-être même pas le cas — PUB-11 a testé le scénario où le favori est reposé manuellement après connexion, pas l'auto-reprise de l'intention initiale).
 - **Vitrine « 0 biens publiés »** (PUB-06) : un vrai propriétaire peut avoir des unités bien réelles et réservables, mais si le *bien* parent n'est pas lui-même marqué publiquement listé (deux booléens distincts, `is_publicly_listed` au niveau bien ET au niveau unité), sa vitrine affiche « 0 biens » sans aucune explication. Rien dans `pro/biens/*` n'explique cette distinction à deux niveaux au propriétaire — il ne comprendra pas pourquoi son bien n'apparaît pas dans sa propre vitrine alors qu'il « l'a publié ».
