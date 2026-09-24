@@ -1,0 +1,201 @@
+@import url("https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Nunito:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap");
+@import "tailwindcss";
+
+/* Design tokens transcrits depuis le projet Claude Design "Immo — Refonte moderne
+   interfaces immobilières" (tokens/*.css). Vert forêt = confiance/marque, terracotta =
+   argent immobilisé, neutres toujours sable chaud — jamais de gris-bleu froid. */
+@theme {
+  /* ---- Polices ---- */
+  --font-display: "Bricolage Grotesque", "Nunito", system-ui, sans-serif;
+  --font-body: "Nunito", system-ui, -apple-system, sans-serif;
+  --font-sans: "Nunito", system-ui, -apple-system, sans-serif;
+  --font-mono: "Space Mono", ui-monospace, "SFMono-Regular", monospace;
+
+  /* Le "black" de la marque est 800, pas le 900 par défaut de Tailwind */
+  --font-weight-black: 800;
+
+  /* ---- Échelle display — Bricolage Grotesque, tracking toujours négatif ---- */
+  --text-hero: 52px;
+  --text-hero--line-height: 1.04;
+  --tracking-hero: -0.035em;
+  --text-title-1: 32px;
+  --text-title-1--line-height: 1.1;
+  --tracking-title-1: -0.03em;
+  --text-title-2: 27px;
+  --text-title-2--line-height: 1.15;
+  --tracking-title-2: -0.025em;
+  --text-title-3: 22px;
+  --text-title-3--line-height: 1.2;
+  --tracking-title-3: -0.025em;
+  --text-metric: 25px;
+  --tracking-metric: -0.03em;
+
+  /* ---- Corps — Nunito ---- */
+  --text-lead: 16.5px;
+  --text-body: 15px;
+  --text-body--line-height: 1.55;
+  --text-body-sm: 14px;
+  --text-caption: 13px;
+  --text-micro: 12px;
+  --leading-tight: 1.4;
+
+  /* ---- Étiquette — capitales espacées, toujours en text-faint ---- */
+  --text-label: 11.5px;
+  --tracking-label: 0.06em;
+
+  /* ---- Vert Immo — marque, confiance, validation ---- */
+  --color-green-50: #eef5ef;
+  --color-green-100: #d7e8da;
+  --color-green-200: #bfdfc7;
+  --color-green-300: #8fd3ac;
+  --color-green-400: #4c9459;
+  --color-green-500: #2b8a5c;
+  --color-green-600: #1f6f4a;
+  --color-green-700: #1a5d3e;
+  --color-green-800: #164c33;
+  --color-green-900: #123c29;
+  --color-green-950: #0d2c1e;
+
+  /* ---- Terracotta — accent, séquestre, actions secondaires chaudes ---- */
+  --color-clay-50: #fdf6ec;
+  --color-clay-100: #fdf1dd;
+  --color-clay-200: #f0e3d0;
+  --color-clay-300: #d9c4a3;
+  --color-clay-500: #c77f3e;
+  --color-clay-700: #8a6116;
+  --color-clay-900: #6b5b45;
+
+  /* ---- Neutres chauds — jamais de gris-bleu froid ---- */
+  --color-sand-50: #faf8f4;
+  --color-sand-100: #f7f4ef;
+  --color-sand-200: #f4efe6;
+  --color-sand-300: #ece5da;
+  --color-sand-400: #ddd4c4;
+  --color-sand-500: #c2b7a3;
+  --color-sand-600: #a0937c;
+  --color-sand-700: #7d715d;
+  --color-sand-800: #5e5445;
+  --color-sand-900: #453d32;
+  --color-ink: #1a1714;
+  --color-white: #ffffff;
+
+  /* ---- Sémantique d'état ---- */
+  --color-danger-bg: #fbeae6;
+  --color-danger-border: #efc3b7;
+  --color-danger-fg: #a23f26;
+  --color-danger-fg-deep: #7d2d18;
+  --color-danger-tint: #f7d5cb;
+  --color-warn-bg: #fcf3df;
+  --color-warn-border: #f0da9f;
+  --color-warn-fg: #8a6116;
+  --color-warn-fg-deep: #6b4a10;
+  --color-ok-bg: #eaf4ec;
+  --color-ok-border: #bfdfc7;
+  --color-ok-fg: #1f6f4a;
+  --color-info-bg: #e9f1f4;
+  --color-info-border: #c9dde5;
+  --color-info-fg: #2a6478;
+  --color-info-fg-deep: #1f4a5a;
+  --color-fav: #e3506b;
+  --color-whatsapp: #25d366;
+
+  /* ---- Rayons — proportionnels à la surface ---- */
+  --radius-xs: 7px;
+  --radius-sm: 11px;
+  --radius-md: 14px;
+  --radius-lg: 18px;
+  --radius-xl: 20px;
+  --radius-2xl: 22px;
+  --radius-3xl: 30px;
+  --radius-pill: 9999px;
+
+  /* ---- Ombres ---- */
+  --shadow-hairline: 0 1px 2px rgba(26, 23, 20, 0.04);
+  --shadow-card: 0 2px 8px rgba(26, 23, 20, 0.05);
+  --shadow-raised: 0 14px 32px rgba(26, 23, 20, 0.11);
+  --shadow-panel: 0 16px 40px rgba(26, 23, 20, 0.14);
+  --shadow-overlay: 0 16px 38px rgba(26, 23, 20, 0.3);
+  --shadow-action: 0 6px 16px rgba(31, 111, 74, 0.3);
+  --shadow-accent: 0 8px 20px rgba(199, 127, 62, 0.36);
+
+  /* ---- Mouvement ---- */
+  --ease-standard: cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+
+:root {
+  /* Alias sémantiques — pas des jetons Tailwind, à consommer via bg-[var(--nom)] etc.
+     Préférés aux valeurs brutes dans les composants. */
+  --surface-page: var(--color-sand-50);
+  --surface-card: var(--color-white);
+  --surface-sunken: var(--color-sand-100);
+  --surface-inverse: var(--color-green-900);
+  --surface-escrow: var(--color-clay-50);
+  --surface-input: #fdfcfa;
+  --overlay-panel: #221e19;
+
+  --border-subtle: #efe8dc;
+  --border-default: var(--color-sand-400);
+  --border-strong: var(--color-sand-500);
+  --border-escrow: var(--color-clay-200);
+
+  --text-primary: var(--color-ink);
+  --text-secondary: var(--color-sand-800);
+  --text-muted: var(--color-sand-700);
+  --text-faint: var(--color-sand-600);
+  --text-on-dark: var(--color-white);
+  --text-brand: var(--color-green-700);
+  --text-money-locked: var(--color-clay-700);
+
+  --action-primary: linear-gradient(140deg, var(--color-green-500), var(--color-green-700));
+  --action-primary-solid: var(--color-green-600);
+  --action-accent: var(--color-clay-500);
+  --action-danger: var(--color-danger-fg);
+
+  --gradient-hero: radial-gradient(90% 120% at 78% 8%, rgba(255, 255, 255, 0.5), transparent 55%),
+    linear-gradient(155deg, var(--color-green-100) 0%, var(--color-green-400) 46%, var(--color-green-900) 100%);
+  --gradient-balance: radial-gradient(90% 130% at 85% 10%, rgba(199, 127, 62, 0.5), transparent 60%),
+    linear-gradient(130deg, var(--color-green-800), var(--color-green-950));
+
+  --duration-fast: 0.16s;
+  --duration-base: 0.22s;
+  --duration-slow: 0.35s;
+}
+
+body {
+  background: var(--surface-page);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+}
+
+@keyframes im-fade {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes im-pop {
+  0% { transform: scale(1); }
+  45% { transform: scale(1.3); }
+  100% { transform: scale(1); }
+}
+@keyframes im-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+@keyframes im-shimmer {
+  0% { background-position: -500px 0; }
+  100% { background-position: 500px 0; }
+}
+@keyframes im-rise {
+  from { opacity: 0; transform: translateY(18px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes im-spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes im-slide-left {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
+@keyframes im-veil {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
