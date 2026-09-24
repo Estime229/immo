@@ -311,8 +311,14 @@ Pour chaque cas exécuté, noter : **ID**, **date**, **compte utilisé**, **Réu
 | LOC-17 | ✅ Réussi | Après signature complète : la fiche repasse en lecture seule, badge « Signé », date de signature affichée, plus aucun contrôle de signature visible |
 | LOC-24 | ✅ Réussi | « Publier une demande de logement » (demande générale, pas une candidature sur une annonce précise) → `POST /housing-requests` **201**, `status: "open"`, confirmation claire (« Les propriétaires correspondants peuvent maintenant vous répondre ») |
 | LOC-27 | ✅ Réussi | Message envoyé depuis une conversation existante (créée plus tôt via une demande de contact) → `POST /messaging/conversations/:id/messages` **201**, relu côté propriétaire (`GET` sur la même conversation avec le token du propriétaire) : le message apparaît bien dans son fil |
+| LOC-26 | ✅ Réussi | `/locataire/signalements` liste les deux signalements créés plus haut avec une vraie frise de statut (« Déclaré » actif, le reste grisé — cohérent avec `status: "open"` côté API), badge « Pièce jointe 1 » affiché uniquement sur celui qui en a une |
+| LOC-28 | ✅ Réussi (voir bug backend ci-dessous) | Cloche de notifications : compteur exact (6), tri antichronologique correct, notifications réelles générées pour chaque action de ce lot (EDL signé, EDL à signer, paiement d'entrée, dépôt wallet, bail prêt à signer, compte vérifié) — mais une des notifications affiche la mauvaise devise, cf. ci-dessous |
 
-**20/32 cas exécutés à ce stade.**
+**22/32 cas exécutés à ce stade.**
+
+### Bug backend trouvé (pas un problème front) : la notification de recharge wallet affiche « EUR » au lieu de FCFA
+
+`GET /notifications` renvoie, pour la notification « Dépôt réussi ! » suivant une recharge wallet réussie : `"Votre dépôt de 120000 EUR a été validé. Votre tirelire a été rechargée."` — alors que toutes les autres notifications du même compte, générées dans la même minute pour les mêmes 120 000 F (bail, paiement d'entrée), utilisent correctement « XOF » ou n'affichent que le montant sans devise erronée. Le message est déjà entièrement formé côté API (`message.fr`), `NotificationBell.vue` ne fait qu'afficher `localizeNotification(n.message)` sans aucune interpolation — rien à corriger côté front, le template de génération de cette notification précise (recharge wallet) est en cause côté backend.
 
 ### Bug trouvé et corrigé : fil d'avancement du bail toujours en retard d'une étape
 
