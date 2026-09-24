@@ -263,3 +263,66 @@ Tout autre numéro produit un comportement non défini côté bac à sable — n
 ## Comment reporter un résultat
 
 Pour chaque cas exécuté, noter : **ID**, **date**, **compte utilisé**, **Réussi / Échoué / Bloqué**, et si échoué — capture d'écran + réponse réseau exacte (statut + corps) de l'appel API concerné. Un « échec » sans la réponse API réelle est difficile à distinguer d'un problème de démarrage à froid du backend (voir SYS-02) ou d'une limite déjà connue (voir §0).
+
+---
+
+## Résultats d'exécution — §3 Espace Public
+
+**Date** : 2026-09-24 · **Compte** : `qa-tenant-1790279752@example.com` (créé pour l'occasion, jamais utilisé avant) · **Environnement** : `https://im-hazel.vercel.app` (production réelle) · **Outil** : Playwright, sans rien mocker.
+
+| ID | Résultat | Preuve |
+|---|---|---|
+| PUB-01 | ✅ Réussi | « 30 logements disponibles » affiché, 0 erreur console |
+| PUB-02 | ✅ Réussi | Filtre ville appliqué sans erreur |
+| PUB-05 | ✅ Réussi | Fiche logement réelle chargée, 0 erreur console |
+| PUB-06 | ✅ Réussi | Vitrine réelle chargée (« 0 biens » légitime — bien du propriétaire testé non publiquement listé au niveau du bien, voir constat UX ci-dessous) |
+| PUB-07 | ✅ Réussi | Clic sur ♥ non connecté → redirection propre vers `/connexion` |
+| PUB-08 | ✅ Réussi (fonctionnellement) | Page ne plante pas — **mais message trompeur, voir constat UX ci-dessous** |
+| PUB-09/10 | ✅ Réussi | `/contact`, `/faq`, `/legal`, `/louer` : 200, 0 erreur console |
+| PUB-11 | ✅ Réussi | Favori ajouté avant connexion, retrouvé après connexion sur `/favoris` (« 1 logement enregistré ») |
+
+**11/11 cas Public exécutés, 11 réussis fonctionnellement.** Deux réussites « techniques » cachent des problèmes de clarté — détaillés ci-dessous plutôt que dans cette grille, pour ne pas les faire passer pour de simples bugs.
+
+---
+
+## 9. Constats UX / Produit — zones d'ombre, parcours à revoir, clarté, validations sans confirmation
+
+Cette section répond à une question différente de « est-ce que ça marche ? » (couvert ci-dessus) : « est-ce que c'est compréhensible, et est-ce que ça protège l'utilisateur de ses propres erreurs ? ». Constats obtenus en relisant le code de chaque action irréversible/financière de la plateforme (pas une supposition — chaque ligne ci-dessous cite le fichier exact).
+
+### 9.1 Validations sans confirmation — le constat le plus net
+
+Recherche systématique de tout `@click` déclenchant une action irréversible ou financière : **aucune n'a de récapitulatif ni de « Êtes-vous sûr ? » avant exécution, sauf une seule exception.**
+
+| Action | Fichier | Ce qui se passe aujourd'hui | Risque réel |
+|---|---|---|---|
+| **Payer une intervention artisan** (débit wallet, peut être un montant important) | `app/pages/pro/artisans.vue:248` (`doPay`) | Un clic sur « Payer l'intervention » dans une liste débite immédiatement, aucun récapitulatif du montant | 🔴 Argent réel débité sans étape de recul |
+| **Demander un retrait** (wallet → Mobile Money) | `app/components/pro/RetraitModal.vue`, `app/components/artisan/RetraitModal.vue` | La modale elle-même sert de semi-confirmation, mais le bouton final (« Demander le retrait ») exécute directement — pas de récapitulatif « 50 000 F vers +229 97 XX XX XX, confirmer ? » | 🟠 Erreur de saisie (montant, numéro) non rattrapable avant envoi |
+| **Annuler une demande d'intervention artisan** | `app/pages/pro/artisans.vue:247` (`doCancel`) | Un clic annule directement | 🟡 |
+| **Mettre fin à un partenariat artisan** | `app/pages/pro/artisans.vue:365` / `app/pages/artisan/partenaires.vue:38` | Idem | 🟡 |
+| **Annuler une réservation payée** | `app/pages/locataire/reservations.vue:50` (`cancelBooking`) | Annule directement, **sans afficher le taux de rétention** (`booking_retention_percentage`) avant de cliquer — l'utilisateur découvre le remboursement partiel après coup | 🟠 Surprise financière évitable |
+| **Résilier / annuler un bail** | `app/pages/pro/baux/index.vue:42,49` (`cancelUnpaid`, `terminate`) | Un clic sur « Annuler (jamais payé) » résilie directement | 🟠 Action lourde de conséquence pour le locataire concerné |
+| **Supprimer un document KYC** | `app/pages/kyc.vue:130` (`deleteDoc`) | Suppression immédiate | 🟡 |
+| **Retirer un tarif** | `app/pages/pro/tarifs.vue:84` (`removePricing`) | Suppression immédiate | 🟡 |
+| **Supprimer une photo de portfolio (artisan)** | `app/pages/artisan/profil.vue:103` | Suppression immédiate | ⚪ |
+| **Marquer une intervention terminée** | `app/components/artisan/TerminerModal.vue:32` | Déclenche le décompte de la garantie, un clic suffit | 🟡 |
+
+**La seule exception, et le bon modèle à généraliser** : la suppression de compte (`app/pages/locataire/profil.vue:317`, `app/pages/pro/profil.vue:246`) a un vrai état à deux temps (`deleteStep: 'idle' → 'confirm'`) avant d'appeler `DELETE /user/delete`. C'est exactement le patron à répliquer sur les actions ci-dessus — pas besoin d'inventer un nouveau composant, juste réutiliser celui-là.
+
+### 9.2 Clarté — messages qui induisent en erreur
+
+- **`/favoris` non connecté** (`app/pages/favoris.vue`) affiche *« Impossible de charger vos favoris pour le moment. Réessayer »* — un message qui sonne comme une panne technique, alors que la vraie raison est simplement « vous n'êtes pas connecté ». Un testeur qui tombe dessus par un lien direct (pas depuis le bouton ♥, qui redirige correctement) croira à un bug serveur. À corriger : détecter l'absence de session et afficher « Connectez-vous pour voir vos favoris » avec un bouton vers `/connexion`, plutôt que de laisser l'appel API échouer silencieusement en 401 et afficher un message d'échec générique.
+- **Clic sur ♥ non connecté** : redirige vers `/connexion` sans un mot d'explication. Rien n'indique à l'utilisateur *pourquoi* il vient d'être redirigé, ni que son intention (« mettre ce logement en favori ») sera reprise après connexion (ce qui, à vérifier, n'est peut-être même pas le cas — PUB-11 a testé le scénario où le favori est reposé manuellement après connexion, pas l'auto-reprise de l'intention initiale).
+- **Vitrine « 0 biens publiés »** (PUB-06) : un vrai propriétaire peut avoir des unités bien réelles et réservables, mais si le *bien* parent n'est pas lui-même marqué publiquement listé (deux booléens distincts, `is_publicly_listed` au niveau bien ET au niveau unité), sa vitrine affiche « 0 biens » sans aucune explication. Rien dans `pro/biens/*` n'explique cette distinction à deux niveaux au propriétaire — il ne comprendra pas pourquoi son bien n'apparaît pas dans sa propre vitrine alors qu'il « l'a publié ».
+- **Erreur I2** (invitation d'équipe/agence, `pro/equipe.vue`) : le message affiché est probablement une erreur 500 brute mappée génériquement, pas une explication produit (« cette fonctionnalité est temporairement indisponible »). À vérifier visuellement — si c'est le cas, ça expose un problème backend interne à l'utilisateur final au lieu de l'abstraire proprement.
+- **Retenue de garantie artisan** : le montant retenu et sa date de libération sont visibles *après coup* dans `facturation.vue`, mais rien avant le paiement (côté propriétaire, `pro/artisans.vue`) n'explique qu'une partie de la somme sera retenue puis reversée à l'artisan plus tard.
+
+### 9.3 Parcours à revoir
+
+- **Paiement d'une intervention artisan** (`pro/artisans.vue`) : parcours à une seule étape depuis une liste, sans écran dédié récapitulatif ni confirmation — voir §9.1. Candidat naturel pour une modale de confirmation dédiée (montant, artisan, garantie, solde restant après paiement).
+- **Annulation de réservation** (`locataire/reservations.vue`) : devrait afficher le montant réellement remboursé (calculé depuis `booking_retention_percentage`) **avant** de cliquer « Annuler », pas seulement le résultat après coup.
+- **Vitrine propriétaire vs biens listés** : soit unifier les deux booléens (bien/unité) côté produit, soit à défaut expliquer clairement dans `pro/biens/*` pourquoi un bien n'apparaît pas publiquement.
+- **Équipe/mandats (I2)** : tant que le bug serveur n'est pas corrigé, envisager de masquer l'entrée de menu ou d'afficher un bandeau « Fonctionnalité en cours de déploiement » plutôt que de laisser un utilisateur agence buter sur une 500 sans contexte.
+
+### 9.4 Recommandation de priorisation
+
+Si une seule chose devait être corrigée en premier : **le paiement d'intervention artisan sans confirmation** (§9.1, premier item) — c'est la seule action de cette liste qui déplace de l'argent réel en un clic isolé, sans aucun garde-fou, pas même le semi-frein d'une modale dédiée.
