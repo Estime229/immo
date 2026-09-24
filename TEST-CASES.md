@@ -281,8 +281,10 @@ Pour chaque cas exécuté, noter : **ID**, **date**, **compte utilisé**, **Réu
 | PUB-08 | ✅ Réussi (fonctionnellement) | Page ne plante pas — **mais message trompeur, voir constat UX ci-dessous** |
 | PUB-09/10 | ✅ Réussi | `/contact`, `/faq`, `/legal`, `/louer` : 200, 0 erreur console |
 | PUB-11 | ✅ Réussi | Favori ajouté avant connexion, retrouvé après connexion sur `/favoris` (« 1 logement enregistré ») |
+| PUB-03 | ✅ Réussi | « 2 chambres à Cotonou sous 100 000 » → critères correctement extraits (« 2+ chambres », « Max 100 000 FCFA »), résultats filtrés en conséquence (3 logements) |
+| PUB-04 | ✅ Réussi | Vue carte : 1 seul pin sur la première page de résultats — vérifié par comparaison directe avec l'API que **seul 1 des 12 biens de cette page a de vraies coordonnées GPS** (les 7 autres biens géolocalisés existent mais sont sur des pages suivantes) ; correct, pas un bug |
 
-**11/11 cas Public exécutés, 11 réussis fonctionnellement.** Deux réussites « techniques » cachent des problèmes de clarté — détaillés ci-dessous plutôt que dans cette grille, pour ne pas les faire passer pour de simples bugs.
+**Correction** : ce tableau annonçait « 11/11 » alors que PUB-03/04 n'y figuraient pas — erreur de comptage corrigée ici. **11/11 cas Public réellement exécutés maintenant.** Deux réussites « techniques » cachent des problèmes de clarté — détaillés ci-dessous plutôt que dans cette grille, pour ne pas les faire passer pour de simples bugs.
 
 ---
 
@@ -425,6 +427,41 @@ En finançant le wallet du propriétaire neuf ci-dessus par le vrai bac à sable
 
 ---
 
+## Résultats d'exécution — §1 Authentification, §2 KYC, §7 Paiements, §8 Robustesse
+
+**Date** : 2026-09-24 · **Comptes** : plusieurs comptes de cette session (frais et existants) · **Environnement** : `https://im-hazel.vercel.app` (production réelle) · **Outil** : Playwright + curl.
+
+| ID | Résultat | Preuve |
+|---|---|---|
+| AUTH-01/02/05/10/11 | ✅ Réussi (déjà exercés) | Exercés en pratique des dizaines de fois au fil de cette session (chaque compte neuf créé, chaque bascule de rôle, LOC-03 pour AUTH-11) — jamais consignés isolément avant, mais couverts avec preuve réelle |
+| AUTH-03 | ✅ Réussi | Code OTP faux → « Code incorrect ou expiré. », reste sur `/connexion`, aucune connexion |
+| AUTH-04 | ✅ Réussi (déjà exercé) | Connexion admin par mot de passe utilisée systématiquement tout au long de cette session |
+| AUTH-06 | ⬜ Non exécuté | Pas prioritaire — flux similaire à AUTH-03/l'inscription, non rejoué faute de temps |
+| AUTH-07 | ✅ Réussi | Session locataire, rechargement (F5) → toujours connecté, même URL |
+| AUTH-08 | ❌ **Échoué — voir « Constat majeur » ci-dessous** | Jeton invalide/corrompu → reste sur la page protégée au lieu de rediriger vers `/connexion`, tableau de bord affiché avec des messages d'erreur génériques trompeurs sur chaque bloc |
+| AUTH-09 | ⬜ Non exécuté | Nécessite de suspendre un compte via l'admin — risqué sur les comptes de test partagés, non tenté |
+| KYC-01/02/03/04 | ✅ Réussi (déjà exercés) | Couverts en détail dans `INTEGRATION-TESTS.md` (Lots 3, 35) — non rejoués ici, comportement inchangé confirmé indirectement par KYC-05 |
+| KYC-05 | ✅ Réussi | Exercé plusieurs fois (LOC-19, PRO-02) : 403 explicite systématique sur action nécessitant KYC |
+| PAY-01 | ✅ Réussi (initiation) | `POST /payment/checkout` (FedaPay, mode `redirect`) → 201, vraie URL sandbox renvoyée ; parcours externe non complété (pas de carte réelle), cohérent avec les lots précédents |
+| PAY-02 | ✅ Réussi (déjà exercé) | Les 9 numéros MTN/Moov/Free Money du bac à sable ont chacun été utilisés au moins une fois au fil de cette session avec le résultat annoncé |
+| PAY-03 | ⬜ Non testable ici | Même limite que les lots précédents — nécessite de compléter un paiement FedaPay jusqu'au bout |
+| PAY-04 | ✅ Réussi (déjà observé) | Chaque modale de paiement/retrait testée cette session désactive son bouton pendant l'envoi (`:disabled="loading"`) |
+| SYS-01/03/06/07 | ⬜ Non exécuté | Hors périmètre de cette passe |
+| SYS-02 | ✅ Réussi (déjà observé) | Plusieurs faux « 0 résultat » rencontrés cette session se sont résolus avec un délai suffisant (voir PUB-01/PUB-04) — squelette de chargement présent, comportement attendu |
+| SYS-04 | ❌ **Échoué — voir « Constat majeur » ci-dessous** | Navigation directe vers `/locataire`, `/pro`, `/artisan` **sans aucun cookie** : reste sur l'URL protégée, ne redirige jamais vers `/connexion` |
+| SYS-05 | 🟡 Observé, non tranché | Voir constat d'`im-78` en §5 — un compte `tenant` par défaut peut atteindre `/pro/biens/ajouter`, bloqué seulement par `POST /property` (403 KYC), pas par une garde de rôle en amont |
+
+### Constat majeur : aucune page protégée ne redirige réellement vers `/connexion`
+
+`SYS-04` et `AUTH-08` échouent pour la même raison structurelle, vérifiée en direct sur `/locataire`, `/pro` et `/artisan` : **il n'existe aucun middleware de route dans tout le projet** (`find app -iname "*middleware*"` ne renvoie que des fichiers de types/composables, rien sous `app/middleware/`). La seule protection existante est `app/plugins/auth.ts`, qui tente `fetchMe()` au démarrage si un jeton existe — et le documente honnêtement en commentaire : *« Jeton invalide/expiré au chargement : la prochaine requête authentifiée passera par le rafraîchissement normal, ou l'échec restera visible à l'usage. »* C'est exactement ce qui se passe, dans les deux scénarios les plus probables en vrai usage :
+
+- **Aucun cookie** (session jamais ouverte, ou complètement effacée) : `/locataire`, `/pro`, `/artisan` se chargent quand même, sidebar et navigation complètes affichées, chaque bloc de données échoue individuellement en 401 (vérifié : `notifications`, `bookings/mine`, `wallet/me`, `leases/my`, `signals`… tous en 401) et affiche son propre message générique (« Impossible de charger vos baux pour le moment. Réessayer ») — jamais « Vous devez vous connecter ».
+- **Jeton corrompu/expiré sans refresh possible** : comportement identique.
+
+Combiné au constat déjà fait en §9.2 sur `/favoris` (même famille de message trompeur), ceci n'est pas un problème isolé à un écran : c'est l'absence d'une garde d'authentification au niveau des routes elle-même. N'importe qui peut voir la structure complète de n'importe quel espace protégé sans être connecté — sans données réelles, certes, mais sans non plus être informé qu'il doit se connecter pour les voir. La correction naturelle est un middleware Nuxt (`definePageMeta({ middleware: 'auth' })` ou équivalent global) qui redirige vers `/connexion` dès que `useAuthUser()` est `null` après la tentative de `fetchMe()`, plutôt que de compter sur chaque bloc pour échouer proprement.
+
+---
+
 ## 9. Constats UX / Produit — zones d'ombre, parcours à revoir, clarté, validations sans confirmation
 
 Cette section répond à une question différente de « est-ce que ça marche ? » (couvert ci-dessus) : « est-ce que c'est compréhensible, et est-ce que ça protège l'utilisateur de ses propres erreurs ? ». Constats obtenus en relisant le code de chaque action irréversible/financière de la plateforme (pas une supposition — chaque ligne ci-dessous cite le fichier exact).
@@ -460,6 +497,7 @@ Recherche systématique de tout `@click` déclenchant une action irréversible o
 - **Retenue de garantie artisan** : le montant retenu et sa date de libération sont visibles *après coup* dans `facturation.vue`, mais rien avant le paiement (côté propriétaire, `pro/artisans.vue`) n'explique qu'une partie de la somme sera retenue puis reversée à l'artisan plus tard.
 - **Le message d'erreur pousse l'utilisateur vers une confusion supplémentaire, pas seulement l'API qui bug** : reproduit en direct sur production (compte neuf, voir « Résultats d'exécution — §4 »). Après un 500 générique sur `POST /visits` (écriture en réalité appliquée côté serveur — bug d'API distinct, voir Lot 24), le front affiche *« Une erreur est survenue côté serveur. Réessayez dans un instant. »*, qui **invite explicitement à réessayer**. Sauf que la visite a déjà été créée : la seconde tentative percute la contrainte anti-doublon de l'API (« Vous avez deja une visite en attente pour ce logement. », 400) — un message qui semble contredire l'expérience de l'utilisateur, qui n'a, de son point de vue, jamais réussi. Un bug de fiabilité API se transforme ainsi en confusion produit évitable : le message générique après un 500 devrait suggérer de vérifier l'état actuel (« Mes visites ») avant de suggérer de réessayer.
 - **Champs de date « fantômes » dans le blocage de disponibilité artisan** (`app/components/artisan/BloquerModal.vue:20,24`) : vérifié en direct, `readonly: false` et `disabled: false` sur des champs dont la valeur ne peut en réalité jamais changer. Pire qu'un champ désactivé, qui dirait honnêtement « pas encore possible » — celui-ci a l'air de fonctionner et ne fonctionne pas, sans qu'aucun message ne le signale.
+- **Aucune page protégée ne redirige vers `/connexion` (AUTH-08, SYS-04)** : le constat le plus large de toute cette section, détaillé dans « Résultats d'exécution — §1/§2/§7/§8 » ci-dessus. Sans session valide, `/locataire`, `/pro` et `/artisan` se chargent quand même avec toute leur structure, et chaque bloc de données échoue individuellement avec un message générique — jamais une invite claire à se reconnecter.
 
 ### 9.3 Parcours à revoir
 
@@ -470,4 +508,9 @@ Recherche systématique de tout `@click` déclenchant une action irréversible o
 
 ### 9.4 Recommandation de priorisation
 
-Si une seule chose devait être corrigée en premier : **le paiement d'intervention artisan sans confirmation** (§9.1, premier item) — c'est la seule action de cette liste qui déplace de l'argent réel en un clic isolé, sans aucun garde-fou, pas même le semi-frein d'une modale dédiée.
+Deux constats se disputent la première place, pour des raisons différentes :
+
+1. **L'absence de garde d'authentification sur les routes** (AUTH-08/SYS-04, ci-dessus) — le plus large en portée : touche `/locataire`, `/pro` et `/artisan` dans leur intégralité, pas une seule action. Aucune vraie donnée ne fuit (chaque appel API reste protégé, 401 systématique), mais l'expérience — une page à moitié rendue avec des messages d'échec trompeurs au lieu d'une invite claire à se connecter — est la moins professionnelle de tout l'audit, et la plus simple à corriger (un seul middleware à ajouter, réutilisable partout).
+2. **Le paiement d'intervention artisan sans confirmation** (§9.1, premier item) — la seule action de la liste qui déplace de l'argent réel en un clic isolé, sans aucun garde-fou.
+
+Si une seule chose devait être corrigée en premier, la garde d'authentification (1) a le meilleur rapport effort/impact : une correction, un fichier, un bénéfice sur tout le site.
