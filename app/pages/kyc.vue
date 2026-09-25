@@ -7,6 +7,53 @@ import { ApiRequestError } from '~/utils/authenticatedFetcher'
 const role = useAuthRole()
 const auth = useAuthApi()
 const kyc = useKycApi()
+const profileApi = useProfileApi()
+
+/** `useAuthRole()` est un choix local jamais persisté côté API (I1) — pour savoir si ce compte est réellement propriétaire/agence, on lit le vrai rôle renvoyé par /auth/me. */
+const isLandlordOrAgency = computed(() => {
+  const r = auth.user.value?.role
+  return r === 'landlord' || r === 'agent' || r === 'agency'
+})
+
+/**
+ * Nom complet + (propriétaire/agence) raison sociale/IFU/RCCM — mêmes champs
+ * que `locataire/profil.vue`/`pro/profil.vue`, réutilisés ici pour que la
+ * vérification les demande directement au lieu de compter sur l'utilisateur
+ * pour les retrouver séparément sur une autre page.
+ */
+const fullName = ref('')
+const company = ref('')
+const ifu = ref('')
+const rccm = ref('')
+const savingCoordonnees = ref(false)
+const coordonneesError = ref('')
+const coordonneesSaved = ref(false)
+async function saveCoordonnees() {
+  const payload: Record<string, unknown> = {}
+  if (fullName.value.trim()) payload.full_name = fullName.value.trim()
+  if (isLandlordOrAgency.value) {
+    if (company.value.trim()) payload.company = company.value.trim()
+    if (ifu.value.trim()) payload.ifu = ifu.value.trim()
+    if (rccm.value.trim()) payload.rccm = rccm.value.trim()
+  }
+  if (Object.keys(payload).length === 0) return true
+  savingCoordonnees.value = true
+  coordonneesError.value = ''
+  try {
+    await profileApi.update(payload)
+    fullName.value = ''
+    company.value = ''
+    ifu.value = ''
+    rccm.value = ''
+    coordonneesSaved.value = true
+    return true
+  } catch (e) {
+    coordonneesError.value = e instanceof ApiRequestError ? (e.mapped.bannerMessage ?? "L'enregistrement a échoué.") : "L'enregistrement a échoué."
+    return false
+  } finally {
+    savingCoordonnees.value = false
+  }
+}
 
 const kycTab = ref<'identite' | 'documents' | 'coordonnees'>('identite')
 const KYC_TABS = [
@@ -152,8 +199,9 @@ async function previewDoc(id: string) {
 }
 
 const doneOpen = ref(false)
-function finishKyc() {
-  doneOpen.value = true
+async function finishKyc() {
+  const ok = await saveCoordonnees()
+  if (ok) doneOpen.value = true
 }
 const SPACE_ROUTE: Record<UserRole, string> = {
   locataire: '/locataire',
@@ -276,17 +324,37 @@ function goSpace() {
 
     <template v-else>
       <div class="max-w-[560px] rounded-xl border border-[var(--border-subtle)] bg-white p-6">
-        <p class="m-0 text-base font-bold">Numéro Mobile Money</p>
-        <p class="mb-5 mt-1.5 text-[13.5px] text-[var(--text-muted)]">C'est sur ce numéro que vos retraits seront envoyés. Il doit être à votre nom.</p>
-        <label class="block">
-          <span class="mb-2 block text-[12.5px] font-bold">Numéro</span>
-          <div class="relative">
-            <input value="+229 97 45 12 08" class="h-[50px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] py-0 pl-4 pr-[100px] font-mono text-[15px] outline-none">
-            <span class="absolute right-[9px] top-[9px] rounded-sm bg-[image:linear-gradient(140deg,#ffcc08,#e0a800)] px-3.5 py-2 text-[11.5px] font-black text-[var(--text-primary)]">MTN MoMo</span>
-          </div>
+        <p class="m-0 text-base font-bold">Coordonnées</p>
+        <p class="mb-5 mt-1.5 text-[13.5px] text-[var(--text-muted)]">
+          {{ isLandlordOrAgency ? "Ces informations sont demandées pour la vérification d'activité (KYB) — elles ne sont jamais réaffichées en clair une fois enregistrées." : "Votre nom complet, utilisé sur vos échanges avec les propriétaires et sur vos documents." }}
+        </p>
+
+        <label class="mb-3.5 block">
+          <span class="mb-2 block text-[12.5px] font-bold">Nom complet</span>
+          <input v-model="fullName" placeholder="Ex. Koffi Dossou" class="h-[50px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-4 text-[15px] outline-none">
         </label>
-        <p class="mb-0 mt-2.5 text-[12.5px] text-[var(--text-faint)]">Opérateur détecté automatiquement d'après le préfixe. Pas encore relié à l'API — dépend de /profile/me, hors périmètre I3.</p>
-        <CoreButton size="lg" full-width class="mt-4.5" @click="finishKyc">Enregistrer et terminer la vérification</CoreButton>
+
+        <template v-if="isLandlordOrAgency">
+          <label class="mb-3.5 block">
+            <span class="mb-2 block text-[12.5px] font-bold">Raison sociale</span>
+            <input v-model="company" placeholder="Ex. Agence Immo Cotonou" class="h-[50px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-4 text-[15px] outline-none">
+          </label>
+          <div class="mb-1 grid grid-cols-2 gap-3">
+            <label class="block">
+              <span class="mb-2 block text-[12.5px] font-bold">IFU</span>
+              <input v-model="ifu" placeholder="13 chiffres" class="h-[50px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-4 text-[15px] outline-none">
+            </label>
+            <label class="block">
+              <span class="mb-2 block text-[12.5px] font-bold">RCCM</span>
+              <input v-model="rccm" placeholder="Ex. RB/COT/24 B 6789" class="h-[50px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-4 text-[15px] outline-none">
+            </label>
+          </div>
+        </template>
+
+        <p class="mb-0 mt-3.5 text-[12.5px] text-[var(--text-faint)]">Votre numéro Mobile Money est demandé directement au moment d'un retrait, pas ici.</p>
+        <p v-if="coordonneesError" class="mb-0 mt-2.5 text-[13px] font-semibold text-danger-fg">{{ coordonneesError }}</p>
+        <p v-if="coordonneesSaved" class="mb-0 mt-2.5 text-[13px] font-semibold text-ok-fg">Enregistré.</p>
+        <CoreButton size="lg" full-width class="mt-4.5" :disabled="savingCoordonnees" @click="finishKyc">{{ savingCoordonnees ? 'Enregistrement…' : 'Enregistrer et terminer la vérification' }}</CoreButton>
       </div>
     </template>
 

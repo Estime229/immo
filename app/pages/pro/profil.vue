@@ -38,6 +38,7 @@ function maskedStatus(v: string | null) {
   return v ? 'Renseigné' : 'Non renseigné'
 }
 
+const fullName = ref('')
 const company = ref('')
 const ifu = ref('')
 const rccm = ref('')
@@ -50,11 +51,13 @@ async function saveProfile() {
   profileSaved.value = false
   try {
     const payload: Record<string, unknown> = {}
+    if (fullName.value.trim()) payload.full_name = fullName.value.trim()
     if (company.value.trim()) payload.company = company.value.trim()
     if (ifu.value.trim()) payload.ifu = ifu.value.trim()
     if (rccm.value.trim()) payload.rccm = rccm.value.trim()
     if (Object.keys(payload).length === 0) return
     await profileApi.update(payload)
+    fullName.value = ''
     company.value = ''
     ifu.value = ''
     rccm.value = ''
@@ -169,6 +172,10 @@ async function toggleChannel(channel: NotificationChannel) {
         </div>
         <template v-if="profile">
           <div class="flex justify-between border-b border-sand-200 py-3.5">
+            <span class="text-[13.5px] text-[var(--text-faint)]">Nom complet</span>
+            <span class="text-sm font-semibold">{{ maskedStatus(profile.full_name_masked) }}</span>
+          </div>
+          <div class="flex justify-between border-b border-sand-200 py-3.5">
             <span class="text-[13.5px] text-[var(--text-faint)]">Raison sociale</span>
             <span class="text-sm font-semibold">{{ maskedStatus(profile.company_masked) }}</span>
           </div>
@@ -187,6 +194,10 @@ async function toggleChannel(channel: NotificationChannel) {
         <p class="m-0 text-base font-bold">Modifier mon identité pro</p>
         <p class="mb-4 mt-1 text-[13px] text-[var(--text-muted)]">Ces informations sont chiffrées côté serveur — jamais réaffichées en clair.</p>
         <div class="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+          <div class="sm:col-span-2">
+            <label class="mb-1.5 block text-[12.5px] font-bold text-[var(--text-muted)]">Nom complet</label>
+            <input v-model="fullName" placeholder="Ex. Koffi Dossou" class="h-11 w-full rounded-sm border border-[var(--border-default)] bg-white px-3.5 text-[13.5px] outline-none">
+          </div>
           <div class="sm:col-span-2">
             <label class="mb-1.5 block text-[12.5px] font-bold text-[var(--text-muted)]">Raison sociale</label>
             <input v-model="company" placeholder="Ex. Agence Immo Cotonou" class="h-11 w-full rounded-sm border border-[var(--border-default)] bg-white px-3.5 text-[13.5px] outline-none">
