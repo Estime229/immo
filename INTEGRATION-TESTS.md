@@ -2821,3 +2821,46 @@ Test Files  16 passed (16)
 ### Limite connue
 
 Même demande backend qu'au Lot 41 : un paramètre de type de location sur `GET /property/search` rendrait le filtre exact au-delà de 300 unités et supprimerait les appels de grille tarifaire.
+
+## Lot 43 — Tableaux de bord : un compte non vérifié est maintenant signalé dans les trois espaces
+
+**Date** : 2026-09-26
+
+### Demande
+
+L'utilisateur voulait qu'un compte dont l'identité n'est pas vérifiée soit signalé dans les tableaux de bord des espaces.
+
+### Deux pièges trouvés en le faisant
+
+1. **« Locataire vérifié » mentait.** La barre latérale de l'espace locataire se basait sur `user.is_verified`, qui ne dit que l'email confirmé — vrai dès le premier code OTP (constaté en direct : des comptes jamais vérifiés affichaient « Locataire vérifié »). Seul `profile.kyc_status` dit si l'identité a été vérifiée. Corrigé : « Locataire vérifié » seulement si `kyc_status === 'verified'`, sinon « Locataire · non vérifié ».
+2. **`pending` ne veut pas dire « en cours d'examen ».** Un compte tout juste créé est déjà `kyc_status: "pending"` avant d'avoir déposé quoi que ce soit. Afficher « vos documents sont en cours de vérification » à quelqu'un qui n'a rien envoyé serait faux. `has_id_card` (aussi renvoyé par `/auth/me`) départage les deux cas, sans appel supplémentaire.
+
+### Ce qui a été livré
+
+| Fichier | Rôle |
+|---|---|
+| `app/utils/kycStatus.ts` | + `deriveVerificationNotice(status, hasIdCard, space)` — `null` si vérifié ; sinon « Compte non vérifié » (orange), « Vérification en cours » (bleu, seulement si une pièce est déposée) ou « Vérification refusée » (rouge), avec les actions réellement bloquées par espace (403 `KYC_REQUIRED` constatés : visites, création de bien ; retraits selon la règle affichée sur /kyc) |
+| `app/components/layout/KycNotice.vue` | **Nouveau** — bandeau partagé avec bouton vers `/kyc` |
+| `app/pages/locataire/index.vue`, `pro/index.vue`, `artisan/index.vue` | Bandeau en tête de tableau de bord |
+| `app/layouts/locataire.vue` | Libellé « vérifié » basé sur `kyc_status` |
+| `app/types/auth.ts` | + `has_id_card` sur `AuthUser` |
+
+### Tests automatisés
+
+```
+Test Files  16 passed (16)
+     Tests  101 passed (101)   [+5 : deriveVerificationNotice]
+```
+
+### Vérification manuelle (build de production local, comptes réels)
+
+| Compte | État réel | Bandeau affiché |
+|---|---|---|
+| Locataire neuf | `pending`, aucune pièce | « Compte non vérifié » + « réserver un logement, demander une visite ni retirer de l'argent » ; barre latérale « Locataire · non vérifié » |
+| Artisan neuf | `pending`, aucune pièce | « Compte non vérifié » + « retirer vos gains » |
+| Propriétaire avec pièce déposée | `pending`, pièce déposée | « Vérification en cours » + « publier un bien ni retirer de l'argent » |
+| Propriétaire vérifié | `verified` | Aucun bandeau |
+
+### Constat laissé ouvert (à trancher avec le backend)
+
+Les pages publiques affichent « ✓ Vérifié » / « Ce compte a passé la vérification d'identité Immo » selon `is_verified` du profil public (`GET /public/owners/:id`, `app/pages/vitrine/[id].vue`, `app/pages/biens/[id].vue`). Si ce champ est le même `is_verified` que celui de `/auth/me` — vrai dès la confirmation de l'email —, ces badges affirment une vérification d'identité qui n'a peut-être jamais eu lieu. Le profil public n'expose pas `kyc_status` : à confirmer côté backend avant de corriger l'affichage.

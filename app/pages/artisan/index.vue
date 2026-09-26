@@ -72,6 +72,7 @@ watch(profile, async p => {
 
 <template>
   <div class="animate-[im-fade_.3s_ease_both]">
+    <LayoutKycNotice space="artisan" />
     <div class="mb-4.5 rounded-2xl bg-[image:var(--gradient-balance)] p-6 text-white">
       <div class="mb-3.5 flex items-center gap-2.5">
         <span class="text-[11px] font-extrabold uppercase tracking-[.06em] text-white/60">{{ currentMission ? 'Mission en cours' : 'Bonjour' }}</span>

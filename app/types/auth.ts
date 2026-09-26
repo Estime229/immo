@@ -39,6 +39,8 @@ export interface AuthUser {
   preferred_lang?: string
   preferred_theme?: string
   has_password: boolean
+  /** Présent sur GET /auth/me — une pièce d'identité a été déposée (POST /user/id-card). */
+  has_id_card?: boolean
   created_at?: string
   updated_at?: string
   profile?: AuthUserProfile

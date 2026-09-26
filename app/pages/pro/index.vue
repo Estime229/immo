@@ -86,6 +86,7 @@ const topBiens = computed(() => {
 
 <template>
   <div class="animate-[im-fade_.3s_ease_both]">
+    <LayoutKycNotice space="pro" />
     <div v-if="state === 'loading'" class="flex flex-col gap-4.5">
       <DataSkeletonCard :height="100" :lines="1" />
       <DataSkeletonCard :height="200" :lines="1" />

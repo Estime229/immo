@@ -10,7 +10,8 @@ const displayName = computed(() => {
   return `${u.first_name ?? ''} ${u.last_name ?? ''}`.trim() || u.email
 })
 const firstName = computed(() => currentUser.value?.first_name?.trim() || displayName.value)
-const verifiedLabel = computed(() => (currentUser.value?.is_verified ? 'Locataire vérifié' : 'Locataire'))
+/** `is_verified` ne dit que l'email confirmé (vrai dès le premier code OTP) — seul `profile.kyc_status` dit si l'identité a été vérifiée. */
+const verifiedLabel = computed(() => (currentUser.value?.profile?.kyc_status === 'verified' ? 'Locataire vérifié' : 'Locataire · non vérifié'))
 
 const PAGE_TITLES: Record<string, string> = {
   dash: 'Bonjour',

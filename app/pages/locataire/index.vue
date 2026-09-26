@@ -93,6 +93,7 @@ const activityLoading = computed(() => signalsBlock.state.value === 'loading' ||
 
 <template>
   <div class="animate-[im-fade_.3s_ease_both]">
+    <LayoutKycNotice space="locataire" />
     <FeedbackAlertBanner v-if="lateInfo" tone="danger" action-label="Payer maintenant" class="mb-5" @action="payLateLease">
       {{ dashAlert }}
     </FeedbackAlertBanner>
