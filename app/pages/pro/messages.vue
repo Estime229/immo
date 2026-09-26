@@ -8,10 +8,15 @@ const messagingApi = useMessagingApi()
 const preview = useProtectedFile()
 const currentUser = useAuthUser()
 
+const route = useRoute()
 const block = useFetchBlock(() => messagingApi.fetchConversations())
 onMounted(async () => {
   await block.load()
-  if (block.items.value[0]) pickThread(block.items.value[0])
+  // Même lien profond que côté locataire (?conversation=) — utilisé après une réponse à une demande de logement.
+  const wanted = String(route.query.conversation ?? '')
+  const match = wanted ? block.items.value.find(c => c.id === wanted) : undefined
+  const first = match ?? block.items.value[0]
+  if (first) pickThread(first)
 })
 
 const mobileView = ref<'list' | 'chat'>('list')

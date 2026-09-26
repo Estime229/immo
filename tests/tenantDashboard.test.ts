@@ -96,6 +96,7 @@ describe('buildNextSteps', () => {
     const hr: HousingRequestSummary = { id: 'hr1', description: 'Studio à Fidjrossè', status: 'open', response_count: 3, created_at: '2026-07-01' }
     const steps = buildNextSteps({ ...empty, housingRequests: [hr] })
     expect(steps[0]!.label).toContain('3 réponses')
+    expect(steps[0]!.to).toBe('/locataire/demandes?request=hr1')
   })
 
   it('cumule les étapes de plusieurs sources', () => {

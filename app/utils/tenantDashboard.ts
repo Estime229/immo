@@ -91,7 +91,7 @@ export function buildNextSteps(input: {
         label: `${hr.response_count} réponse${hr.response_count > 1 ? 's' : ''} reçue${hr.response_count > 1 ? 's' : ''} à votre recherche`,
         hint: hr.description,
         cta: 'Voir',
-        to: '/locataire/demandes'
+        to: `/locataire/demandes?request=${hr.id}`
       })
     }
   }

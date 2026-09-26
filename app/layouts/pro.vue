@@ -22,6 +22,27 @@ const currentKey = computed(() => {
 })
 const pageTitle = computed(() => PAGE_TITLES[currentKey.value] ?? '')
 
+/**
+ * Compteurs du menu : jusqu'au Lot 47 ils étaient écrits en dur (« 1 » sur
+ * Demandes, Baux, Mandats, Signalements, Messages, pour tout compte). Seul le
+ * nombre de demandes ouvertes est calculé ici, depuis l'API ; les autres
+ * restent vides tant qu'ils ne sont pas branchés sur une vraie donnée.
+ */
+const housingRequestsApi = useHousingRequestsApi()
+const liveCounts = ref<Record<string, number>>({})
+onMounted(async () => {
+  try {
+    const res = await housingRequestsApi.fetchOpen({ limit: 1 })
+    liveCounts.value = { ...liveCounts.value, demandes: res.total }
+  } catch {
+    // pas de compteur plutôt qu'un faux
+  }
+})
+function liveCount(key: string) {
+  const n = liveCounts.value[key]
+  return n ? (n > 99 ? '99+' : String(n)) : ''
+}
+
 const drawerOpen = ref(false)
 
 watch(() => route.path, () => { drawerOpen.value = false })
@@ -59,7 +80,7 @@ watch(() => route.path, () => { drawerOpen.value = false })
         >
           <span class="w-[17px] flex-none text-center text-sm">{{ n.icon }}</span>
           <span class="flex-1">{{ n.label }}</span>
-          <span v-if="n.count" class="rounded-pill bg-clay-500 px-[7px] py-0.5 text-[10px] font-black text-white">{{ n.count }}</span>
+          <span v-if="liveCount(n.key)" class="rounded-pill bg-clay-500 px-[7px] py-0.5 text-[10px] font-black text-white">{{ liveCount(n.key) }}</span>
         </NuxtLink>
       </template>
     </aside>

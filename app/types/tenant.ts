@@ -150,17 +150,29 @@ export interface PayBookingResult {
 
 export type HousingRequestStatus = 'open' | 'closed'
 
-export interface HousingRequestSummary {
+/** Critères structurés d'une demande — renvoyés tels quels par `/my` ET `/open` (vérifié en live, Lot 47). */
+export interface HousingRequestCriteria {
+  city_id?: string | null
+  city?: { id: string; name: string } | null
+  neighborhood_id?: string | null
+  neighborhood?: { id: string; name: string } | null
+  budget_min?: string | null
+  budget_max?: string | null
+  move_in_date?: string | null
+  min_bedrooms?: number | null
+  desired_billing_frequency?: string | null
+  unit_type_reference_id?: string | null
+  desired_furnished_level?: string | null
+  desired_feature_ids?: string[] | null
+}
+
+export interface HousingRequestSummary extends HousingRequestCriteria {
   id: string
   description: string
   status: HousingRequestStatus
   response_count: number
   created_at: string
   closed_at?: string | null
-  budget_min?: string | null
-  budget_max?: string | null
-  move_in_date?: string | null
-  min_bedrooms?: number | null
 }
 
 /** `message` est quasi toujours null en pratique (optionnel côté RespondToHousingRequestDto) — vérifié en direct. */
@@ -171,6 +183,9 @@ export interface HousingRequestResponse {
   message: string | null
   conversation_id: string
   created_at: string
+  /** Joints par `GET /:id/responses` (vérifié en live) — jamais affichés avant le Lot 47 (« Un propriétaire a proposé un logement »). */
+  unit?: { id: string; name: string; price: string; unit_status: string; property_id: string | null; bedrooms_count?: number | null; surface_m2?: number | null; furnished_level?: string | null } | null
+  landlord?: { id: string; first_name: string | null; last_name: string | null; avatar_url?: string | null } | null
 }
 
 /**
@@ -179,14 +194,16 @@ export interface HousingRequestResponse {
  * auteur) : pas de `response_count`/`created_at`/`min_bedrooms`, mais
  * `requester_display_name` et `desired_billing_frequency` à la place.
  */
-export interface HousingRequestOpenItem {
+export interface HousingRequestOpenItem extends HousingRequestCriteria {
   id: string
   description: string
   budget_min: string | null
   budget_max: string | null
   desired_billing_frequency: string | null
-  requester_display_name: string
+  /** `null` quand le locataire n'a pas de prénom. */
+  requester_display_name: string | null
   status: HousingRequestStatus
+  created_at: string
 }
 
 export interface PaginatedResult<T> {
@@ -300,6 +317,8 @@ export interface NotificationItem {
   type: string
   isRead: boolean
   createdAt: string
+  /** Identifiants liés (ex. `housing_request_id`, `response_id`) — sert au lien de destination. */
+  metadata?: Record<string, unknown> | null
 }
 
 /* ---- IL2 : actions sur un bail ---- */

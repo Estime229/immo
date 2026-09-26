@@ -25,10 +25,10 @@ export const NAV_GROUPS = [
   {
     header: 'Activité locative',
     items: [
-      { key: 'demandes', to: '/pro/demandes', icon: '✎', label: 'Demandes', count: '1' },
+      { key: 'demandes', to: '/pro/demandes', icon: '✎', label: 'Demandes', count: '' },
       { key: 'visites', to: '/pro/visites', icon: '⚑', label: 'Visites', count: '' },
       { key: 'reservations', to: '/pro/reservations', icon: '◱', label: 'Réservations', count: '' },
-      { key: 'baux', to: '/pro/baux', icon: '⎘', label: 'Baux', count: '1' },
+      { key: 'baux', to: '/pro/baux', icon: '⎘', label: 'Baux', count: '' },
       { key: 'edl', to: '/pro/edl', icon: '☑', label: 'États des lieux', count: '' }
     ]
   },
@@ -36,7 +36,7 @@ export const NAV_GROUPS = [
     header: 'Équipe et partenaires',
     items: [
       { key: 'equipe', to: '/pro/equipe', icon: '⚇', label: 'Équipe', count: '' },
-      { key: 'mandats', to: '/pro/mandats', icon: '⚿', label: 'Mandats', count: '1' },
+      { key: 'mandats', to: '/pro/mandats', icon: '⚿', label: 'Mandats', count: '' },
       { key: 'artisans', to: '/pro/artisans', icon: '⚒', label: 'Artisans', count: '' }
     ]
   },
@@ -44,8 +44,8 @@ export const NAV_GROUPS = [
     header: 'Suivi',
     items: [
       { key: 'wallet', to: '/pro/wallet', icon: '⎈', label: 'Wallet', count: '' },
-      { key: 'signalements', to: '/pro/signalements', icon: '⚠', label: 'Signalements', count: '1' },
-      { key: 'messages', to: '/pro/messages', icon: '✉', label: 'Messages', count: '1' }
+      { key: 'signalements', to: '/pro/signalements', icon: '⚠', label: 'Signalements', count: '' },
+      { key: 'messages', to: '/pro/messages', icon: '✉', label: 'Messages', count: '' }
     ]
   }
 ] as const

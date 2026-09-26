@@ -2,24 +2,31 @@ import type { HousingRequestOpenItem, HousingRequestResponse, HousingRequestResp
 
 export interface CreateHousingRequestPayload {
   description: string
+  city_id?: string
+  neighborhood_id?: string
   budget_min?: number
   budget_max?: number
   move_in_date?: string
   min_bedrooms?: number
+  unit_type_reference_id?: string
+  desired_billing_frequency?: string
+  desired_furnished_level?: string
 }
 
+/** Seuls filtres que l'API applique réellement (ville, fréquence) — les autres critères ne sont pas filtrables côté serveur. */
 export interface OpenHousingRequestsFilters {
   city_id?: string
+  desired_billing_frequency?: string
   page?: number
   limit?: number
 }
 
 /**
  * Module demandes de logement — voir 12-INTEGRATION-LOCATAIRE.md, IL6.
- * Les critères structurés qui dépendent d'un référentiel (ville, quartier,
- * type de logement, équipements — via GET /ref) ne sont pas exposés dans le
- * formulaire de ce lot : seuls `description` (obligatoire) et les champs
- * simples sans dépendance à un référentiel sont câblés.
+ * Depuis le Lot 47 le formulaire envoie aussi ville, quartier, type,
+ * fréquence et ameublement : ville et fréquence sont les deux seuls filtres
+ * que les propriétaires peuvent appliquer (`GET /open`), et aucune demande ne
+ * les portait auparavant.
  */
 export function useHousingRequestsApi() {
   const api = useApi()

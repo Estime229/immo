@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { localizeNotification } from '~/composables/useNotificationsApi'
+import { notificationTarget } from '~/utils/housingRequest'
 
 const notificationsApi = useNotificationsApi()
 const block = useFetchBlock(() => notificationsApi.list())
@@ -20,6 +21,16 @@ async function markOne(id: string) {
     await notificationsApi.markRead(id)
   } catch {
     item.isRead = false
+  }
+}
+
+/** Une notification liée à un objet précis (ex. réponse à une demande) y mène directement — avant, un clic ne faisait que la marquer lue. */
+async function openNotification(n: { id: string; metadata?: Record<string, unknown> | null }) {
+  markOne(n.id)
+  const target = notificationTarget(n)
+  if (target) {
+    open.value = false
+    await navigateTo(target)
   }
 }
 
@@ -71,7 +82,7 @@ onUnmounted(() => document.removeEventListener('click', onDocClick))
           type="button"
           class="flex w-full items-start gap-2.5 border-b border-sand-100 px-4 py-3 text-left last:border-b-0"
           :class="n.isRead ? 'bg-white' : 'bg-green-50'"
-          @click="markOne(n.id)"
+          @click="openNotification(n)"
         >
           <span class="mt-1.5 h-2 w-2 flex-none rounded-pill" :class="n.isRead ? 'bg-transparent' : 'bg-info-fg'" />
           <span class="min-w-0 flex-1">
