@@ -107,28 +107,20 @@ function pickCategory(c: CategoryTile) {
   navigateTo({ path: '/recherche', query: { unit_type_id: c.unitTypeId } })
 }
 
-/* ---- Sections par ville réelles ---- */
+/* ---- Annonces réelles : chargées une fois, puis classées nuit / mois (voir plus bas) ---- */
 interface CityGroup { name: string; units: ListingCard[] }
-const cityGroups = ref<CityGroup[]>([])
-const cityGroupsLoading = ref(true)
+const listingsLoading = ref(true)
 
-async function loadCityGroups() {
-  cityGroupsLoading.value = true
+async function loadListings() {
+  listingsLoading.value = true
   try {
     const res = await searchApi.search({ limit: 60, sort: 'newest' })
     const properties = (res.data as PropertySearchResult[]).filter((p): p is PropertySearchResult => !('_virtual' in p))
-    const cards = flattenSearchResults(properties)
-    loadRentalModes(cards)
-    const names = [...new Set(cards.map(c => c.cityName).filter(Boolean))]
-    cityGroups.value = names
-      .map(name => ({ name, units: cards.filter(c => c.cityName === name) }))
-      .filter(g => g.units.length > 0)
-      .sort((a, b) => b.units.length - a.units.length)
-      .slice(0, 4)
+    await loadRentalModes(flattenSearchResults(properties))
   } catch {
-    cityGroups.value = []
+    rentalLoading.value = false
   } finally {
-    cityGroupsLoading.value = false
+    listingsLoading.value = false
   }
 }
 
@@ -209,17 +201,32 @@ function rentalCount(key: RentalKey): string {
   const n = rentalUnits.value[key].length
   return `${n} logement${n > 1 ? 's' : ''}`
 }
-/** Prix affiché sur les cartes par ville : un logement qui ne se loue qu'à la nuit n'affiche jamais son prix de base, sans signification pour un visiteur. */
-function cityCardDisplay(u: ListingCard): { listing: ListingCard; suffix: string | undefined } {
-  const m = modeByUnit.value[u.unitId]
-  if (!m) return { listing: u, suffix: undefined }
-  if (m.monthly !== null) return { listing: { ...u, price: m.monthly }, suffix: '/ mois' }
-  if (m.nightly !== null) return { listing: { ...u, price: m.nightly }, suffix: '/ nuit' }
-  return { listing: u, suffix: undefined }
+/**
+ * Sections par ville filtrées sur le mode choisi plus haut : un visiteur qui
+ * a cliqué « À la nuit » ne voit plus que des logements réservables à la nuit,
+ * au prix de la nuit. Un logement proposé dans les deux modes apparaît dans les deux.
+ */
+const cityGroups = computed<CityGroup[]>(() => {
+  const units = rentalUnits.value[activeRental.value]
+  const names = [...new Set(units.map(u => u.cityName).filter(Boolean))]
+  return names
+    .map(name => ({ name, units: units.filter(u => u.cityName === name) }))
+    .sort((a, b) => b.units.length - a.units.length)
+    .slice(0, 4)
+})
+
+/* ---- En fin de page : un aperçu de l'autre mode, pour qui s'est trompé de porte ---- */
+const otherRental = computed<RentalKey>(() => (activeRental.value === 'nuit' ? 'mois' : 'nuit'))
+const otherUnits = computed(() => rentalUnits.value[otherRental.value].slice(0, 8))
+const rentalSection = ref<HTMLElement | null>(null)
+function switchToOther() {
+  activeRental.value = otherRental.value
+  const el = rentalSection.value
+  if (el) window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 90, behavior: 'smooth' })
 }
 
 onMounted(async () => {
-  const [c] = await Promise.all([refData.fetchCities(), loadCategories(), loadCityGroups(), favorites.ensureLoaded()])
+  const [c] = await Promise.all([refData.fetchCities(), loadCategories(), loadListings(), favorites.ensureLoaded()])
   cities.value = c
 })
 
@@ -365,10 +372,11 @@ const TRUST_ITEMS = [
     </section>
 
     <!-- Deux façons de louer — moodboard -->
-    <section class="mx-auto max-w-[1240px] px-[26px] pt-12">
+    <section ref="rentalSection" class="mx-auto max-w-[1240px] px-[26px] pt-12">
       <div class="mb-5 max-w-[640px]">
         <p class="m-0 text-[12.5px] font-black uppercase tracking-[.08em] text-clay-500">Deux façons de louer</p>
         <h2 class="mb-0 mt-2 font-display text-title-2 font-bold tracking-title-2">À la nuit ou au mois ?</h2>
+        <p class="mb-0 mt-2 text-[14.5px] text-[var(--text-muted)]">Les logements présentés sur toute la page suivent votre choix.</p>
       </div>
 
       <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -415,10 +423,15 @@ const TRUST_ITEMS = [
             <DataSkeletonCard :height="186" />
           </div>
         </div>
-        <p v-else-if="!rentalUnits[activeRental].length" class="m-0 rounded-xl border border-dashed border-[var(--border-default)] bg-white px-5 py-6 text-center text-[14px] text-[var(--text-muted)]">
+        <div v-if="!rentalLoading && rentalUnits[activeRental].length" class="mb-3 flex justify-end">
+          <NuxtLink :to="{ path: '/recherche', query: { mode: activeRental } }" class="text-[13.5px] font-bold text-green-700 underline-offset-4 hover:underline">
+            Voir tous les logements {{ activeRental === 'nuit' ? 'à la nuit' : 'au mois' }} →
+          </NuxtLink>
+        </div>
+        <p v-if="!rentalLoading && !rentalUnits[activeRental].length" class="m-0 rounded-xl border border-dashed border-[var(--border-default)] bg-white px-5 py-6 text-center text-[14px] text-[var(--text-muted)]">
           Aucun logement {{ activeRental === 'nuit' ? 'à la nuit' : 'au mois' }} publié pour l'instant.
         </p>
-        <div v-else class="flex gap-[18px] overflow-x-auto pb-1" style="scrollbar-width: none">
+        <div v-if="!rentalLoading && rentalUnits[activeRental].length" class="flex gap-[18px] overflow-x-auto pb-1" style="scrollbar-width: none">
           <div v-for="u in rentalUnits[activeRental]" :key="`${activeRental}-${u.unitId}`" class="w-[214px] flex-none">
             <SearchPropertyCard
               :listing="u"
@@ -464,14 +477,13 @@ const TRUST_ITEMS = [
           </div>
           <div class="absolute inset-x-[18px] bottom-[18px]">
             <p class="m-0 text-lg font-bold tracking-[-.01em] text-white">{{ c.label }}</p>
-            <p class="mb-0 mt-1 text-[13px] text-white/[.82]">{{ c.count }}</p>
           </div>
         </div>
       </div>
     </section>
 
     <!-- Sections par ville — squelette pendant le chargement -->
-    <section v-if="cityGroupsLoading" class="mx-auto max-w-[1240px] px-[26px] pt-11">
+    <section v-if="listingsLoading || rentalLoading" class="mx-auto max-w-[1240px] px-[26px] pt-11">
       <div class="mb-[18px] h-[23px] w-[220px] animate-[im-shimmer_1.3s_linear_infinite] rounded-pill bg-[linear-gradient(90deg,var(--color-sand-200)_25%,var(--color-sand-100)_50%,var(--color-sand-200)_75%)] bg-[length:460px_100%]" />
       <div class="flex gap-[18px] overflow-x-auto pb-1">
         <div v-for="i in 5" :key="i" class="w-[214px] flex-none">
@@ -481,7 +493,7 @@ const TRUST_ITEMS = [
     </section>
 
     <!-- Sections par ville -->
-    <section v-for="(group, gi) in cityGroups" :key="group.name" class="mx-auto max-w-[1240px] px-[26px] pt-11">
+    <section v-for="(group, gi) in (rentalLoading ? [] : cityGroups)" :key="`${activeRental}-${group.name}`" class="mx-auto max-w-[1240px] px-[26px] pt-11">
       <div class="mb-[18px] flex items-center justify-between">
         <div class="flex items-center gap-3">
           <h2 class="m-0 font-display text-[23px] font-bold tracking-[-.025em]">{{ group.name }}</h2>
@@ -495,8 +507,8 @@ const TRUST_ITEMS = [
       <div :ref="(el) => setCityRail(gi, el)" class="flex gap-[18px] overflow-x-auto pb-1" style="scrollbar-width: none">
         <div v-for="u in group.units" :key="u.unitId" class="w-[214px] flex-none">
           <SearchPropertyCard
-            :listing="cityCardDisplay(u).listing"
-            :price-suffix="cityCardDisplay(u).suffix"
+            :listing="u"
+            :price-suffix="RENTAL_META[activeRental].suffix"
             :favorite="u.propertyId ? favorites.isFavoriteProperty(u.propertyId) : false"
             @open="openListing(u)"
             @favorite="onFavorite(u)"
@@ -511,6 +523,33 @@ const TRUST_ITEMS = [
             <div class="absolute left-4 top-1.5 h-11 w-11 rotate-[7deg] rounded-sm bg-cover bg-center shadow-[0_2px_6px_rgba(0,0,0,.14)]" :style="stackPhoto(group, 1) ? { backgroundImage: `url(${stackPhoto(group, 1)})` } : {}" />
           </div>
           <span class="text-[14.5px] font-bold text-sand-900">Tout afficher</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- L'autre mode de location, en fin de parcours -->
+    <section v-if="!rentalLoading && otherUnits.length" class="mx-auto max-w-[1240px] px-[26px] pt-14">
+      <div class="rounded-3xl border border-[var(--border-subtle)] bg-white p-6 sm:p-8">
+        <div class="mb-5 flex flex-wrap items-end justify-between gap-4">
+          <div class="max-w-[560px]">
+            <p class="m-0 text-[12.5px] font-black uppercase tracking-[.08em] text-clay-500">{{ RENTAL_META[otherRental].eyebrow }}</p>
+            <h2 class="mb-0 mt-2 font-display text-[26px] font-bold tracking-[-.03em]">Vous cherchez plutôt {{ otherRental === 'nuit' ? 'à la nuit' : 'au mois' }} ?</h2>
+            <p class="mb-0 mt-2 text-[14.5px] leading-[1.55] text-[var(--text-muted)]">{{ RENTAL_META[otherRental].tagline }}</p>
+          </div>
+          <button type="button" class="whitespace-nowrap rounded-pill border border-[var(--border-default)] bg-white px-5 py-3 text-[13.5px] font-bold text-green-700 transition-colors hover:border-green-600" @click="switchToOther">
+            Afficher la page {{ otherRental === 'nuit' ? 'à la nuit' : 'au mois' }} ↑
+          </button>
+        </div>
+        <div class="flex gap-[18px] overflow-x-auto pb-1" style="scrollbar-width: none">
+          <div v-for="u in otherUnits" :key="`other-${otherRental}-${u.unitId}`" class="w-[214px] flex-none">
+            <SearchPropertyCard
+              :listing="u"
+              :price-suffix="RENTAL_META[otherRental].suffix"
+              :favorite="u.propertyId ? favorites.isFavoriteProperty(u.propertyId) : false"
+              @open="openListing(u)"
+              @favorite="onFavorite(u)"
+            />
+          </div>
         </div>
       </div>
     </section>

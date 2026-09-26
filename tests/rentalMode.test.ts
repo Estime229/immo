@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { classifyRental, mapLimited } from '~/utils/rentalMode'
+import { classifyRental, displayPrice, filterByRental, mapLimited } from '~/utils/rentalMode'
 import type { UnitPricing } from '~/types/property'
 
 function row(billing_frequency: string, price: string, is_available = true): UnitPricing {
@@ -29,6 +29,47 @@ describe('classifyRental', () => {
 
   it('un prix de base nul n\'est jamais présenté comme un loyer', () => {
     expect(classifyRental([], 0)).toEqual({ nightly: null, monthly: null })
+  })
+})
+
+describe('displayPrice', () => {
+  it('préfère le loyer mensuel, avec son unité', () => {
+    expect(displayPrice({ nightly: 8000, monthly: 75000 }, 35000)).toEqual({ price: 75000, suffix: '/ mois' })
+  })
+  it('une unité seulement à la nuit affiche son prix à la nuit, jamais son prix de base', () => {
+    expect(displayPrice({ nightly: 12000, monthly: null }, 12000000)).toEqual({ price: 12000, suffix: '/ nuit' })
+  })
+  it('sans classement connu, garde le prix de base sans unité', () => {
+    expect(displayPrice(undefined, 45000)).toEqual({ price: 45000, suffix: undefined })
+  })
+})
+
+describe('filterByRental', () => {
+  const cards = [
+    { unitId: 'a', price: 12000000 },
+    { unitId: 'b', price: 45000 },
+    { unitId: 'c', price: 35000 },
+    { unitId: 'd', price: 20000 }
+  ]
+  const modes = {
+    a: { nightly: 12000, monthly: null },
+    b: { nightly: null, monthly: 45000 },
+    c: { nightly: 8000, monthly: 75000 }
+    // 'd' : grille non chargée — exclue des deux modes plutôt que rangée au hasard
+  }
+
+  it('ne garde que les unités du mode demandé, au prix de ce mode', () => {
+    expect(filterByRental(cards, modes, 'nuit', null, 'newest')).toEqual([{ unitId: 'a', price: 12000 }, { unitId: 'c', price: 8000 }])
+    expect(filterByRental(cards, modes, 'mois', null, 'newest')).toEqual([{ unitId: 'b', price: 45000 }, { unitId: 'c', price: 75000 }])
+  })
+
+  it('applique le budget au prix du mode, pas au prix de base', () => {
+    expect(filterByRental(cards, modes, 'nuit', 10000, 'newest')).toEqual([{ unitId: 'c', price: 8000 }])
+  })
+
+  it('retrie par prix du mode', () => {
+    expect(filterByRental(cards, modes, 'mois', null, 'price_desc').map(c => c.unitId)).toEqual(['c', 'b'])
+    expect(filterByRental(cards, modes, 'nuit', null, 'price_asc').map(c => c.unitId)).toEqual(['c', 'a'])
   })
 })
 

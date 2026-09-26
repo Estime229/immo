@@ -2774,3 +2774,50 @@ Premier chargement à froid : ~19 s d'attente avant **toute** réponse backend (
 ### Prochaine étape proposée
 
 Faire remonter la même distinction dans `/recherche` dès que le paramètre backend existe — en attendant, les badges « / nuit » / « / mois » pourraient y être ajoutés de la même façon (12 appels de grille par page).
+
+## Lot 42 — Recherche : sélecteur « Tous / À la nuit / Au mois » dans l'en-tête, avec un filtre exact
+
+**Date** : 2026-09-26
+
+### Demande
+
+L'utilisateur voulait retravailler l'en-tête de la page de recherche dans l'esprit de la planche d'ambiance de l'accueil (Lot 41), et y intégrer la catégorisation à la nuit / au mois.
+
+### Le problème à résoudre : filtrer sans filtre serveur, sans mentir sur les chiffres
+
+`GET /property/search` ne filtre pas par type de location (voir Lot 41). Filtrer seulement la page affichée donnerait un compteur et une pagination faux. Choix retenu :
+
+- **Mode « Tous »** : pagination serveur inchangée (12 par page) ; les unités affichées sont classées en tâche de fond pour afficher le bon prix et son unité (« / nuit », « / mois ») — plus jamais le prix de base d'une unité qui ne se loue qu'à la nuit.
+- **Modes « À la nuit » / « Au mois »** : on charge tout le catalogue correspondant aux autres filtres (pages de 100, plafond de 300 unités — au-delà, une mention le signale), on classe chaque unité (grilles mises en cache pour la session de page), puis on filtre, trie et pagine côté client. Le compteur « N logements disponibles » est donc exact.
+- **Budget** : en mode nuit/mois, il s'applique au prix du mode (pas envoyé au serveur, dont `max_price` ne compare que le prix de base — faux pour une unité à la nuit à 12 000 F avec un prix de base de 12 000 000 F). Le curseur passe en « Budget par nuit » (0–100 000 F) en mode nuit.
+- **Tri par prix** : refait sur le prix du mode ; les tris par date gardent l'ordre serveur.
+- **URL** : `?mode=nuit|mois`, partageable ; l'accueil y renvoie via « Voir tous les logements à la nuit / au mois → ».
+
+### Ce qui a été livré
+
+| Fichier | Rôle |
+|---|---|
+| `app/utils/rentalMode.ts` | + `displayPrice()`, `filterByRental()`, `RENTAL_SUFFIX` (logique pure, testée) |
+| `app/pages/recherche.vue` | Sélecteur en trois tuiles (photo éditoriale + liseré de couleur, mêmes codes que l'accueil), logique de mode décrite ci-dessus, cartes avec prix et unité corrects, indication pendant le tri |
+| `app/pages/index.vue` | Lien « Voir tous les logements … → » vers `/recherche?mode=…` |
+
+### Tests automatisés
+
+```
+Test Files  16 passed (16)
+     Tests  96 passed (96)   [+6 : displayPrice / filterByRental]
+```
+
+### Vérification manuelle (build de production local, Playwright, données réelles)
+
+| Scénario | Résultat |
+|---|---|
+| `/recherche` (Tous) | 34 logements, cartes avec « / mois » ou « / nuit » selon la vraie grille, 0 erreur console |
+| Clic « À la nuit » | 8 logements, uniquement « / nuit », URL `?mode=nuit` — l'accueil en compte 7 car il exclut l'unique unité sans bien parent, que la recherche inclut |
+| Clic « Au mois » | 34 logements, uniquement « / mois », URL `?mode=mois` |
+| Lien direct `?mode=nuit&budget=10000` | 4 logements (2 000, 5 000, 8 000, 10 000 F / nuit) |
+| Mobile 390 px | Trois tuiles compactes (libellé court + pastille de couleur), sélection lisible via la bordure verte |
+
+### Limite connue
+
+Même demande backend qu'au Lot 41 : un paramètre de type de location sur `GET /property/search` rendrait le filtre exact au-delà de 300 unités et supprimerait les appels de grille tarifaire.

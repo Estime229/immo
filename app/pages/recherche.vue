@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import type { PropertySearchFilters, PropertySearchResult } from '~/types/property'
 import { flattenSearchResults, type ListingCard } from '~/utils/propertyListing'
+import { classifyRental, displayPrice, filterByRental, mapLimited, RENTAL_SUFFIX, type RentalKey, type RentalMode } from '~/utils/rentalMode'
 
 const route = useRoute()
+const router = useRouter()
 const searchApi = usePropertySearchApi()
 const refData = useReferenceData()
 const favorites = usePropertyFavorites()
@@ -127,19 +129,79 @@ function onNaturalKey(e: KeyboardEvent) {
   if (e.key === 'Enter') runNatural()
 }
 
+/* ---- Type de location : à la nuit / au mois ---- */
+/**
+ * `GET /property/search` ne sait pas filtrer par type de location — seule la
+ * grille tarifaire de chaque unité le dit. En mode « Tous », la pagination
+ * reste serveur et on classe seulement les unités affichées (pour le bon prix
+ * et son unité). En mode « À la nuit » / « Au mois », on charge tout le
+ * catalogue correspondant aux autres filtres, on classe chaque unité, puis on
+ * filtre et pagine ici — le compteur reste exact au lieu de ne filtrer qu'une
+ * page. Au-delà de CATALOG_CAP unités, le filtre ne couvre que les premières.
+ */
+type RentalFilter = 'tous' | RentalKey
+const rentalMode = ref<RentalFilter>(route.query.mode === 'nuit' || route.query.mode === 'mois' ? route.query.mode : 'tous')
+const modeByUnit = ref<Record<string, RentalMode>>({})
+const CATALOG_PAGE = 100
+const CATALOG_CAP = 300
+const catalogTruncated = ref(false)
+const visibleCount = ref(12)
+
+async function classify(cards: ListingCard[]) {
+  const todo = cards.filter(c => !modeByUnit.value[c.unitId])
+  if (!todo.length) return
+  const modes = await mapLimited(todo, 10, async c => {
+    try {
+      return classifyRental(await searchApi.fetchPricing(c.unitId), c.price)
+    } catch {
+      return null
+    }
+  })
+  const next = { ...modeByUnit.value }
+  todo.forEach((c, i) => { if (modes[i]) next[c.unitId] = modes[i]! })
+  modeByUnit.value = next
+}
+
+const RENTAL_TILES: { key: RentalFilter; label: string; short: string; hint: string; image: string | null; pos: string; swatch: string }[] = [
+  { key: 'tous', label: 'Tous les logements', short: 'Tous', hint: 'Nuit et mois confondus', image: null, pos: 'center', swatch: 'bg-sand-400' },
+  { key: 'nuit', label: 'À la nuit', short: 'À la nuit', hint: 'Courte durée · meublé', image: 'url(/images/hero/hero-3.jpg)', pos: 'center 70%', swatch: 'bg-clay-500' },
+  { key: 'mois', label: 'Au mois', short: 'Au mois', hint: 'Longue durée · bail signé', image: 'url(/images/hero/hero-1.jpg)', pos: '62% center', swatch: 'bg-green-700' }
+]
+function pickRental(key: RentalFilter) {
+  if (rentalMode.value === key) return
+  rentalMode.value = key
+}
+
 /* ---- Résultats réels ---- */
 const rawResults = ref<(PropertySearchResult)[]>([])
-const listings = computed<ListingCard[]>(() => flattenSearchResults(rawResults.value))
+const allCards = computed<ListingCard[]>(() => flattenSearchResults(rawResults.value))
 const total = ref(0)
 const page = ref(1)
 const status = ref<'idle' | 'loading' | 'empty' | 'emptyFiltered' | 'error' | 'nominal'>('idle')
 
-function currentFilters(): PropertySearchFilters {
-  const f: PropertySearchFilters = { sort: sort.value, page: page.value, limit: 12 }
+const filteredCards = computed(() => rentalMode.value === 'tous'
+  ? []
+  : filterByRental(allCards.value, modeByUnit.value, rentalMode.value, budget.value ? Number(budget.value) : null, sort.value))
+
+const displayItems = computed<{ listing: ListingCard; suffix: string | undefined }[]>(() => {
+  if (rentalMode.value === 'tous') {
+    return allCards.value.map(c => {
+      const d = displayPrice(modeByUnit.value[c.unitId], c.price)
+      return { listing: { ...c, price: d.price }, suffix: d.suffix }
+    })
+  }
+  const suffix = RENTAL_SUFFIX[rentalMode.value]
+  return filteredCards.value.slice(0, visibleCount.value).map(c => ({ listing: c, suffix }))
+})
+const listings = computed<ListingCard[]>(() => displayItems.value.map(i => i.listing))
+const shownTotal = computed(() => (rentalMode.value === 'tous' ? total.value : filteredCards.value.length))
+
+function currentFilters(forCatalog = false): PropertySearchFilters {
+  const f: PropertySearchFilters = { sort: sort.value, page: page.value, limit: forCatalog ? CATALOG_PAGE : 12 }
   if (query.value.trim()) f.q = query.value.trim()
   if (cityName.value) f.city = cityName.value
   if (neighborhoodId.value) f.neighborhood_id = neighborhoodId.value
-  if (budget.value) f.max_price = Number(budget.value)
+  if (budget.value && !forCatalog) f.max_price = Number(budget.value)
   if (minBedrooms.value) f.min_bedrooms = Number(minBedrooms.value)
   if (waterSource.value) f.water_source = waterSource.value
   if (meterType.value) f.meter_type = meterType.value
@@ -147,14 +209,36 @@ function currentFilters(): PropertySearchFilters {
   return f
 }
 
+function settleStatus() {
+  const hasFilters = !!(query.value || cityName.value || neighborhoodId.value || budget.value || minBedrooms.value || waterSource.value || meterType.value || rentalMode.value !== 'tous')
+  status.value = listings.value.length === 0 ? (hasFilters ? 'emptyFiltered' : 'empty') : 'nominal'
+}
+
 async function runSearch(append = false) {
   status.value = 'loading'
   try {
-    const res = await searchApi.search(currentFilters())
-    rawResults.value = append ? [...rawResults.value, ...(res.data as PropertySearchResult[])] : (res.data as PropertySearchResult[])
-    total.value = res.total
-    const hasFilters = !!(query.value || cityName.value || neighborhoodId.value || budget.value || minBedrooms.value || waterSource.value || meterType.value)
-    status.value = listings.value.length === 0 ? (hasFilters ? 'emptyFiltered' : 'empty') : 'nominal'
+    if (rentalMode.value === 'tous') {
+      const res = await searchApi.search(currentFilters())
+      rawResults.value = append ? [...rawResults.value, ...(res.data as PropertySearchResult[])] : (res.data as PropertySearchResult[])
+      total.value = res.total
+      settleStatus()
+      classify(allCards.value)
+      return
+    }
+    rawResults.value = []
+    const collected: PropertySearchResult[] = []
+    let serverTotal = 0
+    for (page.value = 1; collected.length < CATALOG_CAP; page.value++) {
+      const res = await searchApi.search(currentFilters(true))
+      collected.push(...(res.data as PropertySearchResult[]))
+      serverTotal = res.total
+      if (collected.length >= res.total || res.data.length < CATALOG_PAGE) break
+    }
+    catalogTruncated.value = serverTotal > collected.length
+    await classify(flattenSearchResults(collected))
+    rawResults.value = collected
+    visibleCount.value = 12
+    settleStatus()
   } catch {
     status.value = 'error'
   }
@@ -164,14 +248,22 @@ function search() {
   runSearch()
 }
 function loadMore() {
+  if (rentalMode.value !== 'tous') {
+    visibleCount.value += 12
+    return
+  }
   page.value += 1
   runSearch(true)
 }
 onMounted(() => runSearch())
 watch(sort, () => search())
+watch(rentalMode, key => {
+  router.replace({ query: { ...route.query, mode: key === 'tous' ? undefined : key } })
+  search()
+})
 
-const resultCount = computed(() => (total.value > 1 ? `${total.value} logements disponibles` : `${total.value} logement disponible`))
-const resultShort = computed(() => (total.value > 1 ? `${total.value} logements` : `${total.value} logement`))
+const resultCount = computed(() => (shownTotal.value > 1 ? `${shownTotal.value} logements disponibles` : `${shownTotal.value} logement disponible`))
+const resultShort = computed(() => (shownTotal.value > 1 ? `${shownTotal.value} logements` : `${shownTotal.value} logement`))
 
 const hoveredId = ref<string | null>(null)
 function openListing(l: ListingCard) {
@@ -202,7 +294,7 @@ const geoPoints = computed(() => {
 
 <template>
   <div class="mx-auto max-w-[1240px] px-[26px] pb-[60px] pt-6">
-    <div class="rounded-2xl border border-[var(--border-subtle)] bg-white p-6 shadow-card">
+    <div class="rounded-2xl border border-[var(--border-subtle)] bg-white p-5 shadow-card sm:p-6">
       <div class="mb-4 flex flex-wrap items-baseline justify-between gap-5">
         <div class="flex items-baseline gap-3">
           <h1 class="m-0 font-display text-2xl font-bold tracking-[-.03em]">Rechercher un logement</h1>
@@ -212,6 +304,36 @@ const geoPoints = computed(() => {
           <button type="button" class="border-b-2 pb-2 text-sm font-bold transition-colors" :class="searchMode === 'filtres' ? 'border-[var(--text-primary)] text-[var(--text-primary)]' : 'border-transparent text-[var(--text-muted)]'" @click="searchMode = 'filtres'">Par filtres</button>
           <button type="button" class="border-b-2 pb-2 text-sm font-bold transition-colors" :class="searchMode === 'naturel' ? 'border-[var(--text-primary)] text-[var(--text-primary)]' : 'border-transparent text-[var(--text-muted)]'" @click="searchMode = 'naturel'">Décrire ma recherche</button>
         </div>
+      </div>
+
+      <div class="mb-4 grid grid-cols-3 gap-2 sm:gap-3" role="radiogroup" aria-label="Type de location">
+        <button
+          v-for="t in RENTAL_TILES"
+          :key="t.key"
+          type="button"
+          role="radio"
+          :aria-checked="rentalMode === t.key"
+          class="group relative flex min-h-[64px] items-stretch overflow-hidden rounded-xl border-[1.5px] bg-white text-left transition-all sm:min-h-[82px]"
+          :class="rentalMode === t.key ? 'border-green-600 shadow-[0_0_0_3px_var(--color-green-100)]' : 'border-[var(--border-default)] hover:border-green-400'"
+          @click="pickRental(t.key)"
+        >
+          <span class="relative hidden w-[82px] flex-none overflow-hidden sm:block">
+            <span v-if="t.image" class="absolute inset-0 bg-cover bg-no-repeat transition-transform duration-500 group-hover:scale-105" :style="{ backgroundImage: t.image, backgroundPosition: t.pos }" />
+            <span v-else class="absolute inset-0 grid grid-cols-2">
+              <span class="bg-cover bg-no-repeat" style="background-image: url(/images/hero/hero-3.jpg); background-position: 30% 70%" />
+              <span class="bg-cover bg-no-repeat" style="background-image: url(/images/hero/hero-1.jpg); background-position: 70% center" />
+            </span>
+            <span class="absolute inset-x-0 bottom-0 h-[5px]" :class="t.swatch" />
+          </span>
+          <span class="flex min-w-0 flex-1 flex-col justify-center px-3 py-2.5 sm:px-4">
+            <span class="flex items-center gap-1.5">
+              <span class="h-2 w-2 flex-none rounded-pill sm:hidden" :class="t.swatch" />
+              <span class="truncate text-[13px] font-bold text-[var(--text-primary)] sm:text-[15px]"><span class="sm:hidden">{{ t.short }}</span><span class="hidden sm:inline">{{ t.label }}</span></span>
+            </span>
+            <span class="mt-0.5 hidden truncate text-[12.5px] text-[var(--text-muted)] sm:block">{{ t.hint }}</span>
+          </span>
+          <span v-if="rentalMode === t.key" class="absolute right-2 top-2 hidden h-5 w-5 sm:grid place-items-center rounded-pill bg-green-600 text-[11px] font-black text-white">✓</span>
+        </button>
       </div>
 
       <template v-if="searchMode === 'filtres'">
@@ -273,11 +395,11 @@ const geoPoints = computed(() => {
 
             <div>
               <div class="mb-3.5 flex items-baseline justify-between">
-                <p class="m-0 text-[13px] font-black tracking-[.03em]">Budget mensuel</p>
+                <p class="m-0 text-[13px] font-black tracking-[.03em]">{{ rentalMode === 'nuit' ? 'Budget par nuit' : 'Budget mensuel' }}</p>
                 <span class="font-mono text-[13.5px] font-bold text-green-700">{{ budgetRangeLabel }}</span>
               </div>
-              <input v-model.number="budgetSlider" type="range" min="0" max="500000" step="10000" class="w-full accent-green-600">
-              <div class="mt-1.5 flex justify-between font-mono text-[11px] text-[var(--text-faint)]"><span>0 F</span><span>500 000 F</span></div>
+              <input v-model.number="budgetSlider" type="range" min="0" :max="rentalMode === 'nuit' ? 100000 : 500000" :step="rentalMode === 'nuit' ? 1000 : 10000" class="w-full accent-green-600">
+              <div class="mt-1.5 flex justify-between font-mono text-[11px] text-[var(--text-faint)]"><span>0 F</span><span>{{ rentalMode === 'nuit' ? '100 000 F' : '500 000 F' }}</span></div>
             </div>
 
             <div>
@@ -334,9 +456,12 @@ const geoPoints = computed(() => {
       </div>
     </div>
 
-    <div v-if="status === 'loading' && !listings.length" class="grid grid-cols-1 gap-[22px] sm:grid-cols-3">
-      <DataSkeletonCard v-for="i in 6" :key="i" :height="186" :lines="1" />
-    </div>
+    <template v-if="status === 'loading' && !listings.length">
+      <p v-if="rentalMode !== 'tous'" class="mb-3.5 mt-0 text-[13px] font-semibold text-[var(--text-muted)]">Tri des logements {{ rentalMode === 'nuit' ? 'à la nuit' : 'au mois' }} d'après leurs grilles tarifaires…</p>
+      <div class="grid grid-cols-1 gap-[22px] sm:grid-cols-3">
+        <DataSkeletonCard v-for="i in 6" :key="i" :height="186" :lines="1" />
+      </div>
+    </template>
 
     <FeedbackAlertBanner v-else-if="status === 'error'" tone="danger">
       Impossible de charger les résultats pour le moment.
@@ -351,13 +476,14 @@ const geoPoints = computed(() => {
       <div class="grid items-start gap-[22px]" :class="view === 'carte' ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1'">
         <div class="grid grid-cols-1 gap-[22px] sm:grid-cols-2" :class="view === 'carte' ? '' : 'lg:grid-cols-3'">
           <SearchPropertyCard
-            v-for="l in listings"
-            :key="l.unitId"
-            :listing="l"
-            :favorite="l.propertyId ? favorites.isFavoriteProperty(l.propertyId) : false"
-            @open="openListing(l)"
-            @favorite="onFavorite(l)"
-            @hover="hoveredId = l.unitId"
+            v-for="item in displayItems"
+            :key="item.listing.unitId"
+            :listing="item.listing"
+            :price-suffix="item.suffix"
+            :favorite="item.listing.propertyId ? favorites.isFavoriteProperty(item.listing.propertyId) : false"
+            @open="openListing(item.listing)"
+            @favorite="onFavorite(item.listing)"
+            @hover="hoveredId = item.listing.unitId"
             @unhover="hoveredId = null"
           />
         </div>
@@ -377,7 +503,8 @@ const geoPoints = computed(() => {
           </div>
         </div>
       </div>
-      <div v-if="listings.length < total" class="mt-[34px] flex justify-center">
+      <p v-if="rentalMode !== 'tous' && catalogTruncated" class="mb-0 mt-5 text-center text-[12.5px] text-[var(--text-faint)]">Le tri par type de location couvre les {{ CATALOG_CAP }} logements les plus pertinents — affinez par ville ou budget pour aller plus loin.</p>
+      <div v-if="listings.length < shownTotal" class="mt-[34px] flex justify-center">
         <button type="button" class="rounded-pill border border-[var(--border-default)] bg-white px-7 py-[13px] text-sm font-bold" :disabled="status === 'loading'" @click="loadMore">{{ status === 'loading' ? 'Chargement…' : 'Afficher plus de logements' }}</button>
       </div>
     </template>
