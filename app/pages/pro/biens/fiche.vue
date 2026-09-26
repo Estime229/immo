@@ -419,6 +419,7 @@ const perfCards = computed(() => {
             </div>
             <span class="font-mono text-[13.5px] font-bold">{{ formatFcfaShort(Number(u.price)) }}</span>
             <CoreBadge :tone="STATUS_TONE[u.unit_status] ?? 'neutral'">{{ STATUS_LABEL[u.unit_status] ?? u.unit_status }}</CoreBadge>
+            <NuxtLink :to="{ path: '/pro/tarifs', query: { unit: u.id } }" class="rounded-pill border border-[var(--border-default)] bg-white px-3.5 py-2 text-xs font-bold">Tarifs</NuxtLink>
             <button type="button" class="rounded-pill border border-[var(--border-default)] bg-white px-3.5 py-2 text-xs font-bold" @click="editingUnit = u">Modifier</button>
             <button type="button" class="rounded-pill border border-danger-border bg-white px-3.5 py-2 text-xs font-bold text-danger-fg" @click="askDeleteUnit(u)">Supprimer</button>
           </div>

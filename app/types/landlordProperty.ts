@@ -62,9 +62,9 @@ export interface CreateUnitPayload {
   characteristics?: Record<string, unknown>
   /** Codes `GET /ref?type=FEATURE` (clim, wifi…) — enregistrés, mais non renvoyés par la fiche publique (limite backend, Lot 45). */
   features?: string[]
-  /** 1 = à la nuit possible, 30 = au mois uniquement. */
-  min_duration_days?: number
-  max_duration_days?: number
+  /** 1 = à la nuit possible, 30 = au mois uniquement. `null` retire la limite (appliquée par l'API à chaque réservation). */
+  min_duration_days?: number | null
+  max_duration_days?: number | null
   is_publicly_listed?: boolean
   /** Exige un état des lieux pour toute réservation courte durée — défaut false, jamais imposé par la plateforme. */
   requires_booking_inventory?: boolean

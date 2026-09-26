@@ -13,5 +13,10 @@ export function useWaitlistApi() {
     return api.get<LandlordWaitlistEntry[]>(`/units/${unitId}/waitlist`)
   }
 
-  return { fetchMine, fetchForUnit }
+  /** Le propriétaire peut retirer une inscription (`leave` autorise l'intéressé, le propriétaire ou un admin — vérifié en live, 204). */
+  async function removeEntry(unitId: string, tenantId: string) {
+    return api.delete<unknown>(`/units/${unitId}/waitlist/${tenantId}`)
+  }
+
+  return { fetchMine, fetchForUnit, removeEntry }
 }

@@ -57,9 +57,42 @@ const contractType = ref<LeaseContractType>('standard')
 const depositAck = ref(false)
 
 const selectedUnit = computed(() => myUnits.value.find(u => u.id === unitId.value) ?? null)
-watch(selectedUnit, u => {
-  if (u && !monthlyRent.value) monthlyRent.value = u.price
-})
+
+/**
+ * Loyer pré-rempli depuis la grille tarifaire de la fréquence choisie (celle
+ * que l'API utiliserait si le loyer était omis), sinon le prix de base pour un
+ * bail mensuel. Avant : toujours le prix de base, même pour un bail
+ * trimestriel ou si le tarif mensuel avait été changé dans « Tarifs ».
+ */
+const pricingApi = useUnitPricingApi()
+const unitPricing = ref<{ billing_frequency: string; price: string; is_available: boolean }[]>([])
+const rentTouched = ref(false)
+const rentHint = ref('')
+watch(unitId, async id => {
+  unitPricing.value = []
+  if (!id) return
+  try {
+    unitPricing.value = await pricingApi.fetchPricing(id)
+  } catch {
+    unitPricing.value = []
+  }
+  prefillRent()
+}, { immediate: true })
+watch(billingFrequency, prefillRent)
+function prefillRent() {
+  const row = unitPricing.value.find(p => p.billing_frequency === billingFrequency.value && p.is_available)
+  if (row) {
+    rentHint.value = "D'après votre grille tarifaire."
+    if (!rentTouched.value) monthlyRent.value = String(Math.round(Number(row.price)))
+  } else if (billingFrequency.value === 'monthly' && selectedUnit.value) {
+    rentHint.value = "Prix affiché sur l'annonce."
+    if (!rentTouched.value) monthlyRent.value = String(Math.round(Number(selectedUnit.value.price)))
+  } else {
+    rentHint.value = 'Aucun tarif pour cette fréquence : saisissez le loyer de la période.'
+    if (!rentTouched.value) monthlyRent.value = ''
+  }
+}
+watch(selectedUnit, u => { if (u && !unitPricing.value.length) prefillRent() })
 
 const depositMonths = computed(() => {
   const rent = Number(monthlyRent.value)
@@ -140,7 +173,11 @@ async function submit() {
               <option value="annual">Annuelle</option>
             </select>
           </div>
-          <div><p class="mb-1.5 mt-0 text-[12.5px] font-bold">Loyer</p><input v-model="monthlyRent" inputmode="numeric" class="h-[46px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-3.5 font-mono text-sm outline-none"></div>
+          <div>
+            <p class="mb-1.5 mt-0 text-[12.5px] font-bold">Loyer par période</p>
+            <input v-model="monthlyRent" inputmode="numeric" class="h-[46px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-3.5 font-mono text-sm outline-none" @input="rentTouched = true">
+            <p v-if="rentHint" class="mb-0 mt-1 text-[11.5px] text-[var(--text-faint)]">{{ rentHint }}</p>
+          </div>
         </div>
 
         <div class="grid grid-cols-1 gap-3.5 sm:grid-cols-2">

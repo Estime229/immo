@@ -1,4 +1,5 @@
 import type { AvailabilityBlock } from '~/types/property'
+import { isDayBlocked } from './stayPricing'
 
 /**
  * `GET /units/:id/availability` renvoie des plages bloquées, pas un calendrier
@@ -6,8 +7,9 @@ import type { AvailabilityBlock } from '~/types/property'
  * incluse, `end_date` exclue (le jour du départ redevient disponible).
  */
 export function isDateBlocked(date: Date, blocks: AvailabilityBlock[]): boolean {
-  const t = date.getTime()
-  return blocks.some(b => t >= new Date(b.start_date).getTime() && t < new Date(b.end_date).getTime())
+  // `end_date: null` = bail en cours sans fin : avant le Lot 46, `new Date(null)`
+  // (1970) faisait apparaître un logement loué comme libre sur la fiche publique.
+  return isDayBlocked(date.toISOString().slice(0, 10), blocks)
 }
 
 export interface CalendarDay {

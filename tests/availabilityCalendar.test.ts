@@ -33,3 +33,11 @@ describe('buildCalendarDays', () => {
     expect(days[0]!.iso).toBe('2026-08-10')
   })
 })
+
+describe('isDateBlocked — bail en cours (end_date null)', () => {
+  it('un blocage sans fin bloque tous les jours à partir de son début (avant : affiché libre)', () => {
+    const blocks = [{ start_date: '2026-08-10', end_date: null, blocked_by: 'lease' }]
+    expect(isDateBlocked(new Date('2027-03-01'), blocks)).toBe(true)
+    expect(isDateBlocked(new Date('2026-08-09'), blocks)).toBe(false)
+  })
+})

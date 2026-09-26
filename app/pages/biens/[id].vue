@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import type { AvailabilityBlock, OwnerProfile, PointOfInterest, PropertySearchResult, ReviewItem, ReviewStats, UnitPricing, UnitSearchResult } from '~/types/property'
 import { buildCalendarDays } from '~/utils/availabilityCalendar'
+import { quoteStay, rangeHitsBlock, stayLengthError } from '~/utils/stayPricing'
 import { flattenSearchResults } from '~/utils/propertyListing'
 import { ApiRequestError } from '~/utils/authenticatedFetcher'
+import { errorText } from '~/utils/apiErrors'
 
 const route = useRoute()
 const searchApi = usePropertySearchApi()
@@ -145,7 +147,8 @@ const dailyPricing = computed(() => pricing.value.find(p => p.billing_frequency 
 const isShortStay = computed(() => !!dailyPricing.value)
 
 /* ---- Calendrier réel (30 jours à partir d'aujourd'hui) ---- */
-const calendarDays = computed(() => buildCalendarDays(new Date(), 30, availabilityBlocks.value))
+/** 60 jours : avec 30, un séjour au mois (palier mensuel) ne pouvait même pas être sélectionné. */
+const calendarDays = computed(() => buildCalendarDays(new Date(), 60, availabilityBlocks.value))
 const checkIn = ref<string | null>(null)
 const checkOut = ref<string | null>(null)
 function pickDate(day: { iso: string; blocked: boolean }) {
@@ -163,7 +166,17 @@ const nights = computed(() => {
   return Math.round((new Date(checkOut.value).getTime() - new Date(checkIn.value).getTime()) / 86400000)
 })
 const nightlyPrice = computed(() => Number(dailyPricing.value?.price ?? 0))
-const stayTotal = computed(() => nights.value * nightlyPrice.value)
+/** Même calcul que l'API (combinaison la moins chère des paliers actifs) — avant : nuits × prix de la nuit, faux dès 7 nuits (Lot 46). */
+const stayQuote = computed(() => quoteStay(nights.value, pricing.value))
+const stayTotal = computed(() => stayQuote.value?.total ?? nights.value * nightlyPrice.value)
+const minStay = computed(() => selectedUnit.value?.min_duration_days ?? null)
+const maxStay = computed(() => selectedUnit.value?.max_duration_days ?? null)
+/** Refus que l'API ferait de toute façon (400 durée, 409 dates prises) — dits avant de cliquer. */
+const stayProblem = computed(() => {
+  if (!checkIn.value || !checkOut.value) return null
+  return stayLengthError(nights.value, minStay.value, maxStay.value)
+    ?? (rangeHitsBlock(checkIn.value, checkOut.value, availabilityBlocks.value) ? 'Une partie de ces dates est déjà prise : choisissez une période sans jour barré.' : null)
+})
 
 /* ---- Coûts d'entrée réels (longue durée) — depuis les champs réels de l'unité, jamais des constantes ---- */
 const entryLines = computed(() => {
@@ -195,7 +208,7 @@ async function submitBooking() {
     await bookingsApi.create(selectedUnit.value.id, checkIn.value, checkOut.value)
     bookingDone.value = true
   } catch (e) {
-    bookingError.value = e instanceof ApiRequestError ? (e.mapped.bannerMessage ?? 'La réservation a échoué.') : 'La réservation a échoué.'
+    bookingError.value = e instanceof ApiRequestError ? errorText(e.mapped, 'La réservation a échoué.') : 'La réservation a échoué.'
   } finally {
     bookingLoading.value = false
   }
@@ -401,11 +414,12 @@ async function onFavoriteSimilar(l: { propertyId: string | null }) {
               </div>
             </template>
             <template v-else-if="isShortStay">
-              <p class="mb-2.5 mt-4 text-xs font-black uppercase tracking-[.05em] text-[var(--text-faint)]">Vos dates</p>
+              <p class="mb-2.5 mt-4 text-xs font-black uppercase tracking-[.05em] text-[var(--text-faint)]">Vos dates<span v-if="minStay && minStay > 1" class="ml-1.5 font-semibold normal-case tracking-normal">· {{ minStay }} nuits minimum</span></p>
               <div class="grid grid-cols-7 gap-[5px]">
                 <button
                   v-for="day in calendarDays"
                   :key="day.iso"
+                  :data-iso="day.iso"
                   type="button"
                   class="h-[36px] rounded-xs text-[12px] font-semibold transition-all"
                   :class="[
@@ -419,12 +433,16 @@ async function onFavoriteSimilar(l: { propertyId: string | null }) {
               </div>
 
               <div v-if="nights > 0" class="mt-4 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-page)] p-4">
-                <DataMoneyLine :label="`${nights} nuit${nights > 1 ? 's' : ''} × ${formatFcfa(nightlyPrice)}`" :value="formatFcfa(stayTotal)" />
+                <template v-if="stayQuote">
+                  <DataMoneyLine v-for="l in stayQuote.lines" :key="l.label" :label="l.label" :value="formatFcfa(l.amount)" />
+                  <p v-if="stayQuote.saving > 0" class="mb-1 mt-1 text-[12px] font-semibold text-ok-fg">Tarif long séjour appliqué : −{{ formatFcfa(stayQuote.saving) }}</p>
+                </template>
                 <DataMoneyLine label="Total à payer" :value="formatFcfa(stayTotal)" total />
               </div>
 
+              <p v-if="stayProblem" class="mb-0 mt-3 text-[13px] font-semibold text-danger-fg">{{ stayProblem }}</p>
               <p v-if="bookingError" class="mb-0 mt-3 text-[13px] font-semibold text-danger-fg">{{ bookingError }}</p>
-              <CoreButton size="lg" full-width class="mt-4" :disabled="!nights || bookingLoading" @click="submitBooking">{{ bookingLoading ? 'Réservation…' : 'Réserver' }}</CoreButton>
+              <CoreButton size="lg" full-width class="mt-4" :disabled="!nights || !!stayProblem || bookingLoading" @click="submitBooking">{{ bookingLoading ? 'Réservation…' : 'Réserver' }}</CoreButton>
               <p class="mb-0 mt-2.5 text-center text-[12.5px] text-[var(--text-faint)]">Aucun montant prélevé à cette étape</p>
             </template>
 
