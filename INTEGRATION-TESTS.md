@@ -3000,6 +3000,8 @@ Les tests de `rentalSetup` repassent le résultat dans `classifyRental` (la clas
 
 **23/23 PASS.**
 
+Rejoué ensuite en **production** (im-hazel.vercel.app, commit dd57393) : W0 à W11 **21/21 PASS**, dont la photo de 9 Mo passée par le vrai relais Vercel. Le premier rejeu en production avait révélé B13 (corrigé avant ce passage).
+
 ### Problèmes et manques backend (à transmettre)
 
 1. **Aucun moyen de retirer une annonce de la recherche** : ni `is_publicly_listed`, ni le statut du bien (« maintenance », « occupé »), ni le statut « maintenance » d'un logement n'ont d'effet — seul un logement « occupé » disparaît. Il faut un vrai état « brouillon / en pause » ou que la recherche respecte `is_publicly_listed` et le statut du bien.
