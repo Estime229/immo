@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { ListingCard } from '~/utils/propertyListing'
 
-const props = defineProps<{ listing: ListingCard; favorite: boolean }>()
+const props = defineProps<{ listing: ListingCard; favorite: boolean; priceSuffix?: string }>()
 const emit = defineEmits<{ open: []; favorite: []; hover: []; unhover: [] }>()
 
 const STATUS_LABEL: Record<string, string> = {
@@ -95,7 +95,7 @@ function onTouchEnd(e: TouchEvent) {
         {{ listing.bedrooms > 0 ? `${listing.bedrooms} chambre${listing.bedrooms > 1 ? 's' : ''}` : 'Studio' }}<span v-if="listing.surface"> · {{ listing.surface }} m²</span>
       </p>
       <div class="mt-2.5 flex items-baseline justify-between">
-        <p class="m-0 font-mono text-[16px] font-bold text-green-900">{{ formatFcfaShort(listing.price) }}</p>
+        <p class="m-0 font-mono text-[16px] font-bold text-green-900">{{ formatFcfaShort(listing.price) }}<span v-if="priceSuffix" class="font-body text-[12px] font-semibold text-[var(--text-faint)]"> {{ priceSuffix }}</span></p>
         <span v-if="photos.length > 1" class="text-[11px] font-semibold text-[var(--text-faint)]">{{ activeIndex + 1 }}/{{ photos.length }}</span>
       </div>
     </div>

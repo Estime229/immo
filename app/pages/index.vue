@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import type { PropertySearchResult } from '~/types/property'
 import { flattenSearchResults, type ListingCard } from '~/utils/propertyListing'
+import { classifyRental, mapLimited, type RentalMode } from '~/utils/rentalMode'
 
-const { photos } = useProperties()
+const { photos, formatFcfaShort } = useProperties()
 const searchApi = usePropertySearchApi()
 const refData = useReferenceData()
 const favorites = usePropertyFavorites()
@@ -117,6 +118,7 @@ async function loadCityGroups() {
     const res = await searchApi.search({ limit: 60, sort: 'newest' })
     const properties = (res.data as PropertySearchResult[]).filter((p): p is PropertySearchResult => !('_virtual' in p))
     const cards = flattenSearchResults(properties)
+    loadRentalModes(cards)
     const names = [...new Set(cards.map(c => c.cityName).filter(Boolean))]
     cityGroups.value = names
       .map(name => ({ name, units: cards.filter(c => c.cityName === name) }))
@@ -128,6 +130,92 @@ async function loadCityGroups() {
   } finally {
     cityGroupsLoading.value = false
   }
+}
+
+/* ---- Deux façons de louer : à la nuit / au mois — moodboard classé sur les vraies grilles tarifaires ---- */
+type RentalKey = 'nuit' | 'mois'
+/**
+ * Visuels éditoriaux, pas les photos des annonces : celles-ci sont déposées
+ * librement par les propriétaires (et, sur l'instance de test, n'importe quoi)
+ * — elles restent dans le rail d'annonces réelles juste en dessous. Une photo
+ * principale, un détail recadré, un aplat de couleur portant les mots-clés :
+ * la composition classique d'une planche d'ambiance.
+ */
+interface MoodImage { bg: string; size: string; pos: string }
+const RENTAL_META: Record<RentalKey, { label: string; eyebrow: string; tagline: string; suffix: string; main: MoodImage; detail: MoodImage; swatch: string; keywords: string[] }> = {
+  nuit: {
+    label: 'À la nuit',
+    eyebrow: 'Courte durée',
+    tagline: 'Meublés prêts à vivre, pour quelques nuits ou quelques semaines.',
+    suffix: '/ nuit',
+    main: { bg: 'url(/images/hero/hero-3.jpg)', size: 'cover', pos: 'center 62%' },
+    detail: { bg: 'url(/images/hero/hero-3.jpg)', size: '320%', pos: '8% 78%' },
+    swatch: 'bg-clay-500',
+    keywords: ['Meublé', 'Réservation en ligne', 'Sans bail']
+  },
+  mois: {
+    label: 'Au mois',
+    eyebrow: 'Longue durée',
+    tagline: 'Location classique : bail signé en ligne, caution séquestrée par Immo.',
+    suffix: '/ mois',
+    main: { bg: 'url(/images/hero/hero-1.jpg)', size: 'cover', pos: '62% center' },
+    detail: { bg: 'url(/images/hero/hero-2.jpg)', size: 'cover', pos: 'center' },
+    swatch: 'bg-green-800',
+    keywords: ['Bail signé', 'Caution séquestrée', 'Loyer Mobile Money']
+  }
+}
+function moodStyle(m: MoodImage) {
+  return { backgroundImage: m.bg, backgroundSize: m.size, backgroundPosition: m.pos }
+}
+const RENTAL_KEYS: RentalKey[] = ['nuit', 'mois']
+const rentalUnits = ref<Record<RentalKey, ListingCard[]>>({ nuit: [], mois: [] })
+const modeByUnit = ref<Record<string, RentalMode>>({})
+const rentalLoading = ref(true)
+const activeRental = ref<RentalKey>('nuit')
+
+async function loadRentalModes(cards: ListingCard[]) {
+  rentalLoading.value = true
+  try {
+    const modes = await mapLimited(cards, 6, async c => {
+      try {
+        return classifyRental(await searchApi.fetchPricing(c.unitId), c.price)
+      } catch {
+        return null
+      }
+    })
+    const byUnit: Record<string, RentalMode> = {}
+    const nuit: ListingCard[] = []
+    const mois: ListingCard[] = []
+    cards.forEach((c, i) => {
+      const m = modes[i]
+      if (!m) return
+      byUnit[c.unitId] = m
+      if (m.nightly !== null) nuit.push({ ...c, price: m.nightly })
+      if (m.monthly !== null) mois.push({ ...c, price: m.monthly })
+    })
+    modeByUnit.value = byUnit
+    rentalUnits.value = { nuit: nuit.sort((a, b) => a.price - b.price), mois: mois.sort((a, b) => a.price - b.price) }
+    if (!nuit.length && mois.length) activeRental.value = 'mois'
+  } finally {
+    rentalLoading.value = false
+  }
+}
+
+function rentalFrom(key: RentalKey): string {
+  const prices = rentalUnits.value[key].map(u => u.price).filter(p => p > 0)
+  return prices.length ? formatFcfaShort(Math.min(...prices)) : ''
+}
+function rentalCount(key: RentalKey): string {
+  const n = rentalUnits.value[key].length
+  return `${n} logement${n > 1 ? 's' : ''}`
+}
+/** Prix affiché sur les cartes par ville : un logement qui ne se loue qu'à la nuit n'affiche jamais son prix de base, sans signification pour un visiteur. */
+function cityCardDisplay(u: ListingCard): { listing: ListingCard; suffix: string | undefined } {
+  const m = modeByUnit.value[u.unitId]
+  if (!m) return { listing: u, suffix: undefined }
+  if (m.monthly !== null) return { listing: { ...u, price: m.monthly }, suffix: '/ mois' }
+  if (m.nightly !== null) return { listing: { ...u, price: m.nightly }, suffix: '/ nuit' }
+  return { listing: u, suffix: undefined }
 }
 
 onMounted(async () => {
@@ -276,6 +364,74 @@ const TRUST_ITEMS = [
       </div>
     </section>
 
+    <!-- Deux façons de louer — moodboard -->
+    <section class="mx-auto max-w-[1240px] px-[26px] pt-12">
+      <div class="mb-5 max-w-[640px]">
+        <p class="m-0 text-[12.5px] font-black uppercase tracking-[.08em] text-clay-500">Deux façons de louer</p>
+        <h2 class="mb-0 mt-2 font-display text-title-2 font-bold tracking-title-2">À la nuit ou au mois ?</h2>
+      </div>
+
+      <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <button
+          v-for="key in RENTAL_KEYS"
+          :key="key"
+          type="button"
+          :aria-pressed="activeRental === key"
+          class="group relative overflow-hidden rounded-3xl text-left outline-none transition-[transform,box-shadow] duration-[var(--duration-base)] hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-green-600"
+          :class="activeRental === key ? 'shadow-panel ring-[3px] ring-green-600 ring-offset-2 ring-offset-[var(--surface-page)]' : 'shadow-card'"
+          @click="activeRental = key"
+        >
+          <div class="grid h-[250px] grid-cols-3 grid-rows-2 gap-1.5 bg-[var(--surface-page)] sm:h-[310px]">
+            <div class="relative col-span-2 row-span-2 overflow-hidden">
+              <div class="absolute inset-0 bg-sand-300 bg-no-repeat transition-transform duration-500 group-hover:scale-[1.03]" :style="moodStyle(RENTAL_META[key].main)" />
+              <div class="pointer-events-none absolute inset-0 bg-[image:linear-gradient(180deg,rgba(18,29,24,0)_28%,rgba(18,29,24,.84)_100%)]" />
+            </div>
+            <div class="bg-sand-300 bg-no-repeat" :style="moodStyle(RENTAL_META[key].detail)" />
+            <div class="flex flex-col justify-end gap-1 p-3 sm:p-4" :class="RENTAL_META[key].swatch">
+              <span v-for="k in RENTAL_META[key].keywords" :key="k" class="text-[11.5px] font-bold leading-tight text-white/[.92] sm:text-[12.5px]">{{ k }}</span>
+            </div>
+          </div>
+          <span
+            v-if="activeRental === key"
+            class="absolute right-4 top-4 rounded-pill bg-white px-3 py-1.5 text-[11.5px] font-black text-green-800"
+          >✓ Sélectionné</span>
+          <div class="pointer-events-none absolute bottom-0 left-0 w-2/3 p-4 sm:p-6">
+            <span class="inline-block rounded-pill bg-white/[.18] px-3 py-1 text-[11px] font-black uppercase tracking-[.06em] text-white backdrop-blur-[4px]">{{ RENTAL_META[key].eyebrow }}</span>
+            <p class="mb-0 mt-2.5 font-display text-[28px] font-extrabold leading-none tracking-[-.03em] text-white sm:text-[34px]">{{ RENTAL_META[key].label }}</p>
+            <p class="mb-0 mt-2 hidden max-w-[380px] text-[14px] leading-[1.5] text-white/[.86] sm:block">{{ RENTAL_META[key].tagline }}</p>
+            <p class="mb-0 mt-3 text-[13px] font-bold text-white">
+              <template v-if="rentalLoading">Chargement…</template>
+              <template v-else>
+                {{ rentalCount(key) }}<template v-if="rentalFrom(key)"> · dès <span class="font-mono">{{ rentalFrom(key) }}</span> {{ RENTAL_META[key].suffix }}</template>
+              </template>
+            </p>
+          </div>
+        </button>
+      </div>
+
+      <div class="mt-5">
+        <div v-if="rentalLoading" class="flex gap-[18px] overflow-x-auto pb-1">
+          <div v-for="i in 5" :key="i" class="w-[214px] flex-none">
+            <DataSkeletonCard :height="186" />
+          </div>
+        </div>
+        <p v-else-if="!rentalUnits[activeRental].length" class="m-0 rounded-xl border border-dashed border-[var(--border-default)] bg-white px-5 py-6 text-center text-[14px] text-[var(--text-muted)]">
+          Aucun logement {{ activeRental === 'nuit' ? 'à la nuit' : 'au mois' }} publié pour l'instant.
+        </p>
+        <div v-else class="flex gap-[18px] overflow-x-auto pb-1" style="scrollbar-width: none">
+          <div v-for="u in rentalUnits[activeRental]" :key="`${activeRental}-${u.unitId}`" class="w-[214px] flex-none">
+            <SearchPropertyCard
+              :listing="u"
+              :price-suffix="RENTAL_META[activeRental].suffix"
+              :favorite="u.propertyId ? favorites.isFavoriteProperty(u.propertyId) : false"
+              @open="openListing(u)"
+              @favorite="onFavorite(u)"
+            />
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- Carrousel de catégories -->
     <section v-if="categoriesLoading || categories.length" class="mx-auto max-w-[1240px] px-[26px] pt-12">
       <div class="mb-5 flex items-center justify-between">
@@ -339,7 +495,8 @@ const TRUST_ITEMS = [
       <div :ref="(el) => setCityRail(gi, el)" class="flex gap-[18px] overflow-x-auto pb-1" style="scrollbar-width: none">
         <div v-for="u in group.units" :key="u.unitId" class="w-[214px] flex-none">
           <SearchPropertyCard
-            :listing="u"
+            :listing="cityCardDisplay(u).listing"
+            :price-suffix="cityCardDisplay(u).suffix"
             :favorite="u.propertyId ? favorites.isFavoriteProperty(u.propertyId) : false"
             @open="openListing(u)"
             @favorite="onFavorite(u)"

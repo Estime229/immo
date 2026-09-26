@@ -2722,3 +2722,51 @@ Les 30 cas `PRO-01` à `PRO-30` ont été rejoués contre `https://im-hazel.verc
 ### Prochaine étape proposée
 
 `pro/mandats.vue` reste la seule pièce restante de la même famille (mock non lié à I2 au sens propre — aucun appel API du tout, pas seulement bloqué). Sinon, avec ce lot, le rejeu live de `TEST-CASES.md` est complet pour les quatre espaces coordonnés (Public/Artisan `im-9e`, Locataire `im-4e`, Pro — cette session).
+
+## Lot 41 — Accueil : « À la nuit ou au mois ? », une planche d'ambiance classée sur les vraies grilles tarifaires
+
+**Date** : 2026-09-26
+
+### Le constat de départ
+
+Signalé par l'utilisateur : la plateforme loue deux catégories de biens très différentes — à la nuit (souvent meublé, réservation) et au mois (bail) — mais l'accueil et la recherche ne le font pas ressortir.
+
+### Pourquoi ça ne ressortait pas : l'API de recherche ne connaît pas cette distinction
+
+`GET /property/search` n'a aucun paramètre ni champ « à la nuit / au mois ». Les proxys disponibles sont trompeurs : `min_duration_days`/`max_duration_days` ne sont renseignés sur **aucune** unité réelle, et `furnished_level` (meublé) ne dit rien du mode de location. La seule source fiable est la grille tarifaire de chaque unité (`GET /units/:id/pricing`, `billing_frequency`). Relevé en direct sur les 43 unités renvoyées par l'accueil : 9 ont un tarif journalier actif, les autres n'ont aucune grille (loyer mensuel du bail = prix de base de l'unité). Quelques unités de test ont un prix de base absurde (ex. « Studio LAPERTA » à 12 000 000 F) alors qu'elles ne se louent qu'à la nuit à 12 000 F — le prix de base n'a pas de sens pour elles.
+
+### Ce qui a été livré
+
+| Fichier | Rôle |
+|---|---|
+| `app/utils/rentalMode.ts` | **Nouveau** — `classifyRental(pricing, basePrice)` (règle ci-dessous) et `mapLimited()` (au plus N appels simultanés, pour ne pas envoyer 40 requêtes d'un coup au backend Render) |
+| `app/pages/index.vue` | Nouvelle section « Deux façons de louer — À la nuit ou au mois ? » sous la barre de recherche : deux panneaux en planche d'ambiance (photo principale, détail recadré, aplat de couleur portant des mots-clés), compteur et prix de départ réels, sélection qui affiche en dessous le rail des vraies annonces de la catégorie. Les rails par ville affichent désormais le bon prix et son unité (« / nuit » ou « / mois ») au lieu du prix de base brut |
+| `app/components/search/PropertyCard.vue` | Prop optionnelle `priceSuffix` (« / nuit », « / mois ») |
+
+**Règle de classement** : tarif journalier actif → à la nuit (à ce prix) ; tarif mensuel actif, ou grille longue durée, ou **aucune** grille → au mois (au tarif mensuel s'il existe, sinon au prix de base). Une unité avec seulement un tarif journalier n'est jamais présentée au mois. Les tarifs désactivés (`is_available: false`) sont ignorés. Un échec de chargement de grille exclut l'unité des deux rails plutôt que de la ranger au hasard.
+
+**Visuels** : les panneaux utilisent volontairement les trois photos éditoriales du projet (`/images/hero/*`), pas les photos des annonces — celles-ci sont déposées librement par les propriétaires (sur l'instance de test : une carte du monde, une camionnette publicitaire…) et restent affichées dans le rail d'annonces réelles juste en dessous.
+
+### Ce qui reste hors périmètre, et pourquoi
+
+- **Filtre « à la nuit / au mois » sur `/recherche`** : impossible proprement sans paramètre côté serveur — un filtre client ne filtrerait que la page chargée, avec un compteur et une pagination faux. **Demande backend à faire** : un paramètre `billing_frequency` (ou `rental_mode`) sur `GET /property/search`, et idéalement le tarif journalier dans chaque résultat pour éviter un appel par unité.
+- **Unités « virtuelles » (sans bien parent)** : déjà exclues des rails par ville de l'accueil avant ce lot, donc aussi de cette section.
+
+### Tests automatisés
+
+```
+Test Files  16 passed (16)
+     Tests  90 passed (90)   [+7 : tests/rentalMode.test.ts]
+```
+
+### Vérification manuelle (build de production local, Playwright, données réelles)
+
+| Scénario | Résultat |
+|---|---|
+| Desktop 1280 px, section chargée | « 7 logements · dès 2 000 F / nuit » et « 34 logements · dès 10 000 F / mois », rail « À la nuit » avec prix « / nuit » corrects, 0 erreur console |
+| Clic « Au mois » | Panneau sélectionné (anneau vert + « ✓ Sélectionné »), rail remplacé par les annonces mensuelles avec « / mois » |
+| Mobile 390 px | Panneaux empilés, accroche masquée pour tenir dans la tuile principale, mots-clés lisibles, 0 erreur console |
+
+### Prochaine étape proposée
+
+Faire remonter la même distinction dans `/recherche` dès que le paramètre backend existe — en attendant, les badges « / nuit » / « / mois » pourraient y être ajoutés de la même façon (12 appels de grille par page).
