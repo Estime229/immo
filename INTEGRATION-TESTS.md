@@ -2917,6 +2917,10 @@ Test Files  17 passed (17)
 | S6 | Inscription abandonnée après le code, reconnexion → reprise à « Créer votre compte » | PASS |
 | S0 | Zéro erreur JS sur tout le parcours | PASS |
 
+### Rejeu en production (im-hazel.vercel.app, après déploiement du commit 9ab5cb8)
+
+S0 à S5 : **22/22 PASS**, dont la photo de 9 Mo compressée puis enregistrée à travers le vrai relais Vercel. S6 bloqué à l'écran du code par la limite anti-spam de `request-otp` (3 demandes/minute/IP), pas par le correctif — S6 est PASS en local avec le même code.
+
 ### Problèmes backend constatés (à transmettre)
 
 1. **Aucun email OTP n'est envoyé en production** : `request-otp` répond `success:false, sent_channels:[]`. Un vrai utilisateur ne reçoit pas son code → inscription/connexion impossibles sans mot de passe.
@@ -2926,5 +2930,6 @@ Test Files  17 passed (17)
 5. `/onboarding/draft` n'accepte pas `phone_number` alors que `finalize` le lit ; aucun endpoint n'enregistre le téléphone après la vérification du code.
 6. Les doublons IFU/RCCM renvoient **403 FORBIDDEN** au lieu de 409 CONFLICT.
 7. `finalize` remplace `roles[]` par le seul rôle choisi (perte des rôles précédents d'un compte multi-rôles).
+8. **Limite OTP probablement partagée par tous les utilisateurs** : `request-otp` est limité à 3 demandes/minute **par IP** et `verify-otp` à 5/10 min par IP. Le relais Vercel transmet les en-têtes tels quels et le backend ne fait confiance qu'à un proxy (`trust proxy 1`) : il voit vraisemblablement l'IP de sortie de Vercel, pas celle de l'utilisateur (constaté : mon IP bloquée en direct, le relais passait encore). En production réelle, quelques inscriptions simultanées suffiraient à bloquer tout le monde. À confirmer côté backend (journaliser `req.ip`) ; correction probable : faire confiance à la chaîne Vercel + Render ou limiter par email.
 
 Données de test laissées en base : comptes `qa-signup-*`, `qa-art-*`, `qa-badifu*`, `qa-dbg*`, `qa-lot44-*@yopmail.com` ; l'un d'eux porte l'IFU invalide « 12345 » enregistré via `finalize` (bug n°3).
