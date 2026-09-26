@@ -3014,3 +3014,77 @@ Rejoué ensuite en **production** (im-hazel.vercel.app, commit dd57393) : W0 à 
 8. `CreatePropertyCommand` accepte `agent_id` librement depuis le corps de la requête (un propriétaire peut désigner n'importe quel utilisateur comme agent) — à restreindre.
 
 Données de test : biens `Lot45 …` créés puis supprimés ; comptes `qa-lot45-nv*@yopmail.com` (propriétaires non vérifiés, sans bien).
+
+---
+
+## Lot 46 — Tarifs et disponibilités : règles réelles de l'API, calendrier, liste d'attente, totaux honnêtes
+
+Demande : « parcourir et tester le flow Tarifs et disponibilité et tout ce qui va avec, en consultant l'API pour voir les divergences et ce qui doit être ajouté ». Méthode : lecture du backend (`unit-pricing.service.ts`, `availability.controller.ts`, `availability.service.ts`, `unit-waitlist.service.ts`, `calculate-booking-price.helper.ts`, `create-booking.handler.ts`, `create-lease.command.handler.ts`), puis chaque règle rejouée en live (propriétaire vérifié + locataire neuf `qa-lot46-tenant-*`, réservations créées puis annulées). Les manques backend sont reportés dans `BACKEND-ISSUES.md` (points 27 à 32), fichier créé à ce lot pour regrouper tout ce qui est à transmettre.
+
+### Comment l'API utilise réellement les tarifs (vérifié en live)
+
+| Règle | Preuve |
+|---|---|
+| Réserver en ligne exige un tarif **« à la nuit » actif** ; sans lui, le logement ne se loue qu'avec un bail | `create-booking.handler.ts` |
+| Les tarifs semaine/mois/… sont des **remises automatiques** : l'API prend la combinaison la moins chère, à partir de `min_periods` périodes | 10 nuits (10 000/nuit, 50 000/semaine) → **80 000** ; 35 nuits (150 000/mois) → **200 000** |
+| `min_duration_days` / `max_duration_days` appliqués à chaque réservation | 1 nuit (min 2) → 400 « Séjour minimum : 2 nuit(s). » ; 46 nuits (max 40) → 400 |
+| Période chevauchant un blocage → refus | 409 « Ce logement n'est pas disponible sur ces dates. » |
+| Blocage : début inclus, **fin exclue** ; bail en cours = blocage **sans fin** (`end_date: null`) | `availability.service.ts`, DTO |
+| Bail : loyer fourni, sinon tarif actif de la fréquence choisie | `create-lease.command.handler.ts` |
+
+### Constats
+
+| # | Écran | Constat |
+|---|---|---|
+| F1 | Fiche publique | Total affiché = nuits × prix de la nuit : **faux dès 7 nuits** (100 000 affichés, 80 000 facturés). |
+| F2 | Fiche publique | Séjour minimum/maximum et jours pris au milieu de la période non vérifiés : échec au clic (400/409). Calendrier limité à 30 jours (un séjour au mois était impossible à sélectionner). |
+| F3 | Fiche publique | **Un logement loué apparaissait libre** : `end_date: null` d'un bail en cours donnait `new Date(null)` = 1970. |
+| F4 | Tarifs | Calendrier limité au mois courant : un blocage en décembre était invisible. |
+| F5 | Tarifs | Formulaire de blocage : deux dates sans libellé, fin envoyée telle quelle (fin exclue côté API → « 1 au 5 » bloquait jusqu'au 4). Dates passées acceptées. |
+| F6 | Tarifs | Blocage manuel impossible à retirer (fonction présente mais jamais branchée) — et l'API ne renvoie jamais l'id d'un blocage. |
+| F7 | Tarifs | Prix non modifiable (retirer puis recréer), minimum de périodes non saisissable, prix non validé (l'API accepte 0 et 1000,5), retrait sans confirmation, erreurs de bascule avalées. |
+| F8 | Tarifs | Aucune explication de la règle « tarif à la nuit obligatoire + remises automatiques ». |
+| F9 | Tarifs / bail / recherche | Prix de base de l'unité jamais réaligné sur la grille : la recherche filtrait et affichait un loyer périmé ; le bail pré-remplissait toujours le prix de base, même pour un bail trimestriel. |
+| F10 | Liste d'attente | Message du locataire non affiché, inscription non retirable ; « Contacter » sans gestion d'erreur. L'API ne prévient jamais les inscrits (BACKEND-ISSUES #27). |
+
+### Ce qui a été livré
+
+| Fichier | Rôle |
+|---|---|
+| `app/utils/stayPricing.ts` | **Nouveau** — `quoteStay` (miroir exact de `calculateBookingPrice`, avec détail et économie), `stayLengthError`, `isDayBlocked`/`rangeHitsBlock` (fin exclue, fin nulle = sans fin), `addDays`, `validatePrice` (entier > 0), `syncedBasePrice` |
+| `app/utils/availabilityCalendar.ts` | Blocage sans fin correctement bloqué (F3) |
+| `app/pages/biens/[id].vue` | Total réel avec détail (« 1 semaine + 3 nuits ») et remise affichée ; minimum/maximum et jours pris vérifiés avant l'envoi ; « N nuits minimum » ; calendrier sur 60 jours |
+| `app/pages/pro/tarifs.vue` | Réécrit : logement présélectionné via `?unit=` ; explication + exemple chiffré ; tarifs modifiables (prix, minimum), validés, suspension avec erreurs visibles, retrait confirmé ; écart prix affiché/grille signalé et aligné en un clic, puis automatiquement ; durée de séjour min/max ; calendrier navigable avec légende complète ; liste « Indisponibilités à venir » (dates inclusives) ; blocage par premier/dernier jour inclus, passé refusé ; déblocage des blocages créés depuis cet appareil ; liste d'attente avec message, contact et retrait confirmé |
+| `app/pages/pro/baux/nouveau.vue` | Loyer pré-rempli depuis le tarif de la fréquence choisie (sinon prix de base au mois, sinon vide avec explication) |
+| `app/pages/pro/biens/fiche.vue` | Lien « Tarifs » par logement |
+| `app/composables/useWaitlistApi.ts` | + `removeEntry` |
+| `BACKEND-ISSUES.md` | **Nouveau** — les 32 points à transmettre au backend, classés par gravité |
+
+### Tests automatisés
+
+```
+Test Files  19 passed (19)
+     Tests  145 passed (145)   [+14 : tests/stayPricing.test.ts, calendrier sans fin]
+```
+
+Les totaux de `quoteStay` testés sont ceux renvoyés par l'API en live (80 000 et 200 000).
+
+### Vérification de bout en bout (Playwright, production im-hazel.vercel.app → API de production)
+
+| Id | Scénario | Résultat |
+|---|---|---|
+| T1 | `?unit=` présélectionne le logement ; « Réservation en ligne ouverte » ; exemple « 10 nuits = 1 semaine + 3 nuits → 80 000 F » | PASS |
+| T2 | Écart prix affiché (10 000) / loyer mensuel (150 000) signalé ; « Aligner » → prix de base 150 000 | PASS |
+| T3 | Tarif semaine modifié à 45 000 ; exemple recalculé à 75 000 | PASS |
+| T4-T6 | Prix 0 refusé avant envoi ; tarif trimestre ajouté, suspendu, retiré après confirmation | PASS |
+| T7 | Séjour min 3 / max 30 enregistrés | PASS |
+| T8-T9 | Blocages d'octobre et de décembre listés (dates inclusives) ; décembre visible en naviguant ; blocage créé ailleurs marqué « non retirable ici » | PASS |
+| T10-T11 | Dates passées refusées ; « 10 au 12 janv. » → API 10 → 13 ; affiché avec son motif ; débloqué | PASS |
+| T12 | Message du locataire affiché ; retiré de la liste d'attente | PASS |
+| T13 | Fiche publique : 10 nuits = 75 000 avec détail et remise ; 2 nuits refusées (min 3) ; période enjambant des jours pris refusée ; « 3 nuits minimum » affiché | PASS |
+| T14 | Bail : loyer 150 000 (mois), 45 000 (semaine), vide + explication (trimestre sans tarif) | PASS |
+| T0 | Zéro erreur JS | PASS |
+
+**26/26 PASS** en production (et en local avant déploiement).
+
+Données de test : biens `Lot46 tarifs …` créés puis supprimés ; réservations de test annulées ; compte `qa-lot46-tenant-*@yopmail.com` (locataire, sans réservation active).
