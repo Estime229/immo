@@ -56,6 +56,7 @@ const waterOptions = ref<{ code: string; label: string }[]>([])
 const meterOptions = ref<{ code: string; label: string }[]>([])
 const furnishedOptions = ref<{ code: string; label: string }[]>([])
 const featureOptions = ref<{ code: string; label: string }[]>([])
+const refsReady = ref(false)
 onMounted(async () => {
   const [pt, c, ut, w, m, f, feat] = await Promise.all([
     refData.fetchRef('PROPERTY_TYPE'), refData.fetchCities(), refData.fetchRef('UNIT_TYPE'), refData.fetchRef('WATER_SOURCE'),
@@ -71,6 +72,7 @@ onMounted(async () => {
   buildingType.value ||= propertyTypes.value[0]?.code ?? ''
   cityId.value ||= cities.value[0]?.id ?? ''
   unitTypeId.value ||= unitTypes.value[0]?.id ?? ''
+  refsReady.value = true
 })
 watch(cityId, async id => {
   neighborhoodId.value = ''
@@ -507,7 +509,7 @@ const summary = computed(() => {
           <button
             type="button"
             class="rounded-md bg-[image:var(--action-primary)] px-6 py-3.5 text-sm font-bold text-white shadow-action disabled:opacity-60"
-            :disabled="step1Loading || finalLoading || !!pricingWarning"
+            :disabled="!refsReady || step1Loading || finalLoading || !!pricingWarning"
             @click="next"
           >{{ nextLabel }}</button>
         </div>

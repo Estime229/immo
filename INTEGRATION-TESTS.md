@@ -2956,6 +2956,7 @@ Demande : « parcourir et tester le flow de création de bien, modification et t
 | B10 | Photos | « JPEG ou PNG », sans limite : l'API accepte JPEG/PNG/WebP/GIF ≤ 5 Mo (9 Mo → 413), le relais Vercel coupe à 4,5 Mo. |
 | B11 | Assistant | Champs acceptés par l'API mais jamais demandés : description du bien, caractéristiques (clôturé, gardien, parking, jardin, château d'eau), ameublement, équipements (`FEATURE` : clim, wifi, balcon…), description du logement, séjour minimum. |
 | B12 | Espace Pro | Titre et menu affichaient « Aperçu » sur toutes les sous-pages (`/pro/biens/ajouter`, `/pro/biens/fiche`). |
+| B13 | Modale « Ajouter un logement » | Trouvé au rejeu en production : un clic sur « Ajouter » avant la fin du chargement des référentiels échouait en silence (type non encore choisi → message affiché puis effacé dès la fin du chargement, aucun appel). Bouton désormais « Chargement… » et désactivé jusque-là (idem assistant). |
 
 Vérifié sain : création (201), description (bien relue, traduite en `en` automatiquement), caractéristiques (clés inconnues filtrées), unités (création, champs avancés, statuts), tarifs (doublon → 409 clair, désactivation, suppression), blocages de calendrier (chevauchement → 409, fin avant début → 400), suppression (soft delete, 404 ensuite), cache de recherche de 60 s.
 

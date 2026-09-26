@@ -46,6 +46,8 @@ const meterOptions = ref<{ code: string; label: string }[]>([])
 const toiletOptions = ref<{ code: string; label: string }[]>([])
 const furnishedOptions = ref<{ code: string; label: string }[]>([])
 const featureOptions = ref<{ code: string; label: string }[]>([])
+/** Tant que les référentiels chargent, le type n'est pas encore choisi : un clic trop rapide échouait en silence (message effacé dès la fin du chargement). */
+const refsReady = ref(false)
 
 function resetFromUnit() {
   const u = props.unit
@@ -85,6 +87,7 @@ onMounted(async () => {
   furnishedOptions.value = f.map(e => ({ code: e.code, label: e.labels.fr ?? e.code }))
   featureOptions.value = feat.map(e => ({ code: e.code, label: e.labels.fr ?? e.code }))
   if (!unitTypeId.value) unitTypeId.value = props.unit?.ref_type_id ?? unitTypes.value[0]?.id ?? ''
+  refsReady.value = true
   if (props.unit) await loadEditExtras(props.unit)
 })
 watch(() => props.unit, resetFromUnit)
@@ -318,7 +321,7 @@ function close() {
             <p v-if="hasMonthly" class="mb-0 mt-1.5 text-[12px] text-[var(--text-faint)]">Loi 2022-30 : caution et avance plafonnées à 3 mois chacune.</p>
 
             <p v-if="(showFormError && formError) || errorMessage" class="mb-0 mt-3.5 rounded-md border border-danger-border bg-danger-bg px-3.5 py-2.5 text-[13px] font-semibold text-danger-fg">{{ errorMessage || formError }}</p>
-            <CoreButton size="lg" full-width class="mt-5" :disabled="loading" @click="submit">{{ loading ? 'Enregistrement…' : isEdit ? 'Enregistrer' : 'Ajouter le logement' }}</CoreButton>
+            <CoreButton size="lg" full-width class="mt-5" :disabled="loading || !refsReady" @click="submit">{{ !refsReady ? 'Chargement…' : loading ? 'Enregistrement…' : isEdit ? 'Enregistrer' : 'Ajouter le logement' }}</CoreButton>
           </template>
           <template v-else>
             <div class="px-0.5 py-1 text-center">
