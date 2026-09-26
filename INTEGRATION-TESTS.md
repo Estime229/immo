@@ -2767,6 +2767,10 @@ Test Files  16 passed (16)
 | Clic « Au mois » | Panneau sélectionné (anneau vert + « ✓ Sélectionné »), rail remplacé par les annonces mensuelles avec « / mois » |
 | Mobile 390 px | Panneaux empilés, accroche masquée pour tenir dans la tuile principale, mots-clés lisibles, 0 erreur console |
 
+### Performance mesurée en production
+
+Premier chargement à froid : ~19 s d'attente avant **toute** réponse backend (réveil du serveur Render gratuit — touche aussi les appels préexistants de l'accueil comme `/location/cities`, pas propre à ce lot). Une fois le backend éveillé, la phase de classement (42 appels `/units/:id/pricing`, médiane ~550 ms) prenait ~4,6 s à 6 appels simultanés ; concurrence portée à 10 pour la réduire. Le vrai correctif reste le paramètre backend ci-dessus, qui supprimerait ces 42 appels.
+
 ### Prochaine étape proposée
 
 Faire remonter la même distinction dans `/recherche` dès que le paramètre backend existe — en attendant, les badges « / nuit » / « / mois » pourraient y être ajoutés de la même façon (12 appels de grille par page).

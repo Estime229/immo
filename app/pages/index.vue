@@ -176,7 +176,7 @@ const activeRental = ref<RentalKey>('nuit')
 async function loadRentalModes(cards: ListingCard[]) {
   rentalLoading.value = true
   try {
-    const modes = await mapLimited(cards, 6, async c => {
+    const modes = await mapLimited(cards, 10, async c => {
       try {
         return classifyRental(await searchApi.fetchPricing(c.unitId), c.price)
       } catch {
