@@ -57,6 +57,9 @@ export interface UnitSearchResult {
   is_publicly_listed?: boolean
   requires_booking_inventory?: boolean
   booking_retention_percentage?: number
+  characteristics?: Record<string, unknown> | null
+  /** Équipements (`GET /ref?type=FEATURE`) — renvoyés seulement par `GET /property/owner/me`, jamais par la fiche publique (Lot 45). */
+  resolved_features?: { code: string }[]
 }
 
 export interface PropertySearchResult {
@@ -72,6 +75,8 @@ export interface PropertySearchResult {
   description: LocalizedText
   status: string
   is_publicly_listed: boolean
+  /** `PROPERTY_CHARS` (is_fenced, has_guardian, has_parking, has_garden, has_water_tank) — les autres clés sont ignorées par l'API. */
+  characteristics?: Record<string, unknown> | null
   media: PropertyMedia[]
   units: UnitSearchResult[]
   city?: { id: string; name: string }

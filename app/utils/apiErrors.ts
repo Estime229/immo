@@ -66,12 +66,16 @@ export const FIELD_RULE_MESSAGES: Record<string, string> = {
   'agency_ifu.matches': "L'IFU doit comporter exactement 13 chiffres.",
   'rccm.matches': 'RCCM invalide. Format béninois, par ex. RB/COT/25 A 1234.',
   'agency_rccm.matches': 'RCCM invalide. Format béninois, par ex. RB/COT/25 A 1234.',
+  'caution_months.max': 'La caution ne peut pas dépasser 3 mois (loi 2022-30).',
+  'avance_months.max': "L'avance ne peut pas dépasser 3 mois (loi 2022-30).",
+  'prepaye_months.max': 'Le prépayé ne peut pas dépasser 3 mois (loi 2022-30).',
   'first_name.isNotEmpty': 'Renseignez votre prénom.',
   'last_name.isNotEmpty': 'Renseignez votre nom.'
 }
 
 const BUSINESS_CODE_MESSAGES: Record<string, string> = {
   IFU_ALREADY_EXISTS: 'Cet IFU est déjà utilisé par un autre compte. Vérifiez le numéro ou contactez le support.',
+  'error.KYC_REQUIRED': "Votre identité doit être vérifiée par Immo avant de publier un bien. Déposez vos pièces depuis « Vérifier mon compte » : la validation prend généralement moins de 24 h.",
   RCCM_ALREADY_EXISTS: 'Ce RCCM est déjà utilisé par un autre compte. Vérifiez le numéro ou contactez le support.',
   CPI_ALREADY_EXISTS: 'Cette carte professionnelle (CPI) est déjà utilisée par un autre compte.'
 }

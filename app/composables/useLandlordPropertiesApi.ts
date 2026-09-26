@@ -1,5 +1,5 @@
 import type { PropertySearchPage, PropertySearchResult, UnitSearchResult } from '~/types/property'
-import type { CreatePropertyPayload, CreateUnitPayload, MediaItem, UpdatePropertyPayload, UpdateUnitPayload, UploadImageResult } from '~/types/landlordProperty'
+import type { CreatePoiPayload, CreatePropertyPayload, CreateUnitPayload, MediaItem, PointOfInterest, UpdatePropertyPayload, UpdateUnitPayload, UploadImageResult } from '~/types/landlordProperty'
 
 /**
  * Gestion des biens du propriétaire — voir 13-INTEGRATION-PRO-ET-ARTISAN.md, IP2.
@@ -50,5 +50,18 @@ export function useLandlordPropertiesApi() {
     return api.post<MediaItem>('/property/media', { property_id: propertyId, url, type: 'image', is_primary: opts.isPrimary, rank: opts.rank })
   }
 
-  return { fetchMine, create, update, remove, createUnit, updateUnit, removeUnit, uploadImage, addMedia }
+  /** Points d'intérêt autour du bien (mosquée, bar, école…) — routes `/properties/:id/pois`, jamais branchées avant le Lot 45. */
+  async function listPois(propertyId: string) {
+    return api.get<PointOfInterest[]>(`/properties/${propertyId}/pois`)
+  }
+
+  async function addPoi(propertyId: string, payload: CreatePoiPayload) {
+    return api.post<PointOfInterest>(`/properties/${propertyId}/pois`, payload)
+  }
+
+  async function removePoi(propertyId: string, poiId: string) {
+    return api.delete<unknown>(`/properties/${propertyId}/pois/${poiId}`)
+  }
+
+  return { fetchMine, create, update, remove, createUnit, updateUnit, removeUnit, uploadImage, addMedia, listPois, addPoi, removePoi }
 }

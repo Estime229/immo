@@ -14,15 +14,29 @@ export interface CreatePropertyPayload {
   neighborhood_id?: string
   status?: 'available' | 'occupied' | 'maintenance'
   description?: Record<string, string>
+  /** Vitrine publique du propriétaire uniquement — n'a aucun effet sur la recherche (vérifié en live). Défaut API : false. */
+  is_publicly_listed?: boolean
   gps_latitude?: number
   gps_longitude?: number
   characteristics?: Record<string, unknown>
 }
 
+/**
+ * Vérifié en live (Lot 45) : type, ville, quartier, adresse, GPS, caractéristiques
+ * et visibilité vitrine sont tous modifiables après création — contrairement à ce
+ * qu'affirmait la fiche depuis le Lot 21. `images` remplace toute la liste des photos.
+ */
 export interface UpdatePropertyPayload {
   name?: string
   status?: string
   description?: Record<string, string>
+  building_type?: string
+  city_id?: string
+  neighborhood_id?: string | null
+  address?: string
+  characteristics?: Record<string, unknown>
+  is_publicly_listed?: boolean
+  images?: { url: string; rank: number; is_primary: boolean }[]
 }
 
 export interface CreateUnitPayload {
@@ -46,6 +60,11 @@ export interface CreateUnitPayload {
   meter_type?: string
   furnished_level?: string
   characteristics?: Record<string, unknown>
+  /** Codes `GET /ref?type=FEATURE` (clim, wifi…) — enregistrés, mais non renvoyés par la fiche publique (limite backend, Lot 45). */
+  features?: string[]
+  /** 1 = à la nuit possible, 30 = au mois uniquement. */
+  min_duration_days?: number
+  max_duration_days?: number
   is_publicly_listed?: boolean
   /** Exige un état des lieux pour toute réservation courte durée — défaut false, jamais imposé par la plateforme. */
   requires_booking_inventory?: boolean
@@ -67,4 +86,20 @@ export interface MediaItem {
   type: 'image' | 'video_360' | 'video_short'
   rank: number
   is_primary: boolean
+}
+
+export interface PointOfInterest {
+  id: string
+  poi_type: string
+  name: string | null
+  distance_meters: number | null
+  noise_level: string | null
+  is_verified: boolean | null
+}
+
+export interface CreatePoiPayload {
+  poi_type: string
+  name?: string
+  distance_meters?: number
+  noise_level?: string
 }

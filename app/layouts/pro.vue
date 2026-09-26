@@ -12,12 +12,13 @@ const roleLabel = computed(() => {
   return (r && labels[r]) || 'Compte pro'
 })
 
+/** Sous-pages (`/pro/biens/ajouter`, `/pro/biens/fiche`…) rattachées à leur rubrique — avant, tout s'affichait « Aperçu ». */
 const currentKey = computed(() => {
-  for (const g of NAV_GROUPS) {
-    const found = g.items.find(n => n.to === route.path)
-    if (found) return found.key
-  }
-  return 'apercu'
+  const items = NAV_GROUPS.flatMap(g => g.items)
+  const exact = items.find(n => n.to === route.path)
+  if (exact) return exact.key
+  const parent = items.filter(n => n.to !== '/pro' && route.path.startsWith(`${n.to}/`)).sort((a, b) => b.to.length - a.to.length)[0]
+  return parent?.key ?? 'apercu'
 })
 const pageTitle = computed(() => PAGE_TITLES[currentKey.value] ?? '')
 

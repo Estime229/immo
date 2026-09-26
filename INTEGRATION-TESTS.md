@@ -2933,3 +2933,81 @@ S0 à S5 : **22/22 PASS**, dont la photo de 9 Mo compressée puis enregistrée �
 8. **Limite OTP probablement partagée par tous les utilisateurs** : `request-otp` est limité à 3 demandes/minute **par IP** et `verify-otp` à 5/10 min par IP. Le relais Vercel transmet les en-têtes tels quels et le backend ne fait confiance qu'à un proxy (`trust proxy 1`) : il voit vraisemblablement l'IP de sortie de Vercel, pas celle de l'utilisateur (constaté : mon IP bloquée en direct, le relais passait encore). En production réelle, quelques inscriptions simultanées suffiraient à bloquer tout le monde. À confirmer côté backend (journaliser `req.ip`) ; correction probable : faire confiance à la chaîne Vercel + Render ou limiter par email.
 
 Données de test laissées en base : comptes `qa-signup-*`, `qa-art-*`, `qa-badifu*`, `qa-dbg*`, `qa-lot44-*@yopmail.com` ; l'un d'eux porte l'IFU invalide « 12345 » enregistré via `finalize` (bug n°3).
+
+---
+
+## Lot 45 — Création et gestion d'un bien : parcours complet rejoué contre l'API, divergences corrigées
+
+Demande : « parcourir et tester le flow de création de bien, modification et tout ce qui va avec, en consultant l'API pour voir les divergences et ce qui doit être ajouté ». Méthode : lecture du code backend (`modules/property` : contrôleurs, commandes, handlers, recherche, points d'intérêt, tarifs, disponibilités), puis chaque route rejouée en live avec le propriétaire vérifié `pro-landlord-test-1789930234@example.com` et un propriétaire neuf non vérifié.
+
+### Constats vérifiés en live (API de production)
+
+| # | Écran / API | Constat |
+|---|---|---|
+| B1 | Assistant | Revenir à l'étape 1 puis revalider **créait un second bien** (POST à chaque clic). |
+| B2 | Assistant + modale unité | « Caution > 3 mois avec accord dérogatoire » : l'API refuse toute valeur > 3 (`validation.CAUTION_TOO_HIGH`, pas de dérogation) — la case à cocher menait à un échec. |
+| B3 | Assistant + modale unité | « Visible publiquement — l'unité apparaît dans la recherche » : **aucun effet**. `is_publicly_listed` ne concerne que la vitrine propriétaire (et, pour une unité dans un bien, rien du tout). Rejoué : unité « non visible » → toujours dans la recherche. |
+| B4 | Fiche | « Le type, la ville, le quartier et l'adresse ne sont pas modifiables » : **faux**, tous modifiables (rejoué : duplex→villa, Cotonou→Abomey-Calavi, adresse, GPS). |
+| B5 | Fiche | Onglet « Points d'intérêt » : « aucune donnée côté API » — **faux**, `GET/POST/DELETE /properties/:id/pois` existent et fonctionnent. |
+| B6 | Fiche | « Voir l'annonce » n'apparaissait que si `is_publicly_listed`, jamais positionné par l'écran → bouton jamais visible. |
+| B7 | Fiche | Aucun moyen de supprimer un bien, un logement ou une photo, ni de choisir la photo principale. L'API le permet (`DELETE` bien/unité ; `PATCH images` remplace la liste, fichiers retirés effacés du stockage — vérifié 404). |
+| B8 | Assistant | Aucune notion « à la nuit / au mois » : seul un « loyer mensuel ». Or c'est la grille tarifaire qui classe une annonce (Lots 41-42) : une unité meublée à la nuit apparaissait « au mois » à son prix de base. |
+| B9 | Assistant | Propriétaire non vérifié : l'écran laissait tout remplir puis affichait « Vous n'avez pas les droits » (403 `error.KYC_REQUIRED`). |
+| B10 | Photos | « JPEG ou PNG », sans limite : l'API accepte JPEG/PNG/WebP/GIF ≤ 5 Mo (9 Mo → 413), le relais Vercel coupe à 4,5 Mo. |
+| B11 | Assistant | Champs acceptés par l'API mais jamais demandés : description du bien, caractéristiques (clôturé, gardien, parking, jardin, château d'eau), ameublement, équipements (`FEATURE` : clim, wifi, balcon…), description du logement, séjour minimum. |
+| B12 | Espace Pro | Titre et menu affichaient « Aperçu » sur toutes les sous-pages (`/pro/biens/ajouter`, `/pro/biens/fiche`). |
+
+Vérifié sain : création (201), description (bien relue, traduite en `en` automatiquement), caractéristiques (clés inconnues filtrées), unités (création, champs avancés, statuts), tarifs (doublon → 409 clair, désactivation, suppression), blocages de calendrier (chevauchement → 409, fin avant début → 400), suppression (soft delete, 404 ensuite), cache de recherche de 60 s.
+
+### Ce qui a été livré
+
+| Fichier | Rôle |
+|---|---|
+| `app/utils/propertyForm.ts` | **Nouveau** — `rentalSetup` (au mois / à la nuit / les deux → prix de base, séjour min., `billing_type`, lignes de tarif), `rentalChoiceOf`, `validateMonths` (plafond légal 3 mois), `validateRentalPrices`, `imagesPayload` (retrait/principale, rangs ≥ 1), `deleteBlocker`, caractéristiques du bâtiment, types de points d'intérêt et niveaux de bruit |
+| `app/pages/pro/biens/ajouter.vue` | Réécrit : bandeau « identité non vérifiée » dès l'arrivée ; plus de doublon (PATCH au retour sur l'étape 1) ; description, caractéristiques, vitrine réelle ; photos compressées, retirables, principale au choix ; **mode de location** avec loyer et/ou prix par nuit + tarifs créés ; ameublement, équipements, description ; conditions séparées (mois : caution/avance ≤ 3 ; nuit : retenue, état des lieux) ; récapitulatif honnête sur la visibilité |
+| `app/pages/pro/biens/fiche.vue` | Réécrit : état « visible dans la recherche / hors recherche » ; édition complète (type, ville, quartier, adresse, caractéristiques, vitrine) ; « Voir l'annonce » toujours ; suppression d'un logement et du bien avec confirmation, **bloquée si un logement est occupé ou en préavis** ; photos (retrait, principale) ; onglet « Alentours » réel (ajout/liste/retrait) |
+| `app/components/pro/UniteModal.vue` | Réécrit : mode de location à la création (+ tarifs), mode lu sur la grille en édition ; équipements (relus sur `owner/me` pour ne pas les effacer), description, date de disponibilité (obligatoire en préavis) ; caution/avance ≤ 3 ; case « visible » inopérante retirée |
+| `app/composables/useLandlordPropertiesApi.ts` | + `listPois`, `addPoi`, `removePoi` |
+| `app/types/landlordProperty.ts`, `app/types/property.ts` | Champs réellement modifiables, `features`, `min_duration_days`, `characteristics`, `resolved_features`, points d'intérêt |
+| `app/utils/apiErrors.ts` | `error.KYC_REQUIRED` expliqué ; `caution_months/avance_months/prepaye_months.max` traduits |
+| `app/layouts/pro.vue` | Sous-pages rattachées à leur rubrique (« Mes biens ») |
+
+### Tests automatisés
+
+```
+Test Files  18 passed (18)
+     Tests  131 passed (131)   [+12 : tests/propertyForm.test.ts]
+```
+
+Les tests de `rentalSetup` repassent le résultat dans `classifyRental` (la classification de l'accueil et de la recherche) : « à la nuit » est bien classé à la nuit, « les deux » garde son loyer mensuel.
+
+### Vérification de bout en bout (Playwright, build de production local → API de production)
+
+| Id | Scénario | Résultat |
+|---|---|---|
+| W0 | Compte vérifié : pas de bandeau, titre « Mes biens » | PASS |
+| W1-W2 | Étape 1 avec description + parking + gardien + vitrine ; retour à l'étape 1 et renommage → **un seul bien**, renommé | PASS |
+| W3 | Photo de 9 Mo compressée puis envoyée, 2e photo, changement de principale, retrait (vérifié côté API) | PASS |
+| W4 | « Les deux » 85 000/mois + 15 000/nuit, meublé complet, 2 équipements ; caution 4 refusée avant envoi ; mise en ligne → fiche « Annonce en ligne » ; API : séjour min. 1, tarifs `monthly` + `daily`, 2 équipements | PASS |
+| W5 | Ville et adresse modifiées après création | PASS |
+| W6 | Point d'intérêt « Mosquée, 150 m, bruit fort » ajouté puis retiré | PASS |
+| W7-W8 | Logement « à la nuit » ajouté par la modale (tarif journalier créé) ; en édition, mode reconnu | PASS |
+| W9 | Logement supprimé après confirmation | PASS |
+| W10-W11 | Suppression du bien bloquée tant qu'un logement est occupé ; puis supprimé → retour à la liste, API 404 | PASS |
+| N1-N2 | Propriétaire non vérifié : bandeau dès l'arrivée ; refus expliqué (plus « pas les droits ») | PASS |
+| W0b | Zéro erreur JS | PASS |
+
+**23/23 PASS.**
+
+### Problèmes et manques backend (à transmettre)
+
+1. **Aucun moyen de retirer une annonce de la recherche** : ni `is_publicly_listed`, ni le statut du bien (« maintenance », « occupé »), ni le statut « maintenance » d'un logement n'ont d'effet — seul un logement « occupé » disparaît. Il faut un vrai état « brouillon / en pause » ou que la recherche respecte `is_publicly_listed` et le statut du bien.
+2. **Suppression sans contrôle de bail** : `DELETE /property/:id` et `DELETE …/units/:id` suppriment même un logement occupé (rejoué). Le frontend bloque désormais, mais l'API doit refuser (409) s'il existe un bail actif ou une réservation à venir.
+3. **Équipements invisibles pour les locataires** : `features` est enregistré (`resolved_features`) mais `GET /property/:id` et la recherche ne le renvoient pas — seul `owner/me` le fait.
+4. **Deux notions de « vérifié » qui divergent** : `POST /property` exige `users.is_verified`, alors que l'écran affiche `profile.kyc_status` — et toute modification du profil repasse `kyc_status` à `pending` sans toucher `is_verified`. Le propriétaire de test est `is_verified: true` / `kyc_status: pending` : il peut publier, mais nos bandeaux (Lot 43) lui disent le contraire. À aligner (une seule source de vérité).
+5. Pas d'état « brouillon » : un bien existe dès l'étape 1 (vide, hors recherche tant qu'il n'a pas de logement). Un assistant abandonné laisse un bien vide.
+6. `POST /property/upload-image` n'exige pas de compte vérifié (n'importe quel compte peut remplir le stockage) ; pas de route pour supprimer une photo isolée (il faut renvoyer toute la liste).
+7. Blocages de calendrier acceptés dans le passé ; message de chevauchement « bail ou réservation » même quand le conflit est un blocage manuel.
+8. `CreatePropertyCommand` accepte `agent_id` librement depuis le corps de la requête (un propriétaire peut désigner n'importe quel utilisateur comme agent) — à restreindre.
+
+Données de test : biens `Lot45 …` créés puis supprimés ; comptes `qa-lot45-nv*@yopmail.com` (propriétaires non vérifiés, sans bien).
