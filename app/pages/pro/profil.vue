@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import type { NotificationChannel, NotificationPreferences, ProfileMe } from '~/types/profile'
 import { ApiRequestError } from '~/utils/authenticatedFetcher'
+import { errorText } from '~/utils/apiErrors'
+import { validateIfu, validateRccm } from '~/utils/onboarding'
 
 definePageMeta({ layout: 'pro' })
 
@@ -46,9 +48,10 @@ const savingProfile = ref(false)
 const profileSaveError = ref('')
 const profileSaved = ref(false)
 async function saveProfile() {
-  savingProfile.value = true
-  profileSaveError.value = ''
   profileSaved.value = false
+  profileSaveError.value = validateIfu(ifu.value) ?? validateRccm(rccm.value) ?? ''
+  if (profileSaveError.value) return
+  savingProfile.value = true
   try {
     const payload: Record<string, unknown> = {}
     if (fullName.value.trim()) payload.full_name = fullName.value.trim()
@@ -64,7 +67,7 @@ async function saveProfile() {
     profileSaved.value = true
     await loadProfile()
   } catch (e) {
-    profileSaveError.value = e instanceof ApiRequestError ? (e.mapped.bannerMessage ?? "L'enregistrement a échoué.") : "L'enregistrement a échoué."
+    profileSaveError.value = e instanceof ApiRequestError ? errorText(e.mapped, "L'enregistrement a échoué.") : "L'enregistrement a échoué."
   } finally {
     savingProfile.value = false
   }
@@ -91,7 +94,7 @@ async function submitPassword() {
     pwStep.value = 'done'
     if (currentUser.value) currentUser.value.has_password = true
   } catch (e) {
-    pwError.value = e instanceof ApiRequestError ? (e.mapped.bannerMessage ?? 'Une erreur est survenue.') : 'Une erreur est survenue.'
+    pwError.value = e instanceof ApiRequestError ? errorText(e.mapped, 'Une erreur est survenue.') : 'Une erreur est survenue.'
   } finally {
     pwLoading.value = false
   }
@@ -107,7 +110,7 @@ async function confirmDelete() {
     await authApi.logout()
     await navigateTo('/')
   } catch (e) {
-    deleteError.value = e instanceof ApiRequestError ? (e.mapped.bannerMessage ?? 'La suppression a échoué.') : 'La suppression a échoué.'
+    deleteError.value = e instanceof ApiRequestError ? errorText(e.mapped, 'La suppression a échoué.') : 'La suppression a échoué.'
     deleteStep.value = 'confirm'
   }
 }
@@ -160,6 +163,7 @@ async function toggleChannel(channel: NotificationChannel) {
     </div>
 
     <template v-if="tab === 'identite'">
+      <LayoutAccountNameForm class="mb-4.5 max-w-[640px]" />
       <div class="max-w-[640px] rounded-2xl border border-[var(--border-subtle)] bg-white p-6">
         <p class="mb-4 mt-0 text-[15px] font-bold">Identité</p>
         <div class="flex justify-between border-b border-sand-200 py-3.5">
@@ -172,7 +176,7 @@ async function toggleChannel(channel: NotificationChannel) {
         </div>
         <template v-if="profile">
           <div class="flex justify-between border-b border-sand-200 py-3.5">
-            <span class="text-[13.5px] text-[var(--text-faint)]">Nom complet</span>
+            <span class="text-[13.5px] text-[var(--text-faint)]">Nom légal (pièce d'identité)</span>
             <span class="text-sm font-semibold">{{ maskedStatus(profile.full_name_masked) }}</span>
           </div>
           <div class="flex justify-between border-b border-sand-200 py-3.5">
@@ -195,7 +199,7 @@ async function toggleChannel(channel: NotificationChannel) {
         <p class="mb-4 mt-1 text-[13px] text-[var(--text-muted)]">Ces informations sont chiffrées côté serveur — jamais réaffichées en clair.</p>
         <div class="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
           <div class="sm:col-span-2">
-            <label class="mb-1.5 block text-[12.5px] font-bold text-[var(--text-muted)]">Nom complet</label>
+            <label class="mb-1.5 block text-[12.5px] font-bold text-[var(--text-muted)]">Nom légal (pièce d'identité)</label>
             <input v-model="fullName" placeholder="Ex. Koffi Dossou" class="h-11 w-full rounded-sm border border-[var(--border-default)] bg-white px-3.5 text-[13.5px] outline-none">
           </div>
           <div class="sm:col-span-2">
@@ -208,7 +212,7 @@ async function toggleChannel(channel: NotificationChannel) {
           </div>
           <div>
             <label class="mb-1.5 block text-[12.5px] font-bold text-[var(--text-muted)]">RCCM</label>
-            <input v-model="rccm" placeholder="Ex. RB/COT/24 B 6789" class="h-11 w-full rounded-sm border border-[var(--border-default)] bg-white px-3.5 text-[13.5px] outline-none">
+            <input v-model="rccm" placeholder="Ex. RB/COT/25 A 1234" class="h-11 w-full rounded-sm border border-[var(--border-default)] bg-white px-3.5 text-[13.5px] outline-none">
           </div>
         </div>
         <p v-if="profileSaveError" class="mb-0 mt-3.5 text-[13px] font-semibold text-danger-fg">{{ profileSaveError }}</p>

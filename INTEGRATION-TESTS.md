@@ -2864,3 +2864,67 @@ Test Files  16 passed (16)
 ### Constat laissé ouvert (à trancher avec le backend)
 
 Les pages publiques affichent « ✓ Vérifié » / « Ce compte a passé la vérification d'identité Immo » selon `is_verified` du profil public (`GET /public/owners/:id`, `app/pages/vitrine/[id].vue`, `app/pages/biens/[id].vue`). Si ce champ est le même `is_verified` que celui de `/auth/me` — vrai dès la confirmation de l'email —, ces badges affirment une vérification d'identité qui n'a peut-être jamais eu lieu. Le profil public n'expose pas `kyc_status` : à confirmer côté backend avant de corriger l'affichage.
+
+---
+
+## Lot 44 — Inscription, dépôt de dossier et KYB : ce qui était perdu, pourquoi, et la correction
+
+Signalement utilisateur : « à l'inscription on fournit nom et prénom mais ce n'est pas enregistré (champs vides dans le dashboard) ; j'ai l'impression que les dossiers ne sont pas enregistrés ; pour un user pro les infos (IFU, RCCM…) ne sont pas récupérées ». Chaque point a été vérifié dans le code du backend (`back-end-api-immo-app`) et en live sur l'API de production avant d'être corrigé.
+
+### Diagnostic (vérifié en live, API de production)
+
+| # | Constat | Preuve |
+|---|---|---|
+| D1 | **Le nom et le rôle saisis à l'inscription n'étaient jamais envoyés.** `createAccount()` faisait seulement `navigateTo('/kyc')`. `verify-otp` crée tout compte en `tenant`, sans nom. | `GET /auth/me` après inscription : `first_name: null, last_name: null, role: "tenant"` |
+| D2 | **Le correctif précédent (Lot du 25/09) ne corrigeait pas le dashboard.** `PATCH /profile/me { full_name }` écrit un nom KYC **chiffré** (`profile.full_name_enc`), jamais `users.first_name/last_name` — le seul affiché dans les espaces. Aucun écran n'écrivait ces deux champs. | code `update-profile.handler.ts` ; grep frontend : aucun appel à `/user/update` ni `/onboarding` |
+| D3 | **Un bailleur inscrit restait locataire** → `/kyc` ne lui montrait ni IFU/RCCM (onglet Coordonnées), ni « Titre de propriété / RCCM » (onglet Documents : il voyait « Bulletin de salaire / Pièce du garant »). `useAuthRole()` est local et repart à `locataire` au rechargement. | capture Playwright sur un compte `landlord` réel |
+| D4 | **Envoi de fichiers > 4,5 Mo impossible en production.** Le relais Vercel coupe le corps (`413 FUNCTION_PAYLOAD_TOO_LARGE`), l'API refuse > 5 Mo, l'écran annonçait « 8 Mo max ». Une photo de téléphone (3–8 Mo) échouait. HEIC (iPhone) refusé par l'API mais accepté par le sélecteur (`image/*`). | 1 / 3 / 4,4 Mo → 201 ; 4,8 Mo → 413 Vercel ; 6 Mo direct API → 413 ; HEIC → 400 |
+| D5 | **Les erreurs précises étaient cachées.** Une violation rattachée à un champ (`rccm.matches`) laissait `bannerMessage` à `null` → l'écran affichait « L'enregistrement a échoué. ». Les doublons `IFU_ALREADY_EXISTS` / `RCCM_ALREADY_EXISTS` (403) s'affichaient « Vous n'avez pas les droits pour cette action. » | rejoué en live |
+| D6 | « Enregistrer et terminer la vérification » affichait « Vérification envoyée » même sans pièce d'identité ni justificatif, et vidait les champs après enregistrement (impression que rien n'était parti). | lecture du code + capture |
+| D7 | Une inscription abandonnée après le code (`is_profile_complete: false`) n'était jamais reprise : à la connexion suivante, l'utilisateur arrivait dans l'espace locataire, sans nom. | code `handleOutcome` |
+
+Côté backend, **le dépôt de documents lui-même fonctionne** : chaque fichier crée une ligne `kyc_documents`, relue par `GET /kyc/documents/mine`.
+
+### Ce qui a été livré
+
+| Fichier | Rôle |
+|---|---|
+| `app/composables/useOnboardingApi.ts` | **Nouveau** — `POST /onboarding/draft` + `POST /onboarding/finalize` (seul chemin qui écrit nom + rôle + `roles[]` d'un compte neuf) |
+| `app/utils/onboarding.ts` | **Nouveau** — `SIGNUP_ROLE_TO_API`, `apiRoleToSignupRole`, `needsOnboarding`, `validateSignup`, `validateIfu` (13 chiffres), `validateRccm` (même regex que le backend) |
+| `app/utils/uploadFile.ts` | **Nouveau** — limite réelle 4 Mo, formats JPG/PNG/WebP/PDF, **compression automatique** des photos > 1,5 Mo (2000 px, JPEG 85 %) |
+| `app/pages/connexion.vue` | « Créer mon compte » enregistre vraiment prénom/nom/rôle, erreurs affichées ; champ Téléphone retiré (aucun endpoint ne l'enregistre après le code, `phone_number` est retiré silencieusement du brouillon) ; reprise d'une inscription abandonnée |
+| `app/pages/kyc.vue` | Rôle lu sur `/auth/me` ; « ✓ Enregistré » sur nom légal/raison sociale/IFU/RCCM (lu sur `/profile/me`) ; nom légal pré-rempli ; IFU/RCCM validés avant envoi ; plus de « Vérification envoyée » tant qu'il manque une pièce (liens vers l'onglet concerné) ; limite/format réels |
+| `app/components/layout/AccountNameForm.vue` + `useUserApi.updateIdentity` | **Nouveau** — « Nom affiché » modifiable (`POST /user/update`) dans les profils locataire, pro et artisan (répare aussi les comptes déjà créés sans nom) |
+| `app/pages/{locataire,pro}/profil.vue` | « Nom complet » renommé « Nom légal (pièce d'identité) » ; IFU/RCCM validés (pro) |
+| `app/utils/apiErrors.ts` | `errorText()` (message du champ au lieu de « échoué ») ; messages `ifu/rccm.matches` ; 403 `IFU/RCCM/CPI_ALREADY_EXISTS` → « déjà utilisé par un autre compte » |
+
+### Tests automatisés
+
+```
+Test Files  17 passed (17)
+     Tests  119 passed (119)   [+18 : tests/onboarding.test.ts]
+```
+
+### Vérification de bout en bout (Playwright, build de production local → API de production, comptes neufs)
+
+| Id | Scénario | Résultat |
+|---|---|---|
+| S1 | Inscription « Je loue mes biens » : prénom vide refusé, puis `POST /onboarding/draft` + `/finalize` ; `/auth/me` → `Rodrigue Akplogan`, `role: landlord`, `is_profile_complete: true` | PASS |
+| S2 | `/kyc` : badge « profil bailleur », pièces « Titre de propriété, RCCM, Justificatif de domicile », mention 4 Mo ; **photo de 9 Mo compressée puis enregistrée** (`/kyc/documents/mine` = 1) | PASS |
+| S3 | IFU « 12345 » refusé avant envoi ; RCCM « RB/COT/2024/B/12345 » refusé avec l'exemple valide ; RCCM déjà pris → « Ce RCCM est déjà utilisé… » ; sans pièce d'identité → « il manque encore » + lien ; `/profile/me` : IFU/RCCM/nom légal enregistrés, `landlord_kyb_status: pending` | PASS |
+| S4 | Pièce d'identité déposée → « Vérification envoyée » → espace pro, **nom visible dans la barre latérale** | PASS |
+| S5 | « Nom affiché » modifié depuis `/pro/profil` → `/auth/me.first_name` mis à jour | PASS |
+| S6 | Inscription abandonnée après le code, reconnexion → reprise à « Créer votre compte » | PASS |
+| S0 | Zéro erreur JS sur tout le parcours | PASS |
+
+### Problèmes backend constatés (à transmettre)
+
+1. **Aucun email OTP n'est envoyé en production** : `request-otp` répond `success:false, sent_channels:[]`. Un vrai utilisateur ne reçoit pas son code → inscription/connexion impossibles sans mot de passe.
+2. **Le code `000000` est accepté en production** (`ALLOW_OTP_BYPASS`) : n'importe qui peut se connecter à n'importe quel compte sans mot de passe. Faille critique, à désactiver dès que l'envoi d'email fonctionne.
+3. `/onboarding/finalize` **ne valide pas** IFU/RCCM (contrairement à sa documentation) : « 12345 » a été accepté et enregistré. En cas d'échec (IFU en double), nom et rôle sont déjà écrits mais pas le KYB, et le brouillon reste en Redis. Le frontend contourne : IFU/RCCM passent par `PATCH /profile/me`.
+4. L'exemple Swagger du RCCM (`RB/COT/2024/B/12345`) est refusé par la propre validation de l'API.
+5. `/onboarding/draft` n'accepte pas `phone_number` alors que `finalize` le lit ; aucun endpoint n'enregistre le téléphone après la vérification du code.
+6. Les doublons IFU/RCCM renvoient **403 FORBIDDEN** au lieu de 409 CONFLICT.
+7. `finalize` remplace `roles[]` par le seul rôle choisi (perte des rôles précédents d'un compte multi-rôles).
+
+Données de test laissées en base : comptes `qa-signup-*`, `qa-art-*`, `qa-badifu*`, `qa-dbg*`, `qa-lot44-*@yopmail.com` ; l'un d'eux porte l'IFU invalide « 12345 » enregistré via `finalize` (bug n°3).

@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import type { SessionOutcome } from '~/utils/sessionOutcome'
 import { ApiRequestError } from '~/utils/authenticatedFetcher'
+import { errorText } from '~/utils/apiErrors'
 import { roleHomePath } from '~/utils/roleRoutes'
+import { SIGNUP_ROLE_TO_API, apiRoleToSignupRole, needsOnboarding, validateSignup } from '~/utils/onboarding'
 
 definePageMeta({ layout: 'blank' })
 
@@ -43,6 +45,14 @@ function handleOutcome(outcome: SessionOutcome) {
     step.value = 'signup'
     return
   }
+  if ((outcome.kind === 'ok' || outcome.kind === 'restricted') && needsOnboarding(outcome.user)) {
+    // Inscription commencée puis abandonnée : on la reprend, avec le rôle réel déjà présélectionné.
+    role.value = apiRoleToSignupRole(outcome.user.role) ?? role.value
+    firstName.value = outcome.user.first_name ?? ''
+    lastName.value = outcome.user.last_name ?? ''
+    step.value = 'signup'
+    return
+  }
   if (outcome.kind === 'ok' || outcome.kind === 'restricted') {
     // Redirige selon le rôle réel renvoyé par l'API — jamais le rôle choisi localement à l'étape signup.
     navigateTo(roleHomePath(outcome.user.role))
@@ -71,7 +81,7 @@ async function goPassword() {
       step.value = 'code'
     }
   } catch (e) {
-    authError.value = e instanceof ApiRequestError ? (e.mapped.bannerMessage ?? 'Une erreur est survenue.') : 'Une erreur est survenue.'
+    authError.value = e instanceof ApiRequestError ? errorText(e.mapped, 'Une erreur est survenue.') : 'Une erreur est survenue.'
   } finally {
     loading.value = false
   }
@@ -87,7 +97,7 @@ async function submitPassword() {
     handleOutcome(outcome)
   } catch (e) {
     authError.value = e instanceof ApiRequestError
-      ? (e.mapped.kind === 'auth' ? 'Email ou mot de passe incorrect.' : (e.mapped.bannerMessage ?? 'Une erreur est survenue.'))
+      ? (e.mapped.kind === 'auth' ? 'Email ou mot de passe incorrect.' : errorText(e.mapped, 'Une erreur est survenue.'))
       : 'Une erreur est survenue.'
   } finally {
     loading.value = false
@@ -109,7 +119,7 @@ async function toCodeFromPassword() {
     codeDigits.value = ['', '', '', '', '', '']
     step.value = 'code'
   } catch (e) {
-    authError.value = e instanceof ApiRequestError ? (e.mapped.bannerMessage ?? 'Une erreur est survenue.') : 'Une erreur est survenue.'
+    authError.value = e instanceof ApiRequestError ? errorText(e.mapped, 'Une erreur est survenue.') : 'Une erreur est survenue.'
   } finally {
     loading.value = false
   }
@@ -125,7 +135,7 @@ async function toForgotOtp() {
     codeDigits.value = ['', '', '', '', '', '']
     step.value = 'code'
   } catch (e) {
-    authError.value = e instanceof ApiRequestError ? (e.mapped.bannerMessage ?? 'Une erreur est survenue.') : 'Une erreur est survenue.'
+    authError.value = e instanceof ApiRequestError ? errorText(e.mapped, 'Une erreur est survenue.') : 'Une erreur est survenue.'
   } finally {
     loading.value = false
   }
@@ -170,7 +180,7 @@ async function verifyCode() {
     handleOutcome(outcome)
   } catch (e) {
     codeError.value = true
-    authError.value = e instanceof ApiRequestError ? (e.mapped.bannerMessage ?? 'Code incorrect ou expiré.') : 'Code incorrect ou expiré.'
+    authError.value = e instanceof ApiRequestError ? errorText(e.mapped, 'Code incorrect ou expiré.') : 'Code incorrect ou expiré.'
   } finally {
     loading.value = false
   }
@@ -184,9 +194,11 @@ function toRecovery() {
 }
 
 /* ---- Inscription (complément de profil, après première vérification) ---- */
+const onboardingApi = useOnboardingApi()
 const firstName = ref('')
 const lastName = ref('')
-const phone = ref('+229 ')
+const signupError = ref('')
+watch([firstName, lastName], () => { signupError.value = '' })
 
 const ROLES = [
   { id: 'locataire', label: 'Je cherche un logement', hint: 'Réserver, payer mon loyer, suivre ma caution', icon: '⌂', tint: 'bg-green-50' },
@@ -196,13 +208,29 @@ const ROLES = [
 
 const role = useAuthRole()
 
-function createAccount() {
-  // Le rôle et l'identité choisis ici ne sont pas encore persistés côté API dans
-  // ce lot : aucun endpoint documenté (I1) ne les accepte — /onboarding/draft
-  // existe mais refuse role:'artisan' (bug backend connu, voir INTEGRATION-TESTS.md).
-  // La session est déjà réelle (jetons posés par verify-otp/google) ; seul ce
-  // choix reste local jusqu'à la correction backend.
-  navigateTo('/kyc')
+/**
+ * Nom + rôle enregistrés pour de vrai via /onboarding/draft puis /finalize
+ * (voir utils/onboarding.ts) — jusqu'au Lot 44 ils restaient locaux : tout
+ * compte neuf restait `tenant` sans nom, quel que soit le choix fait ici.
+ */
+async function createAccount() {
+  signupError.value = validateSignup({ firstName: firstName.value, lastName: lastName.value }) ?? ''
+  if (signupError.value) return
+  loading.value = true
+  try {
+    await onboardingApi.saveDraft({
+      first_name: firstName.value.trim(),
+      last_name: lastName.value.trim(),
+      role: SIGNUP_ROLE_TO_API[role.value]
+    })
+    await onboardingApi.finalize()
+    await auth.fetchMe()
+    navigateTo('/kyc')
+  } catch (e) {
+    signupError.value = e instanceof ApiRequestError ? errorText(e.mapped, "La création du compte a échoué. Réessayez.") : "La création du compte a échoué. Réessayez."
+  } finally {
+    loading.value = false
+  }
 }
 
 /* ---- Mot de passe oublié / réinitialisation ---- */
@@ -237,7 +265,7 @@ async function submitReset() {
     const outcome = await auth.login(email.value, newPassword.value)
     handleOutcome(outcome)
   } catch (e) {
-    resetError.value = e instanceof ApiRequestError ? (e.mapped.bannerMessage ?? 'Une erreur est survenue.') : 'Une erreur est survenue.'
+    resetError.value = e instanceof ApiRequestError ? errorText(e.mapped, 'Une erreur est survenue.') : 'Une erreur est survenue.'
   } finally {
     loading.value = false
   }
@@ -356,7 +384,6 @@ async function submitReset() {
             <FormsInput v-model="firstName" label="Prénom" placeholder="Sèdjro" />
             <FormsInput v-model="lastName" label="Nom" placeholder="Aholou" />
           </div>
-          <FormsInput v-model="phone" label="Téléphone" mono class="mt-3" />
           <p class="mb-2.5 mt-5.5 text-[12.5px] font-bold">Vous venez sur Immo pour…</p>
           <div class="flex flex-col gap-2.5">
             <div
@@ -377,7 +404,8 @@ async function submitReset() {
               >{{ role === r.id ? '✓' : '' }}</span>
             </div>
           </div>
-          <CoreButton size="lg" full-width class="mt-5" @click="createAccount">Créer mon compte</CoreButton>
+          <p v-if="signupError" class="mb-0 mt-3.5 rounded-sm border border-danger-border bg-danger-bg px-[15px] py-3 text-[13.5px] font-semibold text-danger-fg-deep">{{ signupError }}</p>
+          <CoreButton size="lg" full-width class="mt-5" :disabled="loading" @click="createAccount">{{ loading ? 'Création du compte…' : 'Créer mon compte' }}</CoreButton>
           <p class="mb-0 mt-3.5 text-[12.5px] leading-[1.5] text-[var(--text-faint)]">
             En continuant, vous acceptez les <NuxtLink to="/legal" class="font-semibold text-green-700">conditions d'utilisation</NuxtLink>
             et la <NuxtLink to="/legal" class="font-semibold text-green-700">politique de confidentialité</NuxtLink>.

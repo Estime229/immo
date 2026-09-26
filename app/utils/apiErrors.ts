@@ -61,7 +61,31 @@ export const FIELD_RULE_MESSAGES: Record<string, string> = {
   'email.isEmail': 'Adresse email invalide.',
   'phone.isPhoneNumber': 'Numéro de téléphone invalide.',
   'start_date.isDate': 'Date de début invalide.',
-  'end_date.isDate': 'Date de fin invalide.'
+  'end_date.isDate': 'Date de fin invalide.',
+  'ifu.matches': "L'IFU doit comporter exactement 13 chiffres.",
+  'agency_ifu.matches': "L'IFU doit comporter exactement 13 chiffres.",
+  'rccm.matches': 'RCCM invalide. Format béninois, par ex. RB/COT/25 A 1234.',
+  'agency_rccm.matches': 'RCCM invalide. Format béninois, par ex. RB/COT/25 A 1234.',
+  'first_name.isNotEmpty': 'Renseignez votre prénom.',
+  'last_name.isNotEmpty': 'Renseignez votre nom.'
+}
+
+const BUSINESS_CODE_MESSAGES: Record<string, string> = {
+  IFU_ALREADY_EXISTS: 'Cet IFU est déjà utilisé par un autre compte. Vérifiez le numéro ou contactez le support.',
+  RCCM_ALREADY_EXISTS: 'Ce RCCM est déjà utilisé par un autre compte. Vérifiez le numéro ou contactez le support.',
+  CPI_ALREADY_EXISTS: 'Cette carte professionnelle (CPI) est déjà utilisée par un autre compte.'
+}
+
+/**
+ * Texte à afficher quand l'écran n'a pas de message sous chaque champ : la
+ * bannière, sinon les messages de champ — jamais un « échoué » générique qui
+ * cache une erreur de format pourtant précise (Lot 44 : « RCCM invalide »
+ * s'affichait « L'enregistrement a échoué. »).
+ */
+export function errorText(mapped: MappedApiError, fallback: string): string {
+  if (mapped.bannerMessage) return mapped.bannerMessage
+  const fields = Object.values(mapped.fieldErrors)
+  return fields.length ? fields.join(' ') : fallback
 }
 
 const GENERIC_RULE_MESSAGES: Record<string, string> = {
@@ -72,6 +96,7 @@ const GENERIC_RULE_MESSAGES: Record<string, string> = {
   min: 'Cette valeur est trop basse.',
   max: 'Cette valeur est trop élevée.',
   isDate: 'Cette date est invalide.',
+  matches: 'Le format de cette valeur est invalide.',
   isEnum: 'Cette valeur n\'est pas autorisée.'
 }
 
@@ -162,6 +187,10 @@ export function mapApiError(
   }
 
   if (status === 403) {
+    // Doublons KYB renvoyés en 403 par PATCH /profile/me (vérifié en live, Lot 44) — ce n'est pas un problème de droits.
+    if (message && BUSINESS_CODE_MESSAGES[message]) {
+      return { kind: 'conflict', fieldErrors: {}, bannerMessage: BUSINESS_CODE_MESSAGES[message] }
+    }
     return {
       kind: 'forbidden',
       fieldErrors: {},

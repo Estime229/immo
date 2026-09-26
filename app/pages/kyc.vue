@@ -2,12 +2,35 @@
 import type { UserRole } from '~/composables/useAuthRole'
 import type { KycDocumentType } from '~/types/kyc'
 import { KYC_DOCUMENT_TYPE_LABELS } from '~/types/kyc'
+import type { ProfileMe } from '~/types/profile'
 import { ApiRequestError } from '~/utils/authenticatedFetcher'
+import { errorText } from '~/utils/apiErrors'
+import { apiRoleToSignupRole, validateIfu, validateRccm } from '~/utils/onboarding'
+import { UPLOAD_ACCEPT_ATTR, UPLOAD_HINT, prepareUpload } from '~/utils/uploadFile'
 
-const role = useAuthRole()
+const localRole = useAuthRole()
 const auth = useAuthApi()
 const kyc = useKycApi()
 const profileApi = useProfileApi()
+
+/**
+ * Rôle réel (/auth/me) d'abord : `useAuthRole()` est un état local qui repart
+ * à 'locataire' à chaque rechargement — vérifié en live (Lot 44), un compte
+ * `landlord` voyait « Bulletin de salaire / Pièce du garant » au lieu de
+ * « Titre de propriété / RCCM ».
+ */
+const role = computed<UserRole>(() => apiRoleToSignupRole(auth.user.value?.role) ?? localRole.value)
+
+/** Ce qui est déjà enregistré (masqué par l'API) — pour ne plus donner l'impression que rien n'a été envoyé. */
+const savedProfile = ref<ProfileMe | null>(null)
+async function loadSavedProfile() {
+  try {
+    savedProfile.value = await profileApi.fetchMe()
+  } catch {
+    savedProfile.value = null
+  }
+}
+onMounted(loadSavedProfile)
 
 /** `useAuthRole()` est un choix local jamais persisté côté API (I1) — pour savoir si ce compte est réellement propriétaire/agence, on lit le vrai rôle renvoyé par /auth/me. */
 const isLandlordOrAgency = computed(() => {
@@ -29,6 +52,8 @@ const savingCoordonnees = ref(false)
 const coordonneesError = ref('')
 const coordonneesSaved = ref(false)
 async function saveCoordonnees() {
+  coordonneesError.value = isLandlordOrAgency.value ? (validateIfu(ifu.value) ?? validateRccm(rccm.value) ?? '') : ''
+  if (coordonneesError.value) return false
   const payload: Record<string, unknown> = {}
   if (fullName.value.trim()) payload.full_name = fullName.value.trim()
   if (isLandlordOrAgency.value) {
@@ -46,9 +71,10 @@ async function saveCoordonnees() {
     ifu.value = ''
     rccm.value = ''
     coordonneesSaved.value = true
+    await loadSavedProfile()
     return true
   } catch (e) {
-    coordonneesError.value = e instanceof ApiRequestError ? (e.mapped.bannerMessage ?? "L'enregistrement a échoué.") : "L'enregistrement a échoué."
+    coordonneesError.value = e instanceof ApiRequestError ? errorText(e.mapped, "L'enregistrement a échoué.") : "L'enregistrement a échoué."
     return false
   } finally {
     savingCoordonnees.value = false
@@ -93,10 +119,15 @@ async function onIdCardSelected(e: Event) {
   idCardError.value = ''
   idCardUploading.value = true
   try {
-    await kyc.uploadIdCard(file)
+    const ready = await prepareUpload(file)
+    if (ready.error !== null) {
+      idCardError.value = ready.error
+      return
+    }
+    await kyc.uploadIdCard(ready.file)
     await loadIdCard()
   } catch (err) {
-    idCardError.value = err instanceof ApiRequestError ? (err.mapped.bannerMessage ?? "Le téléversement a échoué.") : "Le téléversement a échoué."
+    idCardError.value = err instanceof ApiRequestError ? errorText(err.mapped, "Le téléversement a échoué.") : "Le téléversement a échoué."
   } finally {
     idCardUploading.value = false
     input.value = ''
@@ -162,10 +193,15 @@ async function onFileSelected(e: Event) {
   uploadError.value = ''
   uploading.value = true
   try {
-    await kyc.upload(file, uploadType.value)
+    const ready = await prepareUpload(file)
+    if (ready.error !== null) {
+      uploadError.value = ready.error
+      return
+    }
+    await kyc.upload(ready.file, uploadType.value)
     await loadDocs()
   } catch (err) {
-    uploadError.value = err instanceof ApiRequestError ? (err.mapped.bannerMessage ?? 'Le téléversement a échoué.') : 'Le téléversement a échoué.'
+    uploadError.value = err instanceof ApiRequestError ? errorText(err.mapped, 'Le téléversement a échoué.') : 'Le téléversement a échoué.'
   } finally {
     uploading.value = false
     input.value = ''
@@ -180,7 +216,7 @@ async function deleteDoc(id: string) {
     await kyc.remove(id)
     docs.value = docs.value.filter(d => d.id !== id)
   } catch (err) {
-    uploadError.value = err instanceof ApiRequestError ? (err.mapped.bannerMessage ?? 'La suppression a échoué.') : 'La suppression a échoué.'
+    uploadError.value = err instanceof ApiRequestError ? errorText(err.mapped, 'La suppression a échoué.') : 'La suppression a échoué.'
   } finally {
     deletingId.value = null
   }
@@ -199,10 +235,27 @@ async function previewDoc(id: string) {
 }
 
 const doneOpen = ref(false)
+/** « Vérification envoyée » ne s'affiche plus tant qu'une pièce manque — avant, le bouton confirmait même un dossier vide. */
+const missingSteps = computed(() => {
+  const m: { label: string; tab: 'identite' | 'documents' }[] = []
+  if (idCardState.value === 'missing') m.push({ label: "votre pièce d'identité", tab: 'identite' })
+  if (docsState.value === 'empty') m.push({ label: 'au moins un justificatif', tab: 'documents' })
+  return m
+})
+const showMissing = ref(false)
 async function finishKyc() {
   const ok = await saveCoordonnees()
-  if (ok) doneOpen.value = true
+  if (!ok) return
+  showMissing.value = missingSteps.value.length > 0
+  if (!showMissing.value) doneOpen.value = true
 }
+
+/** Nom complet pré-rempli avec le nom du compte tant que le nom KYC n'a jamais été saisi. */
+watch(() => [auth.user.value, savedProfile.value] as const, ([u, p]) => {
+  if (!fullName.value && p && !p.full_name_masked && u) {
+    fullName.value = `${u.first_name ?? ''} ${u.last_name ?? ''}`.trim()
+  }
+}, { immediate: true })
 const SPACE_ROUTE: Record<UserRole, string> = {
   locataire: '/locataire',
   bailleur: '/pro',
@@ -268,8 +321,9 @@ function goSpace() {
 
         <label class="mt-3.5 flex w-full cursor-pointer items-center justify-center rounded-sm border border-[var(--border-default)] bg-white py-[11px] text-[13.5px] font-bold" :class="idCardUploading ? 'cursor-not-allowed opacity-60' : ''">
           {{ idCardUploading ? 'Envoi en cours…' : (idCardState === 'present' ? 'Reprendre la photo' : 'Déposer une photo') }}
-          <input type="file" accept="image/*,application/pdf" class="hidden" :disabled="idCardUploading" @change="onIdCardSelected">
+          <input type="file" :accept="UPLOAD_ACCEPT_ATTR" class="hidden" :disabled="idCardUploading" @change="onIdCardSelected">
         </label>
+        <p class="mb-0 mt-2 text-center text-[12px] text-[var(--text-faint)]">{{ UPLOAD_HINT }} — les photos trop lourdes sont réduites automatiquement.</p>
         <p v-if="idCardError" class="mb-0 mt-2.5 text-[13px] font-semibold text-danger-fg">{{ idCardError }}</p>
       </div>
     </template>
@@ -314,8 +368,8 @@ function goSpace() {
             class="flex h-[46px] flex-1 items-center justify-center rounded-md border-[1.5px] border-dashed text-[13.5px] font-semibold transition-colors"
             :class="uploading ? 'cursor-not-allowed border-[var(--border-default)] text-[var(--text-faint)]' : 'cursor-pointer border-[var(--border-default)] text-[var(--text-muted)] hover:border-green-600'"
           >
-            {{ uploading ? 'Envoi en cours…' : 'Déposer un fichier · PDF ou photo, 8 Mo max' }}
-            <input type="file" accept="application/pdf,image/*" class="hidden" :disabled="uploading" @change="onFileSelected">
+            {{ uploading ? 'Envoi en cours…' : `Déposer un fichier · ${UPLOAD_HINT}` }}
+            <input type="file" :accept="UPLOAD_ACCEPT_ATTR" class="hidden" :disabled="uploading" @change="onFileSelected">
           </label>
         </div>
         <p v-if="uploadError" class="mb-0 mt-2.5 text-[13px] font-semibold text-danger-fg">{{ uploadError }}</p>
@@ -330,30 +384,34 @@ function goSpace() {
         </p>
 
         <label class="mb-3.5 block">
-          <span class="mb-2 block text-[12.5px] font-bold">Nom complet</span>
+          <span class="mb-2 flex items-center justify-between text-[12.5px] font-bold">Nom légal (tel que sur votre pièce)<span v-if="savedProfile?.full_name_masked" class="font-semibold text-ok-fg">✓ Enregistré</span></span>
           <input v-model="fullName" placeholder="Ex. Koffi Dossou" class="h-[50px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-4 text-[15px] outline-none">
         </label>
 
         <template v-if="isLandlordOrAgency">
           <label class="mb-3.5 block">
-            <span class="mb-2 block text-[12.5px] font-bold">Raison sociale</span>
-            <input v-model="company" placeholder="Ex. Agence Immo Cotonou" class="h-[50px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-4 text-[15px] outline-none">
+            <span class="mb-2 flex items-center justify-between text-[12.5px] font-bold">Raison sociale<span v-if="savedProfile?.company_masked" class="font-semibold text-ok-fg">✓ Enregistrée</span></span>
+            <input v-model="company" :placeholder="savedProfile?.company_masked ? 'Déjà enregistrée — saisir pour remplacer' : 'Ex. Agence Immo Cotonou'" class="h-[50px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-4 text-[15px] outline-none">
           </label>
           <div class="mb-1 grid grid-cols-2 gap-3">
             <label class="block">
-              <span class="mb-2 block text-[12.5px] font-bold">IFU</span>
-              <input v-model="ifu" placeholder="13 chiffres" class="h-[50px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-4 text-[15px] outline-none">
+              <span class="mb-2 flex items-center justify-between text-[12.5px] font-bold">IFU<span v-if="savedProfile?.ifu_masked" class="font-semibold text-ok-fg">✓ Enregistré</span></span>
+              <input v-model="ifu" inputmode="numeric" maxlength="13" :placeholder="savedProfile?.ifu_masked ? 'Déjà enregistré' : '13 chiffres'" class="h-[50px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-4 text-[15px] outline-none">
             </label>
             <label class="block">
-              <span class="mb-2 block text-[12.5px] font-bold">RCCM</span>
-              <input v-model="rccm" placeholder="Ex. RB/COT/24 B 6789" class="h-[50px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-4 text-[15px] outline-none">
+              <span class="mb-2 flex items-center justify-between text-[12.5px] font-bold">RCCM<span v-if="savedProfile?.rccm_masked" class="font-semibold text-ok-fg">✓ Enregistré</span></span>
+              <input v-model="rccm" :placeholder="savedProfile?.rccm_masked ? 'Déjà enregistré' : 'Ex. RB/COT/25 A 1234'" class="h-[50px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-4 text-[15px] outline-none">
             </label>
           </div>
         </template>
 
         <p class="mb-0 mt-3.5 text-[12.5px] text-[var(--text-faint)]">Votre numéro Mobile Money est demandé directement au moment d'un retrait, pas ici.</p>
         <p v-if="coordonneesError" class="mb-0 mt-2.5 text-[13px] font-semibold text-danger-fg">{{ coordonneesError }}</p>
-        <p v-if="coordonneesSaved" class="mb-0 mt-2.5 text-[13px] font-semibold text-ok-fg">Enregistré.</p>
+        <p v-if="coordonneesSaved" class="mb-0 mt-2.5 text-[13px] font-semibold text-ok-fg">Coordonnées enregistrées ✓</p>
+        <div v-if="showMissing && missingSteps.length" class="mt-3 rounded-md border border-warn-border bg-warn-bg px-4 py-3 text-[13px] text-warn-fg">
+          <p class="m-0 font-bold">Pour terminer la vérification, il manque encore :</p>
+          <button v-for="m in missingSteps" :key="m.tab" type="button" class="mt-1.5 block text-left font-semibold underline" @click="kycTab = m.tab">→ {{ m.label }}</button>
+        </div>
         <CoreButton size="lg" full-width class="mt-4.5" :disabled="savingCoordonnees" @click="finishKyc">{{ savingCoordonnees ? 'Enregistrement…' : 'Enregistrer et terminer la vérification' }}</CoreButton>
       </div>
     </template>

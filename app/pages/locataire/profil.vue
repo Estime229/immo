@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { NotificationChannel, NotificationPreferences, ProfileMe } from '~/types/profile'
 import { ApiRequestError } from '~/utils/authenticatedFetcher'
+import { errorText } from '~/utils/apiErrors'
 
 definePageMeta({ layout: 'locataire' })
 
@@ -86,7 +87,7 @@ async function saveProfile() {
     profileSaved.value = true
     await loadProfile()
   } catch (e) {
-    profileSaveError.value = e instanceof ApiRequestError ? (e.mapped.bannerMessage ?? "L'enregistrement a échoué.") : "L'enregistrement a échoué."
+    profileSaveError.value = e instanceof ApiRequestError ? errorText(e.mapped, "L'enregistrement a échoué.") : "L'enregistrement a échoué."
   } finally {
     savingProfile.value = false
   }
@@ -132,7 +133,7 @@ async function submitPassword() {
     pwStep.value = 'done'
     if (currentUser.value) currentUser.value.has_password = true
   } catch (e) {
-    pwError.value = e instanceof ApiRequestError ? (e.mapped.bannerMessage ?? 'Une erreur est survenue.') : 'Une erreur est survenue.'
+    pwError.value = e instanceof ApiRequestError ? errorText(e.mapped, 'Une erreur est survenue.') : 'Une erreur est survenue.'
   } finally {
     pwLoading.value = false
   }
@@ -149,7 +150,7 @@ async function confirmDelete() {
     await authApi.logout()
     await navigateTo('/')
   } catch (e) {
-    deleteError.value = e instanceof ApiRequestError ? (e.mapped.bannerMessage ?? 'La suppression a échoué.') : 'La suppression a échoué.'
+    deleteError.value = e instanceof ApiRequestError ? errorText(e.mapped, 'La suppression a échoué.') : 'La suppression a échoué.'
     deleteStep.value = 'confirm'
   }
 }
@@ -204,6 +205,7 @@ async function toggleChannel(channel: NotificationChannel) {
     </div>
 
     <template v-if="tab === 'infos'">
+      <LayoutAccountNameForm class="mb-4.5" />
       <div class="grid grid-cols-1 gap-4.5 lg:grid-cols-2">
         <div class="rounded-2xl border border-[var(--border-subtle)] bg-white p-6">
           <div class="flex items-center gap-4">
@@ -223,7 +225,7 @@ async function toggleChannel(channel: NotificationChannel) {
               <span class="text-sm font-semibold">{{ currentUser?.email }}</span>
             </div>
             <div v-if="profile" class="flex items-center justify-between border-b border-sand-200 py-3.5">
-              <span class="text-[13.5px] text-[var(--text-faint)]">Nom complet</span>
+              <span class="text-[13.5px] text-[var(--text-faint)]">Nom légal (pièce d'identité)</span>
               <span class="text-sm font-semibold">{{ maskedStatus(profile.full_name_masked) }}</span>
             </div>
             <div v-if="profile" class="flex items-center justify-between py-3.5">
@@ -250,7 +252,7 @@ async function toggleChannel(channel: NotificationChannel) {
         <template v-else>
           <div class="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
             <div>
-              <label class="mb-1.5 block text-[12.5px] font-bold text-[var(--text-muted)]">Nom complet</label>
+              <label class="mb-1.5 block text-[12.5px] font-bold text-[var(--text-muted)]">Nom légal (pièce d'identité)</label>
               <input v-model="fullName" placeholder="Ex. Sèdjro Aholou" class="h-11 w-full rounded-sm border border-[var(--border-default)] bg-white px-3.5 text-[13.5px] outline-none">
             </div>
             <div>

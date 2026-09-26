@@ -2,6 +2,7 @@
 import type { ArtisanProfile } from '~/types/artisan'
 import type { RefEntry } from '~/types/reference'
 import { ApiRequestError } from '~/utils/authenticatedFetcher'
+import { errorText } from '~/utils/apiErrors'
 
 definePageMeta({ layout: 'artisan' })
 
@@ -62,7 +63,7 @@ async function save() {
     saved.value = true
     setTimeout(() => { saved.value = false }, 2500)
   } catch (e) {
-    saveError.value = e instanceof ApiRequestError ? (e.mapped.bannerMessage ?? "L'enregistrement a échoué.") : "L'enregistrement a échoué."
+    saveError.value = e instanceof ApiRequestError ? errorText(e.mapped, "L'enregistrement a échoué.") : "L'enregistrement a échoué."
   } finally {
     saving.value = false
   }
@@ -88,7 +89,7 @@ async function onFileSelected(e: Event) {
     await profileApi.addPortfolioMedia(uploaded.url)
     await load()
   } catch (err) {
-    portfolioError.value = err instanceof ApiRequestError ? (err.mapped.bannerMessage ?? "L'ajout a échoué.") : "L'ajout a échoué."
+    portfolioError.value = err instanceof ApiRequestError ? errorText(err.mapped, "L'ajout a échoué.") : "L'ajout a échoué."
   } finally {
     uploading.value = false
     if (fileInput.value) fileInput.value.value = ''
@@ -103,7 +104,7 @@ async function removePhoto(mediaId: string) {
     await profileApi.removePortfolioMedia(mediaId)
     await load()
   } catch (err) {
-    portfolioError.value = err instanceof ApiRequestError ? (err.mapped.bannerMessage ?? 'La suppression a échoué.') : 'La suppression a échoué.'
+    portfolioError.value = err instanceof ApiRequestError ? errorText(err.mapped, 'La suppression a échoué.') : 'La suppression a échoué.'
   } finally {
     removingId.value = null
   }
@@ -130,6 +131,7 @@ async function removePhoto(mediaId: string) {
     </FeedbackAlertBanner>
 
     <template v-else-if="tab === 'infos'">
+      <LayoutAccountNameForm class="mb-4.5 max-w-[680px]" />
       <div class="max-w-[680px] rounded-2xl border border-[var(--border-subtle)] bg-white p-6">
         <div class="mb-4.5 flex items-center gap-4">
           <CoreAvatar :name="displayName" :size="64" color="var(--color-green-700)" />
