@@ -3088,3 +3088,81 @@ Les totaux de `quoteStay` testés sont ceux renvoyés par l'API en live (80 000 
 **26/26 PASS** en production (et en local avant déploiement).
 
 Données de test : biens `Lot46 tarifs …` créés puis supprimés ; réservations de test annulées ; compte `qa-lot46-tenant-*@yopmail.com` (locataire, sans réservation active).
+
+---
+
+## Lot 47 — Demandes de logement : critères utiles aux propriétaires, vraies réponses, liens directs
+
+Demande : « parcourir et tester le flow Demandes dans les espaces et tout ce qui va avec, en consultant l'API : divergences, manques, écrans à ajouter pour fluidifier, incohérences, messages d'erreur ». Point de départ : le travail non commité de la session `im-99` (grille de cartes + modales de détail des deux côtés), qui l'a explicitement transmis comme terminé. Backend relu : module `housing-request` (contrôleur, DTO, 3 commandes, 3 requêtes). Rejoué en live avec le locataire `qa-lot46-tenant-*` et le propriétaire vérifié de test.
+
+### Comportement réel de l'API (vérifié en live)
+
+| Cas | Réponse |
+|---|---|
+| Création par un propriétaire | 403 « Accès réservé » |
+| Description vide / > 2000 caractères | 400 `description.isNotEmpty` / `maxLength` |
+| Budget min 90 000 > max 50 000, emménagement le 01/01/2025 | **201, accepté tel quel** |
+| `GET /open` | renvoie **tous** les critères (ville, quartier, type, ameublement, chambres, emménagement, date) — l'écran n'en affichait que 2 |
+| Filtres `GET /open` | seulement `city_id` et `desired_billing_frequency` (vérifiés) — or **1 seule** des 7 demandes ouvertes avait une ville, 2 une fréquence : le formulaire ne les demandait pas |
+| Proposer une unité **occupée** | **201, accepté** ; le locataire est notifié |
+| Même unité deux fois | 400 « Vous avez déjà proposé cette unité pour cette demande. » |
+| Demande inexistante / id non-UUID | 404 / **500** |
+| Réponses (`GET /:id/responses`) | unité (nom, prix, statut, bien) + prénom du propriétaire joints ; 403 clair pour un non-auteur |
+| Notification au locataire | « Un propriétaire a répondu à votre demande », `metadata.housing_request_id` |
+| Fermer deux fois / répondre à une demande fermée | 400 messages clairs |
+
+### Constats côté écrans
+
+| # | Espace | Constat |
+|---|---|---|
+| E1 | Locataire | Formulaire sans ville ni « au mois / à la nuit » — les deux seuls filtres des propriétaires ; ni quartier, type, ameublement. Budget inversé et date passée non contrôlés. |
+| E2 | Locataire | Chaque réponse affichée « Un propriétaire a proposé un logement » : ni le logement, ni le prix, ni le propriétaire, alors que l'API les renvoie. Une erreur de chargement s'affichait « Aucune réponse ». |
+| E3 | Locataire | Fermeture définitive (aucune réouverture côté API) sans confirmation. |
+| E4 | Locataire | Notification « Un propriétaire a répondu » non cliquable ; tableau de bord « N réponses » menant à la liste, pas à la demande. |
+| E5 | Pro | 30 demandes au plus, sans pagination ni filtres (l'API filtre ville et fréquence). Critères renvoyés par l'API non affichés. |
+| E6 | Pro | Logements occupés proposables ; aucune indication de prix ni d'adéquation au budget. |
+| E7 | Pro | « Unité proposée » oubliée au rechargement → nouvelle tentative → 400 ; pas d'accès à la conversation créée (et `/pro/messages` ignorait `?conversation=`). |
+| E8 | Pro (menu) | **Compteurs inventés** : « 1 » écrit en dur sur Demandes, Baux, Mandats, Signalements, Messages, pour tout compte. |
+
+### Ce qui a été livré
+
+| Fichier | Rôle |
+|---|---|
+| `app/utils/housingRequest.ts` | **Nouveau** — libellés de fréquence, `requestBudgetLabel`, `validateRequestForm` (min ≤ max, date future, entiers, 2000 car.), `budgetFit` (seulement pour une demande au mois : un budget/nuit ne se compare pas à un loyer), `notificationTarget`, `daysAgoLabel`, `AnsweredEntry` |
+| `app/components/tenant/HousingRequestModal.vue` | Réécrit : au mois / à la nuit / peu importe, ville, quartier, type, ameublement, budget (unité selon la fréquence), emménagement ≥ aujourd'hui, compteur 2000 ; erreurs précises |
+| `app/pages/locataire/demandes.vue` | Cartes avec critères (« À la nuit · Cotonou ») et date de fermeture ; `?request=` ouvre la demande (y compris si la page est déjà ouverte) |
+| `app/components/tenant/HousingRequestDetailModal.vue` | Critères complets ; avertissement si ville/fréquence manquent ; chaque réponse : logement, prix, propriétaire, date, « Dans votre budget », « Actuellement occupé », message, « Voir le logement », « Répondre au propriétaire » ; erreur de chargement avec « Réessayer » ; fermeture confirmée |
+| `app/pages/pro/demandes.vue` | Filtres ville + au mois/à la nuit (API), « Voir plus » paginé, compteur, critères et ancienneté sur les cartes, « ✓ Déjà proposé » mémorisé |
+| `app/components/pro/HousingRequestDetailModal.vue` | Critères complets ; logements libres seulement (occupés comptés à part), prix et adéquation au budget ; « Ouvrir la conversation » après envoi ; proposer un autre logement ; doublon 400 → état récupéré |
+| `app/pages/pro/messages.vue` | Lien profond `?conversation=` (comme côté locataire) |
+| `app/components/layout/NotificationBell.vue` | Une notification liée à une demande l'ouvre directement |
+| `app/utils/tenantDashboard.ts` | Étape « N réponses reçues » → la demande concernée |
+| `app/composables/useProSpace.ts`, `app/layouts/pro.vue` | Compteurs inventés supprimés ; badge « Demandes » = vrai nombre de demandes ouvertes |
+| `app/types/tenant.ts`, `app/composables/useHousingRequestsApi.ts` | Formes réelles (critères, unité et propriétaire des réponses, métadonnées des notifications) ; filtre fréquence |
+| `BACKEND-ISSUES.md` | + points 33 à 39 |
+
+### Tests automatisés
+
+```
+Test Files  20 passed (20)
+     Tests  154 passed (154)   [+9 : tests/housingRequest.test.ts, lien du tableau de bord]
+```
+
+### Vérification de bout en bout (Playwright, production im-hazel.vercel.app → API de production)
+
+| Id | Scénario | Résultat |
+|---|---|---|
+| X1 | Carte locataire « Au mois · Cotonou » | PASS |
+| X2 | Budget inversé et date passée refusés avant envoi ; demande « à la nuit, Cotonou » enregistrée avec ses critères | PASS |
+| X3 | Réponse détaillée : « Studio libre », 70 000 F, « Proposé par Test L. », message ; liens logement + conversation | PASS |
+| X4 | Fermeture confirmée ; carte « Fermée le … » | PASS |
+| Y1 | Badge « Demandes 7 » = total API ; plus aucun « 1 » inventé | PASS |
+| Y2 | Filtre « À la nuit » : la nouvelle demande seule | PASS |
+| Y3 | Critères complets ; logement occupé exclu ; pas de comparaison budget/nuit ; proposition envoyée avec message ; « Ouvrir la conversation » → la bonne conversation | PASS |
+| Y4-Y5 | « Déjà proposé » conservé au rechargement ; doublon depuis un autre appareil → message clair et état récupéré | PASS |
+| Z1 | Clic sur la notification → la demande s'ouvre | PASS |
+| Z0 | Zéro erreur JS | PASS |
+
+**21/21 PASS** en production (et en local avant déploiement).
+
+Données de test : demandes `Lot47 …` fermées, bien `Lot47 demandes …` supprimé.

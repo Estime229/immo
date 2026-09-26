@@ -44,6 +44,13 @@ Mis à jour le 26/09/2026. Statut : **ouvert** sauf mention contraire.
 | 30 | 🟡 | Pas d'endpoint de devis pour une réservation | bookings | 46 |
 | 31 | 🟡 | Tarif à 0 F ou décimal accepté ; message 409 avec le code brut | `POST/PATCH /units/:id/pricing` | 46 |
 | 32 | 🟡 | Tarifs réservés au propriétaire, pas à l'équipe | `UnitPricingService.assertOwner` | 46 |
+| 33 | 🟠 | Un logement occupé peut être proposé à une demande | `POST /housing-requests/:id/respond` | 47 |
+| 34 | 🟠 | Un propriétaire ne peut pas savoir à quelles demandes il a répondu | `GET /housing-requests/open` | 47 |
+| 35 | 🟠 | Les critères d'une demande ne sont pas filtrables (sauf ville et fréquence) | `GET /housing-requests/open` | 47 |
+| 36 | 🟡 | Cycle de vie d'une demande trop limité (ni modification, ni réouverture, ni suite donnée à une proposition) | `housing-requests` | 47 |
+| 37 | 🟡 | Budget min > max et date d'emménagement passée acceptés | `POST /housing-requests` | 47 |
+| 38 | 🟡 | Identifiant non-UUID → erreur 500 | `/housing-requests/:id/*` | 47 |
+| 39 | 🟡 | Aucun propriétaire n'est prévenu d'une nouvelle demande qui correspond à ses biens | notifications | 47 |
 
 ---
 
@@ -245,4 +252,56 @@ L'API renvoie une 400 explicite : l'annulation avec remboursement partiel n'est 
 ### 32. 🟡 Tarifs réservés au propriétaire, pas à l'équipe
 
 `UnitPricingService.assertOwner` compare uniquement `owner_id`. Un membre d'équipe autorisé (`team:units:edit`), qui peut pourtant bloquer des dates, ne peut pas gérer les tarifs.
+
+---
+
+## Ajouts du Lot 47 — Demandes de logement
+
+### 33. 🟠 Un logement occupé peut être proposé à une demande
+
+- `respond-to-housing-request.command.handler.ts` vérifie que la demande est ouverte et que l'unité appartient au répondant, **jamais son statut**.
+- **Rejoué** : unité `occupied` proposée → 201, le locataire est notifié pour un logement indisponible.
+- **Attendu** : 400 si l'unité est `occupied` (ou suspendue).
+- Le frontend ne propose plus les logements occupés.
+
+### 34. 🟠 Un propriétaire ne peut pas savoir à quelles demandes il a répondu
+
+- Aucune route « mes réponses », et `GET /open` ne dit pas si l'appelant a déjà répondu.
+- **Conséquences** : le propriétaire repropose, puis reçoit un 400 « déjà proposé » ; il ne retrouve pas ses propositions.
+- **Contournement frontend** : mémorisation sur l'appareil, et récupération de l'état à partir du 400.
+- **Attendu** : `GET /housing-requests/responses/mine` (demande, unité, conversation), ou un champ `my_response_unit_ids` dans `/open` quand l'appelant est authentifié.
+
+### 35. 🟠 Les critères d'une demande ne sont pas filtrables (sauf ville et fréquence)
+
+- Le Swagger de `POST /housing-requests` indique que les critères structurés « servent uniquement à filtrer GET /open côté pro ».
+- Or `GET /open` ne filtre que `city_id` et `desired_billing_frequency`.
+- **Non filtrables** : budget, quartier, type, chambres, ameublement, équipements.
+- **Constat au passage** : sur les 7 demandes ouvertes en production, **1 seule** avait une ville et 2 une fréquence. Le formulaire locataire ne les demandait pas ; corrigé côté frontend au Lot 47.
+- **Attendu** : filtres `neighborhood_id`, `max_budget` / `min_budget`, `unit_type_reference_id`, `min_bedrooms`, `desired_furnished_level` ; idéalement un filtre « compatible avec mes biens ».
+
+### 36. 🟡 Cycle de vie d'une demande trop limité
+
+- **Statuts** : seulement `open` / `closed`.
+- **Pas d'actions pour** :
+  - modifier une demande ;
+  - la rouvrir ;
+  - la supprimer ;
+  - indiquer pourquoi elle est fermée : trouvé via Immo, trouvé ailleurs, abandon (utile pour mesurer la plateforme) ;
+  - accepter ou décliner une proposition, pour que le propriétaire sache que sa proposition est écartée.
+- Une demande ouverte n'expire jamais : un locataire qui a trouvé ailleurs laisse une demande fantôme dans la liste des propriétaires.
+- **Attendu** : `PATCH /housing-requests/:id`, un motif de fermeture, une expiration automatique (par exemple 60 jours) et un statut par réponse (`pending` / `declined`).
+
+### 37. 🟡 Validations manquantes à la création
+
+- `budget_min: 90000, budget_max: 50000` → 201.
+- `move_in_date: "2025-01-01"` → 201.
+- Le frontend bloque désormais les deux cas ; l'API devrait aussi.
+
+### 38. 🟡 Identifiant non-UUID → erreur 500
+
+`POST /housing-requests/abc/respond` → **500** « Une erreur inattendue s'est produite ». Attendu : 400 ou 404, avec `ParseUUIDPipe` sur `:id` comme ailleurs dans l'API.
+
+### 39. 🟡 Aucun propriétaire n'est prévenu d'une nouvelle demande
+
+La place de marché repose entièrement sur des propriétaires qui viennent consulter la liste. Attendu : notifier les propriétaires dont un logement libre correspond (ville, fréquence, budget) quand une demande est publiée.
 
