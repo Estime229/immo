@@ -42,7 +42,7 @@ function close() {
         <template v-if="step === 'form'">
           <h3 class="m-0 font-display text-lg font-bold tracking-[-.02em]">Prolonger mon séjour</h3>
           <p class="mb-0 mt-2 text-[13px] leading-[1.6] text-[var(--text-muted)]">
-            {{ booking.unit.name }}, actuellement jusqu'au {{ new Date(booking.check_out).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' }) }}.
+            {{ booking.unit?.name ?? 'Logement' }}, actuellement jusqu'au {{ new Date(booking.check_out).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' }) }}.
             Une nouvelle réservation est créée pour la période ajoutée, à payer séparément — votre séjour d'origine n'est pas modifié.
           </p>
           <label class="mb-1.5 mt-4.5 block text-[13px] font-bold text-[var(--text-muted)]">Nouvelle date de départ</label>

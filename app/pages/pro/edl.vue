@@ -36,9 +36,9 @@ async function load() {
     const leaseCandidates = leases.filter((l: LeaseSummary) => ['signed', 'active', 'terminated'].includes(l.status))
     await Promise.all(leaseCandidates.map(async l => {
       const invs = await inventoriesApi.fetchByLease(l.id).catch(() => [])
-      out.push({ key: `${l.id}-entry`, title: `Entrée — ${l.unit.name}`, meta: `Bail · ${tenantName(l.tenant)}`, leaseId: l.id, type: 'entry', inventory: invs.find(i => i.type === 'entry') ?? null })
+      out.push({ key: `${l.id}-entry`, title: `Entrée — ${l.unit?.name ?? 'logement supprimé'}`, meta: `Bail · ${tenantName(l.tenant)}`, leaseId: l.id, type: 'entry', inventory: invs.find(i => i.type === 'entry') ?? null })
       if (l.status === 'terminated') {
-        out.push({ key: `${l.id}-exit`, title: `Sortie — ${l.unit.name}`, meta: `Bail clos · ${tenantName(l.tenant)}`, leaseId: l.id, type: 'exit', inventory: invs.find(i => i.type === 'exit') ?? null })
+        out.push({ key: `${l.id}-exit`, title: `Sortie — ${l.unit?.name ?? 'logement supprimé'}`, meta: `Bail clos · ${tenantName(l.tenant)}`, leaseId: l.id, type: 'exit', inventory: invs.find(i => i.type === 'exit') ?? null })
       }
     }))
 

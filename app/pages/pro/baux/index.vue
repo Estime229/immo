@@ -76,7 +76,7 @@ function terminateLease() {
               <p class="m-0 text-base font-bold tracking-[-.015em]">{{ tenantName(l) }}</p>
               <CoreBadge :tone="STATUS_TONE[l.status]">{{ STATUS_LABEL[l.status] }}</CoreBadge>
             </div>
-            <p class="mb-0 mt-1.5 text-[13.5px] text-[var(--text-muted)]">{{ l.unit.name }} · {{ fmtFcfa(l.signed_rent) }} · {{ fmtDate(l.start_date) }}{{ l.end_date ? ` → ${fmtDate(l.end_date)}` : '' }}</p>
+            <p class="mb-0 mt-1.5 text-[13.5px] text-[var(--text-muted)]">{{ l.unit?.name ?? 'Logement supprimé' }} · {{ fmtFcfa(l.signed_rent) }} · {{ fmtDate(l.start_date) }}{{ l.end_date ? ` → ${fmtDate(l.end_date)}` : '' }}</p>
           </div>
           <div class="flex flex-none flex-col gap-2">
             <button v-if="l.status === 'draft'" type="button" class="whitespace-nowrap rounded-sm bg-[image:var(--action-primary)] px-4 py-2.5 text-[12.5px] font-bold text-white" :disabled="busyId === l.id" @click="sendLease(l)">Envoyer pour signature</button>

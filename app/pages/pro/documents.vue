@@ -31,12 +31,12 @@ async function load() {
     const leases = await leasesApi.fetchMine()
     for (const l of leases) {
       if (l.status === 'draft' || l.status === 'pending_signature') continue
-      out.push({ key: `lease-${l.id}`, name: `Contrat de bail — ${l.unit.name}`, type: 'bail', typeLabel: 'Bail', pdfUrl: `/leases/${l.id}/pdf`, htmlUrl: `/leases/${l.id}/pdf` })
+      out.push({ key: `lease-${l.id}`, name: `Contrat de bail — ${l.unit?.name ?? 'logement supprimé'}`, type: 'bail', typeLabel: 'Bail', pdfUrl: `/leases/${l.id}/pdf`, htmlUrl: `/leases/${l.id}/pdf` })
 
       const invs = await inventoriesApi.fetchByLease(l.id).catch(() => [])
       for (const inv of invs) {
         if (inv.status !== 'signed') continue
-        out.push({ key: `inv-${inv.id}`, name: `État des lieux ${inv.type === 'exit' ? 'de sortie' : "d'entrée"} — ${l.unit.name}`, type: 'edl', typeLabel: 'État des lieux', pdfUrl: `/pdf/inventories/${inv.id}` })
+        out.push({ key: `inv-${inv.id}`, name: `État des lieux ${inv.type === 'exit' ? 'de sortie' : "d'entrée"} — ${l.unit?.name ?? 'logement supprimé'}`, type: 'edl', typeLabel: 'État des lieux', pdfUrl: `/pdf/inventories/${inv.id}` })
       }
     }
 

@@ -55,7 +55,7 @@ function close() {
       <div class="w-[440px] max-w-[calc(100vw-3rem)] animate-[im-rise_.28s_var(--ease-standard)_both] rounded-2xl bg-[var(--surface-page)] p-6.5" @click.stop>
         <template v-if="step === 'form'">
           <h3 class="m-0 font-display text-lg font-bold tracking-[-.02em]">Payer ma réservation</h3>
-          <p class="mb-0 mt-2 text-[13px] text-[var(--text-muted)]">{{ booking.unit.name }} · {{ booking.nights }} nuit{{ booking.nights > 1 ? 's' : '' }}</p>
+          <p class="mb-0 mt-2 text-[13px] text-[var(--text-muted)]">{{ booking.unit?.name ?? 'Logement' }} · {{ booking.nights }} nuit{{ booking.nights > 1 ? 's' : '' }}</p>
 
           <div class="mt-4.5 flex gap-2">
             <input

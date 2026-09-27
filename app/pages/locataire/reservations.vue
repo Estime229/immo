@@ -117,7 +117,7 @@ async function downloadReceipt(b: BookingSummary) {
         <div class="h-[110px] w-full flex-none rounded-md bg-cover bg-center sm:h-[110px] sm:w-[140px]" :style="{ backgroundImage: TENANT_PHOTOS[0] }" />
         <div class="min-w-0 flex-1">
           <div class="flex items-center gap-2.5">
-            <p class="m-0 text-[16px] font-bold tracking-[-.015em]">{{ r.booking.unit.name }}</p>
+            <p class="m-0 text-[16px] font-bold tracking-[-.015em]">{{ r.booking.unit?.name ?? 'Logement retiré de la plateforme' }}</p>
             <CoreBadge :tone="r.statusTone">{{ r.statusLabel }}</CoreBadge>
           </div>
           <p class="mb-0 mt-1.5 text-[13.5px] text-[var(--text-muted)]">
