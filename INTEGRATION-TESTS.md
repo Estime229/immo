@@ -3630,3 +3630,7 @@ Test Files  25 passed (25)
 | E2 | Locataire : « 1 élément noté en moins bon état qu'à l'entrée », « À l'entrée : Bon état », remarque, photo | PASS |
 | E3-E4 | Le propriétaire modifie par l'API pendant la relecture → signature bloquée, nouveau contenu affiché, signature tracée gardée ; relu puis signé | PASS |
 | Z | Zéro erreur JS | PASS |
+
+En **production** (im-hazel.vercel.app, déploiement `im-dkgr9lezt`), le scénario A1 à Z a été rejoué sur des données neuves : **15/15 PASS**. Il couvre notamment la photo conservée après réenregistrement (C2) et la signature bloquée quand le contenu est modifié pendant la relecture (E3).
+
+Données de test : sur le bien « Lot50 baux … » du propriétaire `qa-landlord-1790282977@example.com`, les logements « T2 EDL … » portent chacun un bail signé et non payé, avec un état des lieux d'entrée et un état des lieux de sortie signés. Chaque réenregistrement d'état des lieux avec photo a dupliqué le fichier sur le stockage : c'est le coût du contournement de #71.
