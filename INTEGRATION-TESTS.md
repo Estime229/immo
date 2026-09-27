@@ -3248,3 +3248,79 @@ Test Files  21 passed (21)
 **20/20 PASS** en production. Après suppression du bien de test : « Mes visites » (13 visites) et « Visites » (14) s'affichent avec « Logement retiré de la plateforme », zéro erreur JS ; les 2 réservations orphelines d'un locataire de test s'affichent de nouveau.
 
 Données de test : bien `Lot48 visites …` supprimé (ses visites restent, orphelines, côté API — BACKEND-ISSUES #46).
+
+---
+
+## Lot 49 — Réservations courte durée : réserver et payer d'un trait, phases réelles, montants côté hôte
+
+Demande : « parcourir et tester le flow Réservations avec les espaces et tout ce qui va avec, en consultant l'API : divergences, manques, écrans à ajouter, incohérences, messages d'erreur ». Backend relu : `booking.controller.ts`, `create-booking`, `cancel-booking`, `extend-booking`, `pay-booking.handler.ts` (module wallet), `booking-cron.service.ts`, `booking-retention-cron.service.ts`, `calculate-booking-price.helper.ts`. Rejoué en live : hôte = propriétaire vérifié `qa-landlord-1790282977@example.com` (logement à la nuit, retenue 20 %, état des lieux exigé, séjour 2 à 30 nuits, code promo −10 %) ; voyageurs = propriétaire de test (tirelire alimentée), locataire vérifié sans solde, locataire non vérifié.
+
+### Comportement réel de l'API (vérifié en live)
+
+| Cas | Réponse |
+|---|---|
+| Locataire **non vérifié** réserve | **201** (aucune vérification, contrairement aux visites) |
+| L'hôte réserve son propre logement | **201** |
+| Date passée · 0 nuit · 1 nuit (min 2) · logement sans tarif à la nuit | 400, messages clairs |
+| Payer avec une tirelire vide | 400 « Solde insuffisant. Votre tirelire contient 0 XOF, le séjour coûte 30000 XOF. » |
+| Deux holds sur les mêmes dates | les deux acceptés ; le second à payer → 409 « réservé par quelqu'un d'autre » et annulé |
+| Code promo inconnu / du bien | 400 « Code promo introuvable pour ce logement. » / aperçu −3 000 |
+| Paiement avec code (3 nuits, −10 %, retenue 20 %) | 27 000 débités de la tirelire ; hôte : 21 600 crédités, 5 400 retenus |
+| Annuler une réservation payée | 400 « …contactez le propriétaire directement » (aucune route côté hôte) |
+| Prolonger d'1 nuit (min 2) | **400 « Séjour minimum : 2 nuit(s). »** — minimum appliqué au segment seul |
+| Prolonger de 7 nuits | nouveau hold de 50 000 (tarif semaine sur le segment) |
+| Reçu | 202 → PDF généré en tâche de fond |
+| `GET /bookings/landlord` | logement, nuits, réduction, retenue, voyageur — l'écran n'en montrait que 4 champs |
+| Recharge MTN directe d'un compte sans téléphone | checkout accepté, puis transaction introuvable, rien crédité |
+
+### Constats côté écrans
+
+| # | Espace | Constat |
+|---|---|---|
+| H1 | Annonce | **Aucun sélecteur de logement** : un bien à plusieurs logements ne montrait que le premier, les autres étaient inaccessibles. |
+| H2 | Annonce | Après « Réserver » : « Vous avez 15 minutes pour la payer » + renvoi vers « Mes réservations » — étape inutile sous compte à rebours. |
+| H3 | Paiement | Solde de la tirelire inconnu avant de payer ; solde insuffisant découvert au clic (message brut) sans moyen de recharger ; compte à rebours absent ; retenue et état des lieux non expliqués ; un paiement refusé fermait la fenêtre comme un succès. |
+| H4 | Locataire | Séjour terminé toujours « Confirmée », « Prolonger » proposé sur des séjours finis ; même photo décorative pour tout ; ni lien vers l'annonce, ni contact de l'hôte, ni explication pour annuler un séjour payé ; état vide « la recherche courte durée arrive dans un prochain lot » (elle existe depuis le Lot 42). |
+| H5 | Prolongation | Date minimale = date de départ (0 nuit) ; aucun prix estimé ; après création, retour obligé à la liste pour payer. |
+| H6 | Hôte | Logement jamais affiché ; séjours payés mêlés aux holds de 15 min et aux holds expirés (« Annulée » en rouge), triés par date de création ; aucun montant perçu/retenu ; pas de rappel d'état des lieux alors que la retenue en dépend ; erreurs des codes promo avalées. |
+| H7 | Vérification | Bandeau et page `/kyc` : « vous ne pouvez pas réserver » — faux, l'API l'accepte. |
+
+### Ce qui a été livré
+
+| Fichier | Rôle |
+|---|---|
+| `app/utils/bookings.ts` | **Nouveau** — `bookingPhase` (à payer / délai dépassé / confirmée / en cours / terminée / annulée), `canExtend`, `minExtensionCheckOut` (séjour minimum sur le segment), `hostAmounts` (payé, perçu, retenu, libéré) |
+| `app/pages/biens/[id].vue` | Sélecteur de logement (`?unit=`) ; paiement ouvert aussitôt la réservation créée ; retour propre si les dates sont prises ou le délai dépassé |
+| `app/components/tenant/BookingPayModal.vue` | Compte à rebours, solde de la tirelire, manque signalé avant le clic + « Recharger ma tirelire », code promo « Appliquer », retenue/état des lieux expliqués, sorties « Choisir d'autres dates / Réserver à nouveau », événements `paid` et `changed` distincts |
+| `app/components/tenant/BookingExtendModal.vue` | Date minimale conforme au séjour minimum, estimation (même règle que l'API), « Payer maintenant » |
+| `app/pages/locataire/reservations.vue` | Onglets À payer / À venir / Terminées / Annulées ; montant payé et réduction ; retenue ; « Prolongation » ; « Voir l'annonce » ; « Écrire à l'hôte » ; « Annuler ce séjour ? » expliqué ; annulation d'un hold confirmée ; lien profond `?booking=` |
+| `app/pages/pro/reservations.vue` | Onglets À venir / Paiement en cours / Terminées / Annulées-expirées ; logement, voyageur, nuits ; payé / réduction / reçu / retenu (versé ou non) ; rappel d'état des lieux ; « Écrire au voyageur » ; erreurs des codes promo affichées |
+| `app/utils/housingRequest.ts` | Notifications `metadata.bookingId` → la réservation dans l'espace courant |
+| `app/utils/kycStatus.ts`, `app/pages/kyc.vue` | Réserver n'est plus présenté comme bloqué sans vérification |
+| `app/types/tenant.ts`, `app/types/landlordBookings.ts` | Formes réelles des deux listes |
+
+### Tests automatisés
+
+```
+Test Files  22 passed (22)
+     Tests  173 passed (173)   [+8 : tests/bookings.test.ts, notification de réservation]
+```
+
+Les montants de `hostAmounts` testés sont ceux du paiement réel (27 000 → 21 600 perçus, 5 400 retenus).
+
+### Vérification de bout en bout (Playwright → API de production)
+
+| Id | Scénario | Résultat |
+|---|---|---|
+| A0 | Bien à 2 logements : sélecteur, bascule sur le logement à la nuit, `?unit=` | PASS |
+| A1-A3 | Paiement ouvert directement ; tirelire vide → « Il vous manque 20 000 FCFA », Payer bloqué ; retenue et état des lieux expliqués | PASS |
+| B1-B4 | Code inconnu → message clair ; code −10 % → « Payer 18 000 FCFA » ; tirelire débitée de 18 000 ; annonce « Séjour confirmé ✓ » | PASS (build local → API de production) |
+| C1-C2 | « À venir » : 18 000 dont −2 000, 3 600 retenus « après l'état des lieux » ; annulation d'un séjour payé expliquée | PASS |
+| C3-C6 | Prolonger : date minimale départ + 2 nuits, estimation 20 000, « Payer maintenant » ouvre le paiement du segment, segment non payé annulé après confirmation | PASS |
+| D1-D5 | Hôte : logement, voyageur, nuits ; payé 18 000 / reçu 14 400 / retenu 3 600 ; rappel d'état des lieux ; hold « Paiement en cours » expliqué ; annulés/expirés regroupés | PASS |
+| Z1 | Notification « Réservation confirmée » → la réservation, mise en évidence | PASS |
+| Z0 | Zéro erreur JS | PASS |
+
+En **production** (im-hazel.vercel.app) : A0-A3, C1-C6, D1-D5, Z1, Z0 rejoués — **19/19 PASS** (le paiement B1-B4 n'a pas été répété pour ne pas débiter une seconde fois le compte de test partagé).
+
+Données de test : bien `Lot49 nuitées …` du propriétaire `qa-landlord-1790282977@example.com` conservé (il porte une réservation payée) ; code promo `LOT49…` actif sur ce bien ; tirelire du propriétaire de test passée de 75 000 à 30 000 F (deux séjours payés).

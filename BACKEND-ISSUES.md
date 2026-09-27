@@ -58,6 +58,13 @@ Mis à jour le 26/09/2026. Statut : **ouvert** sauf mention contraire.
 | 44 | 🟡 | Un propriétaire peut demander à visiter son propre logement ; statut du logement ignoré | `POST /visits` | 48 |
 | 45 | 🟡 | Incohérences diverses du module visites | `visit` | 48 |
 | 46 | 🟠 | Supprimer un bien laisse ses visites et réservations orphelines (`unit: null`) | `DELETE /property/:id` | 48 |
+| 47 | 🟠 | Réserver un séjour n'exige pas d'identité vérifiée (une visite, si) | `POST /bookings` | 49 |
+| 48 | 🟠 | Un hôte peut réserver et se payer son propre logement | `POST /bookings`, `POST /bookings/:id/pay` | 49 |
+| 49 | 🟠 | Recharge Mobile Money directe impossible pour un compte sans téléphone | `POST /payment/checkout` (GSM_*) | 49 |
+| 50 | 🟠 | Portefeuille incohérent : tirelire supérieure au solde total | `GET /wallet/me` | 49 |
+| 51 | 🟡 | Séjour minimum appliqué au seul segment de prolongation | `POST /bookings/:id/extend` | 49 |
+| 52 | 🟡 | Trois statuts seulement : séjour terminé et hold expiré indiscernables | `bookings` | 49 |
+| 53 | 🟡 | Message « Solde insuffisant » brut | `POST /bookings/:id/pay` | 49 |
 
 ---
 
@@ -211,7 +218,10 @@ Aucun endpoint ne permet à un artisan de bloquer des jours dans son planning. L
 
 ### 25. Annulation d'une réservation courte durée confirmée
 
-L'API renvoie une 400 explicite : l'annulation avec remboursement partiel n'est pas développée.
+- L'API renvoie une 400 explicite : l'annulation avec remboursement partiel n'est pas développée.
+- **Revérifié au Lot 49** : « …contactez le propriétaire directement ». L'hôte ne peut pas annuler non plus : il n'existe aucune route hôte.
+- Un séjour payé ne peut donc être annulé par personne sur la plateforme.
+- Le frontend l'explique au voyageur et propose d'écrire à l'hôte.
 
 ### 26. Contexte d'équipe
 
@@ -371,4 +381,52 @@ La place de marché repose entièrement sur des propriétaires qui viennent cons
 - Le locataire n'est ni prévenu ni libéré : une visite confirmée reste « à venir » pour un logement qui n'existe plus.
 - **Côté frontend**, ces pages plantaient (`unit.name` sur `null`) ; elles sont désormais protégées (Lot 48).
 - **Attendu** : à la suppression d'un bien ou d'une unité, annuler et notifier les visites en attente ou confirmées ainsi que les réservations à venir. Refuser la suppression s'il existe un bail actif (voir #5).
+
+---
+
+## Ajouts du Lot 49 — Réservations courte durée
+
+### 47. 🟠 Réserver un séjour n'exige pas d'identité vérifiée
+
+- **Rejoué** : un locataire au `kyc_status: pending` crée une réservation (201), et pourrait la payer.
+- Or `POST /visits` exige une identité vérifiée (`VerifiedUserGuard`). Il est plus contraignant de visiter que de dormir sur place.
+- **À trancher** côté produit. Le frontend affiche désormais la règle réelle : réserver est possible, visiter non.
+
+### 48. 🟠 Un hôte peut réserver et se payer son propre logement
+
+- **Rejoué** : le propriétaire du logement crée un hold sur son propre logement (201). Rien ne l'empêche de le payer : son wallet serait débité puis crédité, et le calendrier bloqué.
+- **Attendu** : 403 si `tenant_id === landlord_id`, ou un vrai « blocage » passant par les disponibilités.
+
+### 49. 🟠 Recharge Mobile Money directe impossible pour un compte sans téléphone
+
+- `payment.service.createPayment` prend le numéro dans `user.phone_number`. Le corps de `POST /payment/checkout` n'accepte pas de numéro.
+- Les comptes créés depuis l'inscription par email n'ont pas de téléphone, et aucune route ne permet d'en enregistrer un (#14).
+- **Rejoué** : `checkout` GSM_MTN → `ussd_push` accepté. Puis `GET /payment/transactions/:id/status` → 404 « Transaction non trouvee », `verify-return` → `verified: false`. Rien n'est crédité.
+- **Attendu** : accepter `phone_number` dans `checkout` (avec le numéro saisi à l'écran), et corriger #14.
+
+### 50. 🟠 Portefeuille incohérent : tirelire supérieure au solde total
+
+- **Constaté** sur un compte propriétaire de test : `balance_total: 18000`, `balance_savings: 30000`. La tirelire, qui est une partie du solde, dépasse le total.
+- Au paiement d'une réservation, l'hôte est crédité sur `balance_total` seulement. La cause du dépassement reste à identifier dans l'historique des transactions de ce compte.
+- À examiner avec le parcours Wallet.
+
+### 51. 🟡 Séjour minimum appliqué au seul segment de prolongation
+
+- Prolonger d'**1 nuit** un séjour sur un logement à 2 nuits minimum → 400 « Séjour minimum : 2 nuit(s). », alors que le séjour total fait déjà plusieurs nuits.
+- Même logique pour les paliers de prix : une prolongation de 7 nuits est facturée au tarif semaine, calculé sur le segment seul.
+- **Attendu** : évaluer le minimum (et idéalement les paliers) sur la durée totale de la chaîne de réservations.
+
+### 52. 🟡 Trois statuts seulement pour une réservation
+
+- `pending_payment`, `confirmed`, `cancelled`.
+- **Séjour terminé** : il reste `confirmed` pour toujours.
+- **Hold non payé** : il devient `cancelled` comme une annulation volontaire, sans motif.
+- **Statut « en cours »** : il n'y en a pas.
+- Le frontend déduit ces phases des dates, mais les rapports, les notifications et le back-office ne peuvent pas les distinguer.
+- **Attendu** : `expired`, `completed` (ou `checked_out`), et éventuellement un motif d'annulation.
+
+### 53. 🟡 Message « Solde insuffisant » brut
+
+- « Solde insuffisant. Votre tirelire contient 0 XOF, le séjour coûte 30000 XOF. » : montants non formatés, code devise brut.
+- Le frontend affiche désormais le manque avant le clic, mais le message serveur reste visible dans les autres cas.
 
