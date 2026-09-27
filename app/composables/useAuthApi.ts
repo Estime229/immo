@@ -99,6 +99,11 @@ export function useAuthApi() {
     return api.get<RolesResult>('/auth/roles')
   }
 
+  /** Ajoute un rôle au compte (idempotent) sans changer le rôle actif — ex. devenir agent pour recevoir des mandats (Lot 53). */
+  async function addRole(role: UserRole) {
+    return api.post<RolesResult>('/user/roles', { role })
+  }
+
   async function switchRole(role: UserRole) {
     const res = await api.post<SwitchRoleResult>('/auth/switch-role', { role })
     setTokens({ accessToken: res.token, refreshToken: res.refresh_token })
@@ -132,6 +137,7 @@ export function useAuthApi() {
     logout,
     fetchMe,
     fetchRoles,
+    addRole,
     switchRole
   }
 }

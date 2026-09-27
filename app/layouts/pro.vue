@@ -32,9 +32,12 @@ const pageTitle = computed(() => PAGE_TITLES[currentKey.value] ?? '')
 const housingRequestsApi = useHousingRequestsApi()
 const visitsApi = useVisitsApi()
 const rentalApi = useRentalRequestsApi()
+const mandatesApi = useMandatesApi()
 const liveCounts = ref<Record<string, number>>({})
 onMounted(async () => {
-  const [open, visits, rental] = await Promise.allSettled([housingRequestsApi.fetchOpen({ limit: 1 }), visitsApi.fetchMine('landlord'), rentalApi.fetchMine('landlord')])
+  const [open, visits, rental, mandates] = await Promise.allSettled([housingRequestsApi.fetchOpen({ limit: 1 }), visitsApi.fetchMine('landlord'), rentalApi.fetchMine('landlord'), mandatesApi.mine()])
+  // Invitations de mandat en attente de ma réponse (403 si le compte n'a pas le rôle agent : pas de compteur).
+  if (mandates.status === 'fulfilled') liveCounts.value = { ...liveCounts.value, mandats: mandates.value.filter(m => m.status === 'pending').length }
   // Le propriétaire n'est pas notifié d'une nouvelle candidature (#66) : le compteur est son seul signal.
   if (rental.status === 'fulfilled') liveCounts.value = { ...liveCounts.value, candidatures: rental.value.filter(r => r.status === 'pending').length }
   // pas de compteur plutôt qu'un faux en cas d'échec
@@ -106,7 +109,6 @@ watch(() => route.path, () => { drawerOpen.value = false })
     </main>
 
     <ProRetraitModal />
-    <ProInviteModal />
     <ProQrModal />
     <ProFlashModal />
     <ProPromoModal />

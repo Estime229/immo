@@ -15,7 +15,7 @@ Mis à jour le 27/09/2026. Statut : **ouvert** sauf mention contraire.
 | 1 | 🔴 | Aucun email OTP envoyé en production | `POST /auth/request-otp` | 44 |
 | 2 | 🔴 | Code `000000` accepté en production | `POST /auth/verify-otp` | 44 |
 | 3 | 🔴 | Limite anti-spam OTP probablement commune à tous les utilisateurs | `request-otp`, `verify-otp` | 44 |
-| 4 | 🔴 | Invitation d'équipe toujours en erreur 500 | `POST /team/invite` | I2, 40 |
+| 4 | 🔴 | Invitation d'équipe en 500 après écriture ; jeton perdu, personne ne peut rejoindre (cause trouvée) | `POST /team/invite` | I2, 40, 53 |
 | 5 | 🔴 | Suppression d'un bien/logement occupé acceptée | `DELETE /property/:id`, `DELETE /property/:pid/units/:uid` | 45 |
 | 6 | 🟠 | Impossible de retirer une annonce de la recherche | `GET /property/search` | 45 |
 | 7 | 🟠 | Deux notions de « vérifié » qui divergent | `/auth/me`, `PATCH /profile/me`, `VerifiedUserGuard` | 43, 45 |
@@ -31,7 +31,7 @@ Mis à jour le 27/09/2026. Statut : **ouvert** sauf mention contraire.
 | 17 | 🟡 | Exemple Swagger du RCCM refusé par la validation | `PATCH /profile/me` | 44 |
 | 18 | 🟡 | Upload de photo sans compte vérifié, pas de suppression unitaire | `POST /property/upload-image`, `/property/media` | 45 |
 | 19 | 🟡 | Blocages de calendrier acceptés dans le passé, message de conflit inexact | `POST /units/:id/availability-blocks` | 45 |
-| 20 | 🟡 | `agent_id` librement choisi à la création d'un bien | `POST /property` | 45 |
+| 20 | ✅ | ~~`agent_id` librement choisi à la création d'un bien~~ — corrigé (revérifié Lot 53) | `POST /property` | 45, 53 |
 | 21 | 🟡 | Pas d'état « brouillon » pour un bien | `POST /property` | 45 |
 | 22 | 🟡 | Devise « EUR » dans une notification | notifications de paiement | 40 |
 | 23 | 🟡 | `instructions.fr` du mode `redirect` rédigé pour un développeur | `POST /payment/checkout` | 8 |
@@ -85,6 +85,10 @@ Mis à jour le 27/09/2026. Statut : **ouvert** sauf mention contraire.
 | 71 | 🟠 | Photos d'état des lieux effacées à chaque modification | `GET` / `PATCH /inventories/:id` | 52 |
 | 72 | 🟠 | Le PDF de l'état des lieux n'a ni photos ni comparaison avec l'entrée ; la sortie n'alimente rien | `GET /pdf/inventories/:id` | 52 |
 | 73 | 🟡 | État des lieux accepté sur une réservation annulée ; URL de photo relative → 500 | `POST /inventories`, relais photo | 52 |
+| 74 | 🔴 | Un utilisateur déjà inscrit, invité dans une équipe, ne peut jamais accepter | `POST /team/invite` (branche `in_app`) | 53 |
+| 75 | 🟠 | Invitations et membres : ni annulation, ni relance, ni départ volontaire | `/team` | 53 |
+| 76 | 🟠 | Un mandat ne donne aucun accès ; sa fin laisse l'agent désigné sur les biens | `/agent-mandates`, `PATCH /property/:id` | 53 |
+| 77 | 🟡 | Équipe et mandats : permissions non appliquées, identités manquantes, refus indiscernable | `/team`, `/agent-mandates` | 53 |
 
 ---
 
@@ -111,10 +115,15 @@ Mis à jour le 27/09/2026. Statut : **ouvert** sauf mention contraire.
 - **Impact** : en production réelle, quelques inscriptions simultanées bloqueraient tout le monde pendant une minute.
 - **Attendu** : journaliser `req.ip` pour confirmer, puis faire confiance à la chaîne complète (Vercel + Render) ou limiter par email plutôt que par IP.
 
-### 4. `POST /team/invite` renvoie toujours une 500
+### 4. `POST /team/invite` renvoie toujours une 500 — cause trouvée (Lot 53)
 
-- Quel que soit le corps envoyé (reproduit à plusieurs reprises, dernière fois le 24/09).
-- **Impact** : tout l'espace équipe/mandats des agences est inutilisable (le frontend affiche « fonctionnalité pas encore disponible »).
+- **Rejoué le 28/09** : la réponse est 500, mais **tout est écrit**.
+  - L'équipe est créée (avec `team_name`).
+  - L'invitation passe « pending » : pour une adresse sans compte, une `TeamInvitation` ; pour un compte existant, un `TeamMember` « pending ».
+- **Cause** : `InviteMemberHandler` attend l'envoi de l'e-mail (`await this.emailService.send`) **après** avoir enregistré. L'envoi échoue en production (aucun e-mail ne part, #1), l'exception remonte en 500. C'est la même cause que #11 (visites).
+- **Conséquence** : le **jeton** d'invitation n'existe que dans la réponse de succès. Il est donc perdu, et aucune route ne permet de le relire (`GET /team/my` ne le renvoie pas). Personne ne peut accepter une invitation envoyée à une nouvelle adresse.
+- **Attendu** : envoyer l'e-mail sans l'attendre, ou l'isoler dans un `try`. Renvoyer le jeton (ou le lien) au propriétaire, pour qu'il puisse le transmettre lui-même (WhatsApp, SMS). Prévoir aussi une route pour le relire.
+- Le frontend relit l'équipe après le 500 et affiche « Invitation enregistrée, mais pas transmise ». S'il reçoit un jour un 201 avec jeton, il affiche le lien à copier. La page `/invite/:token`, cible de l'e-mail, existe désormais.
 
 ### 5. Suppression d'un bien ou d'un logement occupé acceptée
 
@@ -216,9 +225,9 @@ L'exemple `RB/COT/2024/B/12345` (Swagger de `PATCH /profile/me`) est refusé par
 - Blocage dans le passé accepté (`2025-01-01 → 2025-01-03`).
 - En cas de chevauchement avec un blocage manuel, le message dit « chevauche un bail ou une réservation déjà confirmée ».
 
-### 20. `agent_id` libre à la création d'un bien
+### 20. ✅ `agent_id` libre à la création d'un bien — corrigé
 
-`CreatePropertyCommand` accepte `agent_id` depuis le corps : un propriétaire peut désigner n'importe quel utilisateur comme agent de son bien, sans mandat. Attendu : ignorer ce champ ou exiger un mandat valide.
+~~`CreatePropertyCommand` accepte `agent_id` depuis le corps.~~ **Revérifié le 28/09 (Lot 53)** : création et modification exigent désormais un mandat actif. Sans mandat, la réponse est 403 « Cet agent n'a pas de mandat actif avec ce propriétaire — invitez-le d'abord via /agent-mandates. »
 
 ### 21. Pas d'état « brouillon »
 
@@ -644,3 +653,65 @@ La place de marché repose entièrement sur des propriétaires qui viennent cons
 - **Bail résilié** : un état des lieux de sortie sur un bail résilié est accepté. C'est souhaitable, la sortie se fait souvent après.
 - **URL relative** : une photo enregistrée avec une URL relative (`/uploads/…`, format documenté par `POST /files` pour le stockage local) → le relais répond 500.
 - **Identifiant invalide** : un identifiant non UUID → « Validation failed (uuid is expected) » (message traduit côté front).
+
+---
+
+## Ajouts — Carte et position des biens
+
+### 74. 🟡 Impossible d'effacer la position GPS d'un bien ; aucune validation des coordonnées
+
+- **Effacement** : `PATCH /property/:id` avec `{ "gps_latitude": null, "gps_longitude": null }` → 500 (« Une erreur inattendue s'est produite »), et la position reste en place (rejoué le 2026-09-28 sur « QA Lease Test Property 3 »). Un propriétaire peut déplacer son bien, jamais retirer sa position. Le frontend ne propose donc « Retirer » qu'avant le premier enregistrement.
+- **Validation** : aucune borne sur les coordonnées. « Studio LAPERTA » (Parakou) est enregistré en `1.0012444, 2.0949334`, en plein golfe de Guinée. Le frontend écarte les points hors du Bénin et affiche la zone de la ville à la place.
+- **Swagger** : le corps documenté de `PATCH /property/:id` ne liste que `name`, `status` et `description`, alors que les coordonnées (et le reste des champs de création) sont bien acceptés.
+- **Attendu** : accepter `null` pour effacer ; refuser (400) une latitude/longitude hors de [-90, 90] / [-180, 180], idéalement hors du pays du bien ; documenter le corps complet du `PATCH`.
+
+---
+
+## Ajouts du Lot 53 — Équipe et mandats
+
+### 74. 🔴 Un utilisateur déjà inscrit, invité dans une équipe, ne peut jamais accepter
+
+- **Création** : pour une adresse qui a déjà un compte, `POST /team/invite` crée un `TeamMember` au statut `pending`. Il n'y a ni jeton ni `TeamInvitation`.
+- **E-mail** : il pointe vers `${frontendUrl}/teams`, une page qui n'existe pas.
+- **Aucune route pour accepter** :
+  - `POST /team/invitation/:token/accept` ne traite que les `TeamInvitation` par jeton ; le code le reconnaît en commentaire (« Peut-être une invitation in-app… »).
+  - `GET /team/memberships` ne liste que les membres `active`.
+- **Rejoué** : invité, le locataire de test n'a reçu aucune notification. Ses appartenances restent vides, et son adhésion reste `pending` indéfiniment.
+- **Attendu** :
+  - une route `POST /team/members/:id/accept` (et `…/decline`) ;
+  - une liste de mes invitations en attente ;
+  - une notification in-app avec `memberId`.
+
+### 75. 🟠 Invitations et membres : ni annulation, ni relance, ni départ
+
+- **Invitation par e-mail** : on ne peut ni l'annuler ni la renvoyer. Elle reste `pending` jusqu'à son expiration (7 jours).
+- **Membre** : il ne peut pas quitter une équipe de lui-même. `DELETE /team/members/:id` est réservé au propriétaire (403 « Seul le propriétaire de l'équipe peut révoquer un membre »).
+- **Retirer un membre deux fois** : la réponse est 200 à chaque fois, et le membre est de nouveau notifié.
+- **Membre jamais actif** : lui retirer l'accès envoie « Votre accès à cette équipe a été révoqué — vous ne pouvez plus accéder à ses biens ».
+- **Validation** : un e-mail invalide renvoie « Données invalides », sans préciser le champ. Le frontend contrôle désormais avant l'envoi.
+
+### 76. 🟠 Un mandat ne donne aucun accès
+
+- **Cycle de vie** : il fonctionne et notifie les deux parties à chaque étape (rejoué : invitation, acceptation, fin).
+- **Mais aucune route n'utilise ni le mandat ni `property.agent_id`** :
+  - les permissions passent uniquement par l'équipe (`hasPropertyAccess`) ;
+  - rejoué : l'agent désigné sur un bien (200) voit **0 bien** dans `GET /property/owner/me`, et `0 bail`.
+- **Fin du mandat** : l'agent reste désigné sur les biens (`agent_id` inchangé, rejoué).
+- **Refus** : l'agent qui refuse fait passer le mandat à `revoked`, comme une fin de mandat.
+- **Attendu** : décider ce qu'un mandat autorise (idéalement, lier mandat et équipe) ; retirer `agent_id` des biens à la fin du mandat ; distinguer `rejected`.
+- En attendant, le frontend le dit clairement aux deux parties et retire lui-même l'agent des biens à la fin du mandat.
+
+### 77. 🟡 Équipe et mandats : écarts divers
+
+- **Permissions non appliquées** : `GET /team/permissions` publie 16 permissions. Seules 5 sont réellement vérifiées :
+  - `team:leases:create`, `team:leases:sign` ;
+  - `team:units:edit`, `team:properties:edit` ;
+  - `team:requests:handle`.
+
+  Les autres, comme « voir les paiements » ou « répondre aux messages », ne débloquent rien.
+- **`TeamAccessGuard`** : écrit mais jamais branché sur une route.
+- **Contexte d'équipe** : `active_team_id` du JWT (`switch-context`, #26) n'est lu par aucun module.
+- **Membre d'équipe** : il n'a aucune liste des baux ou des logements de l'équipe. `/leases/my` ne les contient pas (#65) ; seule `/team/memberships` donne les noms des biens.
+- **Identité du mandant** : `GET /agent-mandates/mine` ne renvoie ni l'e-mail ni le téléphone du propriétaire. S'il n'a pas renseigné son nom, l'agent ne sait pas qui l'invite.
+- **Devenir agent** : l'application n'avait aucun moyen de s'inscrire comme agent. Le frontend ajoute « Je suis agent » (`POST /user/roles`).
+- **Route `GET /property/my`** : l'identifiant non UUID est interprété comme `:id` → 500 (même famille que #38).

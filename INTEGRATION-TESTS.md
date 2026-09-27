@@ -3634,3 +3634,90 @@ Test Files  25 passed (25)
 En **production** (im-hazel.vercel.app, déploiement `im-dkgr9lezt`), le scénario A1 à Z a été rejoué sur des données neuves : **15/15 PASS**. Il couvre notamment la photo conservée après réenregistrement (C2) et la signature bloquée quand le contenu est modifié pendant la relecture (E3).
 
 Données de test : sur le bien « Lot50 baux … » du propriétaire `qa-landlord-1790282977@example.com`, les logements « T2 EDL … » portent chacun un bail signé et non payé, avec un état des lieux d'entrée et un état des lieux de sortie signés. Chaque réenregistrement d'état des lieux avec photo a dupliqué le fichier sur le stockage : c'est le coût du contournement de #71.
+
+## Lot 53 — Équipe et Mandats : pages branchées sur l'API, invitation honnête, lien d'invitation, mandats réels
+
+Demande : « parcourir et tester le flow Équipe et Mandats avec les espaces et tout ce qui va avec, en consultant l'API : divergences, manques, écrans à ajouter, incohérences, messages d'erreur ».
+
+Backend relu :
+- `team.controller.ts`, `team-role-presets.controller.ts` ;
+- les handlers `invite-member`, `accept-invitation`, `update-member`, `revoke-member` ;
+- les requêtes `get-my-team`, `get-my-memberships` ;
+- `team-permissions.registry`, `has-property-access.helper`, `team-access.guard` ;
+- `agent-mandate.controller.ts` et ses handlers, `agent-assignment.service` ;
+- `auth-context.controller.ts` (`switch-context`), `POST /user/roles`.
+
+Rejoué en live :
+- **propriétaire** : `qa-landlord-1790282977@example.com` ;
+- **agent** : `qa-agent-1790550087@example.com`, compte neuf créé par OTP, rôle agent ajouté par `POST /user/roles` ;
+- **invité existant** : le locataire de test ;
+- **invités sans compte** : des adresses neuves.
+
+### Constat de départ
+
+Les deux pages étaient **entièrement factices** :
+- **Équipe** : quatre membres, un « poste » et ses droits écrits en dur, identiques pour tout compte. La fenêtre d'invitation disait « pas encore disponible ».
+- **Mandats** : trois mandats inventés. « Accepter », « Refuser » et « Assigner » affichaient un faux succès sans aucun appel à l'API.
+
+### Comportement réel de l'API (vérifié en live)
+
+| Cas | Réponse |
+|---|---|
+| Registre des permissions | 16 permissions, 4 postes prédéfinis (gestionnaire, commercial, comptable, observateur) |
+| Invitation : e-mail invalide · sans poste · bien d'un autre | 400 « Données invalides » · 400 « role_preset ou custom_preset_id requis » · 403 « Certains biens ne vous appartiennent pas » |
+| Invitation d'une **nouvelle adresse** | **500**, mais équipe créée et invitation « pending » enregistrée ; jeton perdu (#4) |
+| Invitation d'un **compte existant** | **500**, membre « pending » créé ; aucune notification, aucune route pour accepter (#74) |
+| Doublon · un locataire ou un agent invite | 400 « déjà une invitation en attente » · 403 « Seul un bailleur ou une agence peut inviter » |
+| Lien d'invitation inconnu | 404 « Invitation introuvable » |
+| Postes nommés : création · permission inconnue · nom en double · modification par un autre | 201 · 400 « Permissions invalides » · 400 « Un poste nommé "Gardien" existe déjà. » · 403 |
+| Modifier un membre · permission invalide · l'invité se modifie ou se retire | 200 · 400 · 403 · 403 |
+| Retirer un membre · deux fois | 200 + notification · 200 à nouveau |
+| Mandater : un non-agent · un inconnu · sans contact · un locataire mandate | 403 « n'a pas le rôle agent » · 404 · 400 · 403 « Accès réservé » |
+| Mandat · doublon | 201 `pending`, l'agent est notifié · 400 « déjà en attente ou actif » |
+| Désigner l'agent sur un bien avant acceptation · après | 403 « pas de mandat actif » · 200 (`agent_id`) |
+| Acceptation par l'agent · par le mandant | 200 `active`, le mandant est notifié · 403 |
+| L'agent désigné : ses biens · ses baux | **0** · **0** (le mandat ne donne aucun accès, #76) |
+| Fin du mandat (agent) | 200 `revoked` ; **l'agent reste désigné sur le bien** |
+| Création d'un bien avec `agent_id` sans mandat | 403 (#20 corrigé) |
+
+### Ce qui a été livré
+
+| Fichier | Rôle |
+|---|---|
+| `app/types/team.ts`, `app/composables/useTeamApi.ts`, `useMandatesApi.ts` | **Nouveaux** — formes réelles, toutes les routes équipe, postes, invitation et mandats |
+| `app/utils/team.ts` | **Nouveau**. Permissions réellement appliquées (`ENFORCED_PERMISSIONS`), regroupement par catégorie, libellés, `validateInvite` (e-mail, poste, permission, bien, doublons), `inviteOutcome` (ce qui a été écrit malgré le 500), lien d'invitation, échéance, noms avec repli, biens d'un agent |
+| `app/pages/pro/equipe.vue` | **Réécrite**. Carte de l'équipe (nom, compteurs). Membres et invitations réels : e-mail, poste, biens ; limites expliquées (lien non transmis, acceptation impossible pour un compte existant). « Modifier » (poste, permissions, biens) et « Retirer » avec confirmation. « Ce que vos membres peuvent vraiment faire ». Postes nommés : créer, modifier, supprimer. « Équipes dont vous êtes membre ». |
+| `app/components/pro/InviteModal.vue` | **Réécrite** — vrai formulaire (e-mail, nom d'équipe, poste prédéfini ou nommé, permissions pré-cochées et marquées « sans effet » si non appliquées, biens). Selon la réponse : lien à copier (201 avec jeton), invitation dans son espace (compte existant), ou « enregistrée, mais pas transmise » (500 après écriture). |
+| `app/pages/invite/[token].vue` | **Nouveau** — la page visée par l'e-mail d'invitation : détails publics, connexion avec retour, mauvais compte signalé, acceptation, invitation expirée ou inconnue |
+| `app/pages/pro/mandats.vue` | **Réécrite**. « Mes agents » : inviter par e-mail ou téléphone ; compte sans rôle agent expliqué. Désigner ou retirer un agent sur un bien. Mettre fin au mandat, ce qui retire aussi l'agent de ses biens. L'absence d'accès est dite clairement. « Mes mandants » : accepter, refuser, mettre fin. « Je suis agent » ajoute le rôle. `?mandate=`. |
+| `app/composables/useAuthApi.ts` | `addRole` (`POST /user/roles`) |
+| `app/layouts/pro.vue` | Compteur des invitations de mandat en attente ; fenêtre d'invitation retirée du layout (montée dans la page Équipe) |
+| `app/utils/housingRequest.ts` | Notifications `mandate_id` → le mandat, `memberId`/`teamId` → l'équipe |
+
+### Tests automatisés
+
+```
+Test Files  26 passed (26)
+     Tests  230 passed (230)   [+8 : tests/team.test.ts, notifications mandat et équipe — hors tests/geo.test.ts d'une autre session]
+```
+
+`vue-tsc` : aucune erreur dans les fichiers de ce lot (30 erreurs antérieures, inchangées).
+
+### Vérification de bout en bout (Playwright, build de production local → API de production)
+
+| Id | Scénario | Résultat |
+|---|---|---|
+| T1 | Vraie équipe : nom, invitations en attente, lien non transmis expliqué, droits réellement appliqués ; plus aucune donnée factice | PASS |
+| T2-T4 | E-mail invalide refusé ; « Comptable » pré-coche 5 permissions ; invitation → « enregistrée, mais pas transmise » (500 de l'API), puis visible dans la liste | PASS |
+| T5-T7 | Doublon signalé avant l'API ; compte existant : « aucun moyen d'accepter » expliqué dans la fenêtre et sur la ligne | PASS |
+| T8-T9 | Accès d'un membre modifié ; membre retiré (et prévenu) | PASS |
+| T10-T11 | Poste nommé créé puis supprimé | PASS |
+| I1 | `/invite/:token` : jeton inconnu → « Invitation introuvable » | PASS |
+| M0-M2 | Vraie liste ; compte sans rôle agent → explication ; agent invité → « En attente de réponse » | PASS |
+| M3-M5 | Agent : compteur « Mandats 1 », mandant sans nom → « Un propriétaire (nom non renseigné) », mandat accepté, absence d'accès expliquée | PASS |
+| M6-M7 | Agent désigné sur un bien (API `agent_id`) ; fin du mandat → agent retiré du bien (l'API l'y laissait) | PASS |
+| Z | Zéro erreur JS | PASS |
+
+Relevé et corrigé pendant les tests : un membre qui a un nom n'était affiché que par son nom. Son e-mail s'affiche désormais aussi, pour savoir qui a été invité.
+
+Non testable de bout en bout : l'**acceptation** d'une invitation d'équipe. L'API ne rend jamais le jeton (#4) et n'a pas de route pour un compte existant (#74). La page `/invite/:token` et le cas « 201 avec jeton » de la fenêtre sont prêts pour le jour où ce sera corrigé.

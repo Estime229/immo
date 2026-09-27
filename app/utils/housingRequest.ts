@@ -83,6 +83,9 @@ export function notificationTarget(n: { metadata?: Record<string, unknown> | nul
   if (typeof m.inventoryId === 'string') return `/${space}/edl?inventory=${m.inventoryId}`
   // Candidature retenue ou non (Lot 51) — pour un candidat écarté, l'id est celui de la candidature retenue : la page s'ouvre quand même.
   if (typeof m.requestId === 'string') return `/${space}/candidatures?request=${m.requestId}`
+  // Mandats (Lot 53, snake_case cette fois) et équipe (`memberId`/`teamId`) : espace pro seulement.
+  if (typeof m.mandate_id === 'string') return `/pro/mandats?mandate=${m.mandate_id}`
+  if (typeof m.memberId === 'string' || typeof m.teamId === 'string') return '/pro/equipe'
   return null
 }
 

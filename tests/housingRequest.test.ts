@@ -53,6 +53,10 @@ describe('notificationTarget', () => {
     expect(notificationTarget({ metadata: { bookingId: 'b-1', amount: '30000.00' } }, 'pro')).toBe('/pro/reservations?booking=b-1')
     expect(notificationTarget({ metadata: { bookingId: 'b-1' } })).toBe('/locataire/reservations?booking=b-1')
   })
+  it('mandat et équipe (métadonnées : mandate_id, memberId/teamId)', () => {
+    expect(notificationTarget({ metadata: { msgKey: 'mandate_invitation', mandate_id: 'md-1' } })).toBe('/pro/mandats?mandate=md-1')
+    expect(notificationTarget({ metadata: { memberId: 'm-1', teamId: 't-1' } })).toBe('/pro/equipe')
+  })
   it('candidature retenue ou non (métadonnée live : requestId)', () => {
     expect(notificationTarget({ metadata: { requestId: 'r-1' } })).toBe('/locataire/candidatures?request=r-1')
     expect(notificationTarget({ metadata: { requestId: 'r-1' } }, 'pro')).toBe('/pro/candidatures?request=r-1')
