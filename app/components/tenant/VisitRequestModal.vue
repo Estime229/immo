@@ -84,7 +84,7 @@ function close() {
               </select>
             </label>
           </div>
-          <p v-if="chosenLabel && !slotError" class="mb-0 mt-2 text-[12.5px] font-semibold capitalize text-green-800">{{ chosenLabel }}</p>
+          <p v-if="chosenLabel && !slotError" class="mb-0 mt-2 text-[12.5px] font-semibold text-green-800 first-letter:uppercase">{{ chosenLabel }}</p>
 
           <label class="mb-1.5 mt-3.5 flex items-baseline justify-between text-[12.5px] font-bold text-[var(--text-muted)]">Message au propriétaire (optionnel)<span class="font-normal text-[var(--text-faint)]">{{ note.length }} / 500</span></label>
           <textarea v-model="note" rows="2" maxlength="500" placeholder="Ex. Je peux aussi passer en fin de journée." class="w-full resize-y rounded-md border border-[var(--border-default)] bg-white p-3.5 text-sm outline-none" />
@@ -103,7 +103,7 @@ function close() {
           <div class="px-0.5 py-1 text-center">
             <div class="mx-auto grid h-15 w-15 animate-[im-pop_.5s_ease] place-items-center rounded-pill bg-green-600 text-[28px] text-white">✓</div>
             <p class="mb-0 mt-4.5 text-lg font-bold">Demande envoyée</p>
-            <p class="mx-auto mb-0 mt-2.5 max-w-[340px] text-sm leading-[1.6] text-[var(--text-muted)]">Visite demandée pour <strong class="capitalize">{{ chosenLabel }}</strong>. Le propriétaire a été prévenu ; vous serez notifié de sa réponse.</p>
+            <p class="mx-auto mb-0 mt-2.5 max-w-[340px] text-sm leading-[1.6] text-[var(--text-muted)]">Visite demandée pour <strong>{{ chosenLabel }}</strong>. Le propriétaire a été prévenu ; vous serez notifié de sa réponse.</p>
             <div class="mt-5 flex gap-2.5">
               <CoreButton tone="secondary" size="lg" full-width @click="close">Fermer</CoreButton>
               <NuxtLink to="/locataire/visites" class="flex w-full items-center justify-center rounded-md bg-[image:var(--action-primary)] px-4 text-[14px] font-bold text-white">Mes visites</NuxtLink>

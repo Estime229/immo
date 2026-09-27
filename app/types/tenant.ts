@@ -241,8 +241,8 @@ export interface VisitSummary {
   property_id?: string | null
   cancelled_by?: string | null
   created_at?: string
-  /** `property` est joint par `GET /visits` (vérifié en live, Lot 48). */
-  unit: { id: string; name: string; price: string; property_id?: string | null; property?: { id: string; name: string; address?: string | null } | null }
+  /** `property` est joint par `GET /visits` (vérifié en live, Lot 48). `null` si le logement a été supprimé depuis. */
+  unit: null | { id: string; name: string; price: string; property_id?: string | null; property?: { id: string; name: string; address?: string | null } | null }
   tenant?: { id: string; email: string; first_name: string | null; last_name: string | null }
   /** Présent seulement sur `GET /visits/:id`, jamais dans la liste. */
   landlord?: { id: string; email: string; first_name: string | null; last_name: string | null } | null

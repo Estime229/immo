@@ -183,9 +183,9 @@ async function contactTenant(v: VisitSummary) {
               <CoreBadge v-else-if="tab === 'upcoming'" tone="ok">Confirmée</CoreBadge>
               <CoreBadge v-else tone="neutral">Passée — à clôturer</CoreBadge>
             </div>
-            <p class="mb-0 mt-1 text-[13px] text-[var(--text-secondary)]">{{ v.unit.name }}<template v-if="v.unit.property?.name"> · {{ v.unit.property.name }}</template></p>
-            <p class="mb-0 mt-0.5 text-[13px] capitalize text-[var(--text-muted)]">{{ whenOf(visitDate(v)) }}</p>
-            <p v-if="visitMoved(v)" class="mb-0 mt-0.5 text-[12px] text-[var(--text-faint)]">Demandée pour le <span class="capitalize">{{ whenOf(v.requested_at) }}</span></p>
+            <p class="mb-0 mt-1 text-[13px] text-[var(--text-secondary)]">{{ v.unit?.name ?? 'Logement supprimé' }}<template v-if="v.unit?.property?.name"> · {{ v.unit.property.name }}</template></p>
+            <p class="mb-0 mt-0.5 text-[13px] text-[var(--text-muted)] first-letter:uppercase">{{ whenOf(visitDate(v)) }}</p>
+            <p v-if="visitMoved(v)" class="mb-0 mt-0.5 text-[12px] text-[var(--text-faint)]">Demandée pour le <span>{{ whenOf(v.requested_at) }}</span></p>
             <p v-if="v.note" class="mb-0 mt-1.5 line-clamp-4 text-[12.5px] italic text-[var(--text-secondary)] [overflow-wrap:anywhere]">« {{ v.note }} »</p>
             <p v-if="v.status === 'rejected' && v.rejection_reason" class="mb-0 mt-1 text-[12.5px] text-danger-fg [overflow-wrap:anywhere]">Motif : {{ v.rejection_reason }}</p>
           </div>

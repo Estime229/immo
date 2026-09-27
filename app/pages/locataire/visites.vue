@@ -133,11 +133,11 @@ async function contactOwner(v: VisitSummary) {
           </div>
           <div class="min-w-0 flex-1">
             <div class="flex flex-wrap items-center gap-2.5">
-              <p class="m-0 text-[15.5px] font-bold">{{ v.unit.name }}</p>
+              <p class="m-0 text-[15.5px] font-bold">{{ v.unit?.name ?? 'Logement retiré de la plateforme' }}</p>
               <CoreBadge :tone="statusOf(v).tone">{{ statusOf(v).label }}</CoreBadge>
             </div>
-            <p v-if="v.unit.property?.name" class="mb-0 mt-0.5 text-[12.5px] text-[var(--text-faint)]">{{ v.unit.property.name }}</p>
-            <p class="mb-0 mt-1.5 text-[13.5px] capitalize text-[var(--text-muted)]">{{ whenOf(visitDate(v)) }}</p>
+            <p v-if="v.unit?.property?.name" class="mb-0 mt-0.5 text-[12.5px] text-[var(--text-faint)]">{{ v.unit.property.name }}</p>
+            <p class="mb-0 mt-1.5 text-[13.5px] text-[var(--text-muted)] first-letter:uppercase">{{ whenOf(visitDate(v)) }}</p>
           </div>
           <div v-if="isUpcoming(v)" class="flex flex-none flex-wrap gap-2">
             <CoreButton v-if="v.landlord_id" size="sm" tone="secondary" :disabled="busyId === v.id" @click="contactOwner(v)">Écrire au propriétaire</CoreButton>
@@ -146,12 +146,12 @@ async function contactOwner(v: VisitSummary) {
         </div>
 
         <p v-if="visitMoved(v) && v.status === 'confirmed'" class="mb-0 mt-3 rounded-md bg-info-bg px-3.5 py-2 text-[12.5px] text-info-fg-deep">
-          Nouvel horaire fixé par le propriétaire — vous aviez demandé le <span class="capitalize">{{ whenOf(v.requested_at) }}</span>.
+          Nouvel horaire fixé par le propriétaire — vous aviez demandé le <span>{{ whenOf(v.requested_at) }}</span>.
         </p>
         <p v-if="v.status === 'rejected'" class="mb-0 mt-3 text-[12.5px] text-danger-fg [overflow-wrap:anywhere]">{{ v.rejection_reason ? `Motif : ${v.rejection_reason}` : 'Aucun motif précisé par le propriétaire.' }}</p>
         <p v-if="visitExpired(v)" class="mb-0 mt-3 text-[12.5px] text-[var(--text-muted)]">Le propriétaire n'a pas répondu avant la date. Vous pouvez redemander une visite depuis l'annonce.</p>
         <p v-if="v.note" class="mb-0 mt-2 line-clamp-4 text-[12.5px] text-[var(--text-secondary)] [overflow-wrap:anywhere]">Votre message : « {{ v.note }} »</p>
-        <NuxtLink v-if="v.unit.property_id ?? v.property_id" :to="`/biens/${v.unit.property_id ?? v.property_id}`" class="mt-2 inline-block text-[12.5px] font-bold text-green-700">Voir l'annonce →</NuxtLink>
+        <NuxtLink v-if="v.unit && (v.unit.property_id ?? v.property_id)" :to="`/biens/${v.unit.property_id ?? v.property_id}`" class="mt-2 inline-block text-[12.5px] font-bold text-green-700">Voir l'annonce →</NuxtLink>
 
         <div v-if="confirmCancelId === v.id" class="mt-3 flex flex-wrap items-center gap-2.5 rounded-md border border-warn-border bg-warn-bg px-3.5 py-2.5">
           <p class="m-0 flex-1 text-[13px] font-semibold text-warn-fg-deep">Annuler cette visite ? Le propriétaire sera prévenu.</p>
