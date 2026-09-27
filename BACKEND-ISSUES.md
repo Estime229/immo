@@ -2,7 +2,7 @@
 
 Relevés par l'équipe frontend en testant la plateforme contre l'API de production (`https://immo-b89b.onrender.com/v1/api`). Chaque point a été reproduit en direct (curl ou navigateur) et, quand c'était possible, confirmé dans le code de `back-end-api-immo-app`. Le détail de chaque constat se trouve dans `INTEGRATION-TESTS.md` (numéro de lot indiqué).
 
-Mis à jour le 26/09/2026. Statut : **ouvert** sauf mention contraire.
+Mis à jour le 27/09/2026. Statut : **ouvert** sauf mention contraire.
 
 **Légende de gravité** — 🔴 bloquant ou faille · 🟠 données incohérentes ou fonction manquante importante · 🟡 contrat d'API ou confort.
 
@@ -65,6 +65,18 @@ Mis à jour le 26/09/2026. Statut : **ouvert** sauf mention contraire.
 | 51 | 🟡 | Séjour minimum appliqué au seul segment de prolongation | `POST /bookings/:id/extend` | 49 |
 | 52 | 🟡 | Trois statuts seulement : séjour terminé et hold expiré indiscernables | `bookings` | 49 |
 | 53 | 🟡 | Message « Solde insuffisant » brut | `POST /bookings/:id/pay` | 49 |
+| 54 | 🔴 | Un locataire peut signer un bail brouillon jamais envoyé | `PATCH /leases/:id/sign` | 50 |
+| 55 | 🔴 | Re-signer un bail actif le fait repasser « signé » : plus facturé, plus résiliable | `PATCH /leases/:id/sign` | 50 |
+| 56 | 🔴 | État des lieux réécrit après la signature de l'autre partie | `PATCH /inventories/:id` | 50 |
+| 57 | 🟠 | Aucune restitution de la caution (ni de l'avance, ni du prépayé) | `terminate`, `cancel-unpaid` | 50 |
+| 58 | 🟠 | Un brouillon de bail bloque le calendrier et ne peut être ni supprimé ni annulé | `POST /leases`, `PATCH /leases/:id`, `cancel-unpaid` | 50 |
+| 59 | 🟠 | La fin de bail n'est jamais automatique ; la date de départ du préavis n'est pas renvoyée | facturation, `give-notice` | 50 |
+| 60 | 🟠 | Le locataire ne peut pas résilier (garde de rôle), contrairement à la documentation | `PATCH /leases/:id/terminate` | 50 |
+| 61 | 🟠 | Doublons d'état des lieux ; un brouillon vide suffit à libérer la retenue d'un séjour | `POST /inventories`, retenue des réservations | 50 |
+| 62 | 🟡 | Création de bail : date invalide → 500, fin avant début, logement d'un autre bien acceptés | `POST /leases` | 50 |
+| 63 | 🟡 | États des lieux : aucune validation, messages en anglais, PDF d'un séjour incomplet | `/inventories`, `GET /pdf/inventories/:id` | 50 |
+| 64 | 🟡 | `auto-debit` sans `enabled` enregistre `null` | `PATCH /leases/:id/auto-debit` | 50 |
+| 65 | 🟡 | Pas de `GET /leases/:id` ; `/leases/my` mêle les deux rôles | `GET /leases/my` | 50 |
 
 ---
 
@@ -429,4 +441,122 @@ La place de marché repose entièrement sur des propriétaires qui viennent cons
 
 - « Solde insuffisant. Votre tirelire contient 0 XOF, le séjour coûte 30000 XOF. » : montants non formatés, code devise brut.
 - Le frontend affiche désormais le manque avant le clic, mais le message serveur reste visible dans les autres cas.
+
+---
+
+## Ajouts du Lot 50 — Baux et états des lieux
+
+### 54. 🔴 Un locataire peut signer un bail brouillon jamais envoyé
+
+- `SignLeaseCommandHandler` ne refuse que les baux résiliés. Côté locataire, il passe le bail à `signed` quel que soit son statut.
+- **Rejoué** : un brouillon non envoyé, signé par le locataire → 200, `status: signed`, `signed_at_landlord: null`. Le bail est « signé des deux côtés » sans que le propriétaire l'ait signé ni envoyé. Le paiement d'entrée devient possible et active le bail.
+- **Attendu** : signature du locataire acceptée seulement si `status === pending_signature` (400 sinon) ; `SIGNED` seulement si `signed_at_landlord` est renseigné.
+
+### 55. 🔴 Re-signer un bail actif le fait repasser « signé »
+
+- Même cause que #54.
+- **Rejoué** : sur un bail `active` (entrée payée), le locataire appelle `PATCH /leases/:id/sign` → 200, `status: signed`.
+- Conséquences, toutes vérifiées :
+  - le bail n'est plus facturé (la facturation ne prend que les baux `active`) ;
+  - la résiliation est refusée (« Seul un bail actif peut être résilié ») ;
+  - l'annulation pour impayé est refusée (`entry_paid_at` est renseigné) ;
+  - le préavis est refusé.
+- Le bail est bloqué définitivement, et un locataire peut ainsi arrêter ses loyers.
+- **À corriger en base** : le bail de test `52cc38b3-49f5-4df9-8f17-6385e556562d` (propriétaire `qa-landlord-1790282977`) est dans cet état. Le frontend l'affiche « Statut incohérent » et ne propose plus la signature que pour un bail `pending_signature`.
+
+### 56. 🔴 État des lieux réécrit après la signature de l'autre partie
+
+- `update()` n'interdit la modification que d'un état des lieux `signed`. Tant que les deux signatures ne sont pas posées, chaque partie peut tout réécrire, **sans effacer la signature déjà posée**.
+- **Rejoué** :
+  1. le propriétaire signe ;
+  2. le locataire remplace « Murs : bon état » par « Murs : abîmé — réécrit par le locataire après la signature du propriétaire » (200) ;
+  3. le locataire signe → `signed`.
+- Le document final porte la signature du propriétaire sur un contenu qu'il n'a jamais vu. Le locataire peut aussi créer, modifier et envoyer un état des lieux.
+- **Attendu** : contenu figé dès la première signature (ou signatures effacées à chaque modification). Préciser qui rédige (le propriétaire seul, a priori).
+- Le frontend ne permet plus de modifier qu'un brouillon, ou un envoi que personne n'a signé, et jamais côté locataire.
+
+### 57. 🟠 Aucune restitution de la caution
+
+- Le paiement d'entrée débite la tirelire du locataire (caution + avance + prépayé) et place les fonds « en séquestre plateforme ». Aucun wallet n'est crédité.
+- Aucune route ni tâche ne restitue ces fonds : ni la résiliation, ni l'annulation pour impayé, ni l'état des lieux de sortie.
+- **Rejoué** : bail résilié, caution de 10 000 → tirelire du locataire inchangée, aucune transaction.
+- L'avance et le prépayé non consommés restent également bloqués.
+- **Attendu** : un circuit de restitution (retenues justifiées par l'état des lieux de sortie, délai, accord des deux parties ou arbitrage).
+- Le frontend promettait « restitués sous 7 jours » : il dit désormais que la restitution n'est pas encore gérée dans l'application.
+
+### 58. 🟠 Un brouillon de bail bloque le calendrier et ne peut être ni supprimé ni annulé
+
+- `POST /leases` bloque le calendrier du logement dès le brouillon, sans fin si le bail n'a pas de date de fin.
+- **Rejoué** : un brouillon créé par erreur → toute création de bail sur ce logement renvoie 409 « Ce logement n'est pas disponible sur la période demandée ».
+- **Aucune sortie possible pour un brouillon** :
+  - aucun `DELETE` ;
+  - `cancel-unpaid` exige `signed` ;
+  - `terminate` exige `active`.
+- `PATCH /leases/:id` change `start_date`, mais ne déplace ni le blocage du calendrier ni `next_billing_date` (rejoué : début au 01/10, première facturation restée au 30/09).
+- `cancel-unpaid` remet le logement `available` sans fermer son blocage de calendrier (pas d'appel à `closeBlock`, contrairement à `terminate`).
+- **Attendu** :
+  - bloquer le calendrier à l'envoi ou à la signature, pas au brouillon ;
+  - permettre de supprimer un brouillon ;
+  - répercuter les dates modifiées ;
+  - fermer le blocage à l'annulation.
+
+### 59. 🟠 La fin de bail n'est jamais automatique
+
+- **Facturation** : `LeaseBillingService` facture tout bail `active` dont `next_billing_date` est passée. Il ignore `end_date` et la date de départ d'un préavis.
+- **Clôture** : aucune tâche ne clôt le bail à l'une ou l'autre date. Le locataire parti continue d'être facturé jusqu'à ce que le propriétaire résilie.
+- **Réponse de `give-notice`** : `renewal_intent_date` est la **date du préavis**, pas celle du départ. Le départ (`+ notice_period` mois) ne figure que dans les métadonnées de la notification du propriétaire (`availableFrom`).
+- **Après résiliation** : `renewal_intent` reste `leave`.
+- **Attendu** :
+  - arrêter la facturation à la date de départ ou de fin ;
+  - clôturer le bail (ou le proposer au propriétaire) ;
+  - renvoyer `planned_departure_date`.
+
+### 60. 🟠 Le locataire ne peut pas résilier
+
+- `PATCH /leases/:id/terminate` porte `@Roles(ADMIN, LANDLORD, AGENT)`. Le code du handler et la documentation Swagger prévoient pourtant le locataire.
+- **Rejoué** : le locataire du bail → 403 « Accès réservé ».
+- La résiliation ne vérifie pas non plus l'état des lieux de sortie et ne traite pas la caution (#57).
+- **À trancher** : si le locataire ne doit passer que par le préavis, corriger la documentation. Sinon, ouvrir la route.
+
+### 61. 🟠 Doublons d'état des lieux ; retenue libérée par un brouillon vide
+
+- `POST /inventories` ne renvoie l'existant que s'il est **brouillon**.
+- **Rejoué** : un état des lieux d'entrée signé, puis `POST` du même type → un **second** « entrée » en brouillon. Le bail en a alors deux.
+- La libération de la retenue d'un séjour (`booking-retention-cron`) vérifie seulement qu'**un** état des lieux existe pour la réservation. Un brouillon vide, créé en un appel, suffit à débloquer l'argent de l'hôte.
+- **Attendu** :
+  - un seul état des lieux par type (renvoyer l'existant quel que soit son statut) ;
+  - exiger un état des lieux **signé** pour libérer la retenue.
+
+### 62. 🟡 Création de bail : validations manquantes
+
+- **Date invalide** : `startDate: "abc"` → 500.
+- **Dates incohérentes acceptées** : fin avant début, début dans le passé. Pour un début passé, les échéances passées seront facturées une par une, une par nuit de facturation.
+- **Logement d'un autre bien** : un logement qui n'appartient pas au bien indiqué est accepté (`unitId` d'un autre bien du même propriétaire).
+- **Locataire** :
+  - son rôle n'est pas vérifié ;
+  - un propriétaire peut créer un bail avec lui-même comme locataire.
+- **Montants** : loyer à 0 accepté.
+- **Préavis** : `noticePeriod` n'est pas accepté à la création, seulement en modification du brouillon.
+- Le frontend contrôle désormais tout cela avant l'envoi.
+
+### 63. 🟡 États des lieux : aucune validation, messages en anglais
+
+- **Aucune validation** : les DTO sont des interfaces TypeScript, non des classes `class-validator`, donc rien n'est contrôlé.
+  - `type: "foo"` → 201 ;
+  - `state` libre (`"n'importe quoi"` enregistré).
+  - Le PDF n'affiche que `new/good/fair/damaged/missing`. L'ancien état « issue » du frontend sortait sans libellé.
+- **Signature vide** : `PATCH /inventories/:id/sign` sans `signature` → 200 sans effet (déjà vu au Lot 28).
+- **Messages en anglais** : « At least one room required », « Not authorized », « Cannot modify a signed inventory », « Inventory must be pending signature ».
+- **PDF d'un séjour** : `GET /pdf/inventories/:id` lit le bien et le logement **via le bail seulement** ; pour une réservation, ils sortent « — ».
+
+### 64. 🟡 `auto-debit` sans `enabled` enregistre `null`
+
+- `PATCH /leases/:id/auto-debit` avec un corps vide → 200, `auto_debit_enabled: null`.
+- La route accepte aussi un bail non actif. **Attendu** : booléen obligatoire.
+
+### 65. 🟡 Pas de `GET /leases/:id` ; `/leases/my` mêle les deux rôles
+
+- La fiche d'un bail doit relire toute la liste. `/leases/my` renvoie indistinctement les baux où l'on est locataire et ceux où l'on est propriétaire, sans indicateur. Le frontend filtre par `tenant_id` / `landlord_id`.
+- Un membre d'équipe autorisé sur un bien (`team:leases:*`) ne voit pas ses baux dans `/leases/my`.
+- Le locataire voit les brouillons de son propriétaire avant leur envoi.
 

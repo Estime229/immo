@@ -201,6 +201,8 @@ async function contactTenant(v: VisitSummary) {
             </template>
             <CoreButton v-else-if="tab === 'to_close' && canComplete(v)" size="sm" :disabled="busyId === v.id" @click="complete(v)">Marquer réalisée</CoreButton>
             <CoreButton v-if="tab !== 'history'" size="sm" tone="ghost" :disabled="busyId === v.id" @click="contactTenant(v)">Écrire</CoreButton>
+            <!-- Suite naturelle d'une visite réussie (Lot 50) : le formulaire de bail arrive pré-rempli. -->
+            <NuxtLink v-if="v.status === 'completed' && v.tenant_id && v.unit" :to="`/pro/baux/nouveau?tenantId=${v.tenant_id}&unitId=${v.unit_id}`" class="inline-flex items-center rounded-sm border border-[var(--border-default)] bg-white px-3 py-1.5 text-[12.5px] font-bold">Proposer un bail</NuxtLink>
           </div>
         </div>
 

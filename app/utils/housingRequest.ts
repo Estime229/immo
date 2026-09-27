@@ -78,6 +78,9 @@ export function notificationTarget(n: { metadata?: Record<string, unknown> | nul
   if (typeof m.visitId === 'string') return `/${space}/visites?visit=${m.visitId}`
   // Réservation payée, récompense de parrainage… (Lot 49, `bookingId` en camelCase lui aussi).
   if (typeof m.bookingId === 'string') return `/${space}/reservations?booking=${m.bookingId}`
+  // Bail (envoi, signature, paiement d'entrée, préavis, résiliation) et état des lieux (Lot 50, camelCase aussi).
+  if (typeof m.leaseId === 'string') return space === 'pro' ? `/pro/baux/${m.leaseId}` : `/locataire/bail?lease=${m.leaseId}`
+  if (typeof m.inventoryId === 'string') return `/${space}/edl?inventory=${m.inventoryId}`
   return null
 }
 

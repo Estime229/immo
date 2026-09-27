@@ -1,3 +1,4 @@
+import { invoiceView } from './leases'
 import type { BookingSummary, HousingRequestSummary, LeaseInvoice, LeaseSummary, NotificationItem, SignalSummary, WaitlistEntry } from '../types/tenant'
 
 export interface LateLeaseInfo {
@@ -9,7 +10,8 @@ export interface LateLeaseInfo {
 export function findLateLeaseInvoice(leases: LeaseSummary[], now: Date = new Date()): LateLeaseInfo | null {
   for (const lease of leases) {
     for (const invoice of lease.invoices ?? []) {
-      if (invoice.status !== 'paid' && new Date(invoice.due_date) < now) {
+      // Échue et encore due — ni payée, ni annulée, ni remboursée (statuts réels, Lot 50).
+      if (invoiceView(invoice, now).payable && new Date(invoice.due_date) < now) {
         return { lease, invoice }
       }
     }
@@ -46,7 +48,7 @@ export function buildNextSteps(input: {
         label: `Signer votre bail — ${unitName}`,
         hint: lease.property?.name ?? '',
         cta: 'Signer',
-        to: '/locataire/bail'
+        to: `/locataire/bail?lease=${lease.id}`
       })
     } else if (lease.status === 'signed') {
       // La double signature ne rend pas le bail actif : seul le paiement d'entrée le fait (voir IL2).
@@ -55,7 +57,7 @@ export function buildNextSteps(input: {
         label: `Payer l'entrée dans les lieux — ${unitName}`,
         hint: lease.property?.name ?? '',
         cta: 'Payer',
-        to: '/locataire/bail'
+        to: `/locataire/bail?lease=${lease.id}`
       })
     }
   }
@@ -64,7 +66,7 @@ export function buildNextSteps(input: {
     if (booking.status === 'pending_payment') {
       steps.push({
         key: `booking-pay-${booking.id}`,
-        label: `Payer votre réservation — ${booking.unit.name}`,
+        label: `Payer votre réservation — ${booking.unit?.name ?? 'logement'}`,
         hint: `${booking.check_in} → ${booking.check_out}`,
         cta: 'Payer',
         to: '/locataire/reservations'

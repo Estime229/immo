@@ -53,6 +53,12 @@ describe('notificationTarget', () => {
     expect(notificationTarget({ metadata: { bookingId: 'b-1', amount: '30000.00' } }, 'pro')).toBe('/pro/reservations?booking=b-1')
     expect(notificationTarget({ metadata: { bookingId: 'b-1' } })).toBe('/locataire/reservations?booking=b-1')
   })
+  it('bail et état des lieux (métadonnées live : leaseId, inventoryId)', () => {
+    expect(notificationTarget({ metadata: { leaseId: 'l-1', amount: 10000 } }, 'pro')).toBe('/pro/baux/l-1')
+    expect(notificationTarget({ metadata: { leaseId: 'l-1' } })).toBe('/locataire/bail?lease=l-1')
+    expect(notificationTarget({ metadata: { inventoryId: 'i-1' } }, 'pro')).toBe('/pro/edl?inventory=i-1')
+    expect(notificationTarget({ metadata: { inventoryId: 'i-1' } })).toBe('/locataire/edl?inventory=i-1')
+  })
   it('visite : vers la page visites de l\'espace courant', () => {
     expect(notificationTarget({ metadata: { visitId: 'v-1' } }, 'pro')).toBe('/pro/visites?visit=v-1')
     expect(notificationTarget({ metadata: { visitId: 'v-1' } })).toBe('/locataire/visites?visit=v-1')

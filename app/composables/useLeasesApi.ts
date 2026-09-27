@@ -9,7 +9,8 @@ import type {
   LeaseSignResult,
   LeaseSummary,
   NoticeResult,
-  PrepaidBufferStatus
+  PrepaidBufferStatus,
+  UpdateLeaseDraftPayload
 } from '~/types/tenant'
 
 /**
@@ -81,8 +82,13 @@ export function useLeasesApi() {
   }
 
   /** Résilie un bail ACTIVE — locataire, propriétaire, ou membre d'équipe autorisé. */
-  async function terminate(id: string) {
-    return api.patch<LeaseActionResult>(`/leases/${id}/terminate`)
+  /** Rôles propriétaire/agent seulement (le locataire reçoit 403, #56). Le motif est transmis à l'autre partie dans la notification. */
+  async function terminate(id: string, reason?: string) {
+    return api.patch<LeaseActionResult>(`/leases/${id}/terminate`, reason ? { reason } : {})
+  }
+
+  async function updateDraft(id: string, payload: UpdateLeaseDraftPayload) {
+    return api.patch<LeaseSummary>(`/leases/${id}`, payload)
   }
 
   return {
@@ -99,6 +105,7 @@ export function useLeasesApi() {
     create,
     send,
     cancelUnpaid,
-    terminate
+    terminate,
+    updateDraft
   }
 }

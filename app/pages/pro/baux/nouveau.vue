@@ -3,6 +3,8 @@ import type { PropertySearchResult } from '~/types/property'
 import type { ConversationSummary } from '~/types/messaging'
 import type { LeaseBillingFrequency, LeaseContractType } from '~/types/tenant'
 import { ApiRequestError } from '~/utils/authenticatedFetcher'
+import { errorText } from '~/utils/apiErrors'
+import { depositExceedsCap, startDateWarning, validateLeaseForm } from '~/utils/leases'
 
 definePageMeta({ layout: 'pro' })
 
@@ -18,21 +20,30 @@ const messagingApi = useMessagingApi()
  * source réelle et déjà accessible au propriétaire : ses propres
  * conversations (chaque participant `tenant` y porte un vrai id).
  */
-const tenantCandidates = ref<{ id: string; name: string }[]>([])
+const tenantCandidates = ref<{ id: string; name: string; hint: string }[]>([])
+const visitsApi = useVisitsApi()
 onMounted(async () => {
-  try {
-    const conversations = await messagingApi.fetchConversations()
-    const seen = new Map<string, string>()
-    for (const c of conversations as ConversationSummary[]) {
+  const seen = new Map<string, { name: string; hint: string }>()
+  const [conversations, visits] = await Promise.allSettled([messagingApi.fetchConversations(), visitsApi.fetchMine('landlord')])
+  // Visites d'abord (réalisées ou confirmées) : c'est d'elles que naît un bail le plus souvent (Lot 50).
+  if (visits.status === 'fulfilled') {
+    for (const v of visits.value) {
+      if (!v.tenant || !['completed', 'confirmed'].includes(v.status) || seen.has(v.tenant.id)) continue
+      const name = `${v.tenant.first_name ?? ''} ${v.tenant.last_name ?? ''}`.trim() || v.tenant.email
+      seen.set(v.tenant.id, { name, hint: `a visité ${v.unit?.name ?? 'un logement'}` })
+    }
+  }
+  if (conversations.status === 'fulfilled') {
+    for (const c of conversations.value as ConversationSummary[]) {
       const tenant = c.participants.find(p => p.role === 'tenant')
       if (tenant && !seen.has(tenant.user_id)) {
-        seen.set(tenant.user_id, `${tenant.user.first_name ?? ''} ${tenant.user.last_name ?? ''}`.trim() || tenant.user.id)
+        seen.set(tenant.user_id, { name: `${tenant.user.first_name ?? ''} ${tenant.user.last_name ?? ''}`.trim() || 'Locataire', hint: 'conversation' })
       }
     }
-    tenantCandidates.value = [...seen].map(([id, name]) => ({ id, name }))
-  } catch {
-    tenantCandidates.value = []
   }
+  tenantCandidates.value = [...seen].map(([id, t]) => ({ id, ...t }))
+  // Lien « Proposer un bail » : locataire hors des listes → on montre le champ d'identifiant pré-rempli.
+  if (tenantId.value && !seen.has(tenantId.value)) showIdField.value = true
 })
 
 const myProperties = ref<PropertySearchResult[]>([])
@@ -55,6 +66,8 @@ const startDate = ref('')
 const endDate = ref('')
 const contractType = ref<LeaseContractType>('standard')
 const depositAck = ref(false)
+const noticePeriod = ref('3')
+const showIdField = ref(false)
 
 const selectedUnit = computed(() => myUnits.value.find(u => u.id === unitId.value) ?? null)
 
@@ -99,9 +112,11 @@ const depositMonths = computed(() => {
   const deposit = Number(depositAmount.value)
   return rent > 0 ? deposit / rent : 0
 })
-const depositExceeds = computed(() => billingFrequency.value === 'monthly' && depositMonths.value > 3)
+const depositExceeds = computed(() => depositExceedsCap(billingFrequency.value, Number(monthlyRent.value), Number(depositAmount.value)))
 
-const canSubmit = computed(() => !!(tenantId.value.trim() && unitId.value && depositAmount.value && startDate.value) && !(depositExceeds.value && !depositAck.value))
+const canSubmit = computed(() => !!(tenantId.value.trim() && unitId.value && startDate.value))
+const todayIso = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)
+const startWarning = computed(() => startDateWarning(startDate.value, todayIso))
 
 const loading = ref(false)
 const errorMessage = ref('')
@@ -109,25 +124,34 @@ const errorMessage = ref('')
 async function submit() {
   if (!canSubmit.value) return
   const unit = selectedUnit.value
-  if (!unit) return
+  errorMessage.value = validateLeaseForm({
+    tenantId: tenantId.value, unitId: unitId.value, rent: monthlyRent.value, deposit: depositAmount.value,
+    startDate: startDate.value, endDate: endDate.value, noticePeriod: noticePeriod.value
+  }) ?? (depositExceeds.value && !depositAck.value ? "Cochez l'accord des deux parties pour une caution au-delà de 3 mois de loyer." : '')
+  if (errorMessage.value || !unit) return
   loading.value = true
-  errorMessage.value = ''
   try {
-    await leasesApi.create({
+    const created = await leasesApi.create({
       tenantId: tenantId.value.trim(),
       propertyId: unit.propertyId,
       unitId: unit.id,
       billingFrequency: billingFrequency.value,
-      monthlyRent: monthlyRent.value ? Number(monthlyRent.value) : undefined,
+      monthlyRent: Number(monthlyRent.value),
       depositAmount: Number(depositAmount.value),
       startDate: startDate.value,
       endDate: endDate.value || undefined,
       contractType: contractType.value,
       depositAcknowledged: depositExceeds.value ? depositAck.value : undefined
     })
-    await navigateTo('/pro/baux')
+    // Le préavis n'est pas accepté à la création, seulement en modification du brouillon.
+    if (Number(noticePeriod.value) !== 3) await leasesApi.updateDraft(created.id, { noticePeriod: Number(noticePeriod.value) }).catch(() => undefined)
+    await navigateTo(`/pro/baux/${created.id}`)
   } catch (e) {
-    errorMessage.value = e instanceof ApiRequestError ? (e.mapped.bannerMessage ?? 'La création du bail a échoué.') : 'La création du bail a échoué.'
+    errorMessage.value = e instanceof ApiRequestError
+      ? (e.status === 409
+          ? 'Ce logement a déjà un bail sur cette période (un brouillon compte aussi). Choisissez un autre logement ou une autre date de début.'
+          : e.status === 404 ? "Ce locataire est introuvable : vérifiez l'identifiant." : errorText(e.mapped, 'La création du bail a échoué.'))
+      : 'La création du bail a échoué.'
   } finally {
     loading.value = false
   }
@@ -140,19 +164,19 @@ async function submit() {
       <h2 class="mb-1 mt-0 font-display text-[22px] font-bold tracking-[-.02em]">Créer un bail</h2>
       <p class="mb-5.5 mt-0 text-[13.5px] text-[var(--text-muted)]">Sélectionnez le locataire et l'unité, puis les conditions du bail.</p>
 
-      <p v-if="errorMessage" class="mb-3.5 text-[13px] font-semibold text-danger-fg">{{ errorMessage }}</p>
+      <p v-if="errorMessage" class="mb-3.5 rounded-md border border-danger-border bg-danger-bg px-3.5 py-2.5 text-[13px] font-semibold text-danger-fg">{{ errorMessage }}</p>
 
       <div class="flex flex-col gap-3.5">
         <div>
           <p class="mb-1.5 mt-0 text-[12.5px] font-bold">Locataire</p>
           <select v-if="tenantCandidates.length" v-model="tenantId" class="h-[46px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-3 text-sm text-sand-900">
-            <option value="" disabled>Choisir parmi vos conversations</option>
-            <option v-for="t in tenantCandidates" :key="t.id" :value="t.id">{{ t.name }}</option>
+            <option value="" disabled>Choisir parmi vos visites et conversations</option>
+            <option v-for="t in tenantCandidates" :key="t.id" :value="t.id">{{ t.name }} — {{ t.hint }}</option>
           </select>
-          <p v-else class="m-0 text-[12.5px] text-[var(--text-muted)]">Aucun locataire dans vos conversations pour l'instant — l'id du locataire peut être saisi directement ci-dessous.</p>
-          <input v-model="tenantId" placeholder="Ou coller directement l'id du locataire" class="mt-2 h-[42px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-3.5 font-mono text-[12.5px] outline-none">
+          <p v-else class="m-0 text-[12.5px] text-[var(--text-muted)]">Aucun locataire dans vos visites ni vos conversations pour l'instant. Le locataire doit avoir un compte Immo.</p>
+          <button v-if="!showIdField && tenantCandidates.length" type="button" class="mt-1.5 text-[12px] font-bold text-[var(--text-muted)] underline" @click="showIdField = true">Le locataire n'est pas dans la liste ?</button>
+          <input v-if="showIdField || !tenantCandidates.length" v-model="tenantId" placeholder="Identifiant du compte locataire" class="mt-2 h-[42px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-3.5 font-mono text-[12.5px] outline-none">
         </div>
-
         <div>
           <p class="mb-1.5 mt-0 text-[12.5px] font-bold">Unité</p>
           <select v-model="unitId" class="h-[46px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-3 text-sm text-sand-900">
@@ -201,10 +225,15 @@ async function submit() {
           </label>
         </div>
 
-        <div class="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+        <div class="grid grid-cols-1 gap-3.5 sm:grid-cols-3">
           <div><p class="mb-1.5 mt-0 text-[12.5px] font-bold">Date de début</p><input v-model="startDate" type="date" class="h-[46px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-3.5 text-sm outline-none"></div>
-          <div><p class="mb-1.5 mt-0 text-[12.5px] font-bold">Date de fin (optionnel)</p><input v-model="endDate" type="date" class="h-[46px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-3.5 text-sm outline-none"></div>
+          <div><p class="mb-1.5 mt-0 text-[12.5px] font-bold">Date de fin (facultatif)</p><input v-model="endDate" type="date" :min="startDate || undefined" class="h-[46px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-3.5 text-sm outline-none"></div>
+          <div><p class="mb-1.5 mt-0 text-[12.5px] font-bold">Préavis (mois)</p><input v-model="noticePeriod" inputmode="numeric" class="h-[46px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-3.5 text-sm outline-none"></div>
         </div>
+        <p v-if="startWarning" class="m-0 rounded-md border border-warn-border bg-warn-bg px-3.5 py-2.5 text-[12.5px] text-warn-fg">{{ startWarning }}</p>
+        <p class="m-0 text-[12px] leading-[1.5] text-[var(--text-faint)]">
+          Le bail est créé en brouillon : vous le relisez, puis vous l'envoyez (ce qui vaut votre signature). Dès sa création, le logement est bloqué dans votre calendrier sur cette période.
+        </p>
       </div>
 
       <div class="mt-6 flex justify-end">

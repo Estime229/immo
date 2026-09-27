@@ -1,12 +1,5 @@
 import type { CreateInventoryPayload, InventoryDetail, UpdateInventoryPayload } from '~/types/tenant'
 
-/** Libellés FR pour `InventoryRoomItem.state` — chaîne libre côté API (pas d'énumération publiée), ce référentiel n'est qu'une convention front. */
-export const INVENTORY_ITEM_STATES: { code: string; label: string }[] = [
-  { code: 'good', label: 'Bon état' },
-  { code: 'issue', label: 'À surveiller' },
-  { code: 'damaged', label: 'Endommagé' }
-]
-
 /**
  * Module états des lieux — voir Swagger `Inventory (Etat des lieux)`, jamais
  * câblé avant ce lot. Rattaché à un bail OU une réservation, jamais les deux

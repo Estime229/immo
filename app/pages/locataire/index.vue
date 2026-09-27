@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { LeaseStatus } from '~/types/tenant'
+import { leasePhase, LEASE_PHASE_TONE, TENANT_LEASE_PHASE_LABEL } from '~/utils/leases'
 import { buildActivityFeed, buildNextSteps, findLateLeaseInvoice } from '~/utils/tenantDashboard'
 
 definePageMeta({ layout: 'locataire' })
@@ -47,18 +47,11 @@ const dashAlert = computed(() => {
   return `Le loyer de ${info.lease.unit?.name ?? 'votre logement'} — ${formatFcfa(Number(info.invoice.amount))} — était dû le ${formatDate(info.invoice.due_date)}`
 })
 function payLateLease() {
-  navigateTo('/locataire/bail')
+  const info = lateInfo.value
+  navigateTo(info ? `/locataire/bail?lease=${info.lease.id}&pay=${info.invoice.id}` : '/locataire/bail')
 }
 
 /* ---- Mes logements ---- */
-const LEASE_STATUS_LABEL: Record<LeaseStatus, string> = {
-  draft: 'Brouillon',
-  pending_signature: 'En attente de signature',
-  signed: 'Paiement en attente',
-  active: 'Actif',
-  terminated: 'Résilié'
-}
-
 const leaseCards = computed(() => leasesBlock.leases.value.map((l, i) => {
   const late = lateInfo.value?.lease.id === l.id
   return {
@@ -66,13 +59,13 @@ const leaseCards = computed(() => leasesBlock.leases.value.map((l, i) => {
     title: [l.unit?.name, l.property?.name].filter(Boolean).join(' — ') || 'Logement',
     rentFmt: formatFcfaShort(Number(l.signed_rent)),
     photo: TENANT_PHOTOS[i % TENANT_PHOTOS.length],
-    statusLabel: late ? 'En retard' : LEASE_STATUS_LABEL[l.status],
-    tone: late ? 'danger' as const : l.status === 'active' ? 'ok' as const : 'neutral' as const
+    statusLabel: late ? 'En retard' : TENANT_LEASE_PHASE_LABEL[leasePhase(l)],
+    tone: late ? 'danger' as const : LEASE_PHASE_TONE[leasePhase(l)]
   }
 }))
 
-function openLease() {
-  navigateTo('/locataire/bail')
+function openLease(id: string) {
+  navigateTo(`/locataire/bail?lease=${id}`)
 }
 
 /* ---- Prochaines étapes (dérivées de baux + réservations + demandes + liste d'attente) ---- */
@@ -123,7 +116,7 @@ const activityLoading = computed(() => signalsBlock.state.value === 'loading' ||
             v-for="l in leaseCards"
             :key="l.id"
             class="flex cursor-pointer gap-3.5 rounded-lg border border-[var(--border-subtle)] p-3 transition-shadow hover:shadow-raised"
-            @click="openLease"
+            @click="openLease(l.id)"
           >
             <div class="h-[66px] w-[78px] flex-none rounded-md bg-cover bg-center" :style="{ backgroundImage: l.photo }" />
             <div class="min-w-0 flex-1">

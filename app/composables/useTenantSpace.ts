@@ -115,12 +115,15 @@ export function useReportModal() {
 export function usePaymentModal() {
   const open = useState('tenantPayOpen', () => false)
   const mode = useState<'loyer' | 'recharge'>('tenantPayMode', () => 'recharge')
-  function openPay(m: 'loyer' | 'recharge') {
+  /** Facture visée par « Payer » (Lot 50) — sans elle, la plus ancienne encore due. */
+  const invoiceId = useState<string | null>('tenantPayInvoiceId', () => null)
+  function openPay(m: 'loyer' | 'recharge', targetInvoiceId: string | null = null) {
     mode.value = m
+    invoiceId.value = targetInvoiceId
     open.value = true
   }
   function closePay() {
     open.value = false
   }
-  return { open, mode, openPay, closePay }
+  return { open, mode, invoiceId, openPay, closePay }
 }

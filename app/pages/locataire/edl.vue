@@ -1,61 +1,108 @@
 <script setup lang="ts">
-import type { InventoryDetail } from '~/types/tenant'
+import type { BookingSummary, InventoryDetail } from '~/types/tenant'
 import { ApiRequestError } from '~/utils/authenticatedFetcher'
+import { errorText } from '~/utils/apiErrors'
+import { bookingPhase } from '~/utils/bookings'
+import { awaitingMySignature, INVENTORY_STATUS_LABEL, INVENTORY_STATUS_TONE, INVENTORY_TYPE_LABEL, itemStateLabel, itemStateTone } from '~/utils/inventories'
 
 definePageMeta({ layout: 'locataire' })
 
-const { activeLease, state: leaseState, ensureLoaded } = useTenantLeases()
+const route = useRoute()
+const { activeLease, leases, state: leaseState, ensureLoaded, selectLease } = useTenantLeases()
 const inventoriesApi = useInventoriesApi()
+const bookingsApi = useBookingsApi()
+const doc = useOpenDocument()
 
-onMounted(ensureLoaded)
+interface Row { inv: InventoryDetail; context: string }
 
-const inventories = ref<InventoryDetail[]>([])
-const invState = ref<'idle' | 'loading' | 'error' | 'empty' | 'success'>('idle')
+const leaseRows = ref<Row[]>([])
+const bookingRows = ref<Row[]>([])
+const state = ref<'loading' | 'error' | 'ready'>('loading')
+const openId = ref<string | null>(typeof route.query.inventory === 'string' ? route.query.inventory : null)
 
-async function loadInventories() {
-  const id = activeLease.value?.id
-  if (!id) return
-  invState.value = 'loading'
+function shortDate(iso: string) {
+  return new Date(iso).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
+}
+
+async function loadLease() {
+  const l = activeLease.value
+  leaseRows.value = []
+  if (!l) return
+  const invs = await inventoriesApi.fetchByLease(l.id)
+  leaseRows.value = invs
+    .sort((a, b) => (a.type === b.type ? b.updated_at.localeCompare(a.updated_at) : a.type === 'entry' ? -1 : 1))
+    .map(inv => ({ inv, context: `Bail — ${l.unit?.name ?? 'logement'}` }))
+}
+
+/**
+ * Séjours courts : l'hôte prépare l'état des lieux d'arrivée et l'envoie ;
+ * jusqu'ici le voyageur n'avait aucun écran pour le lire ni le signer.
+ * Séjours confirmés en cours, à venir ou terminés depuis moins de 30 jours.
+ */
+async function loadBookings() {
+  const all = await bookingsApi.fetchMine().catch(() => [] as BookingSummary[])
+  const limit = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10)
+  const relevant = all.filter(b => b.status === 'confirmed' && (bookingPhase(b) !== 'past' || b.check_out.slice(0, 10) >= limit))
+  const rows = await Promise.all(relevant.map(async b => {
+    const invs = await inventoriesApi.fetchByBooking(b.id).catch(() => [] as InventoryDetail[])
+    return invs.map(inv => ({ inv, context: `Séjour du ${shortDate(b.check_in)} au ${shortDate(b.check_out)} — ${b.unit?.name ?? 'logement'}` }))
+  }))
+  bookingRows.value = rows.flat()
+}
+
+async function load() {
+  state.value = 'loading'
   try {
-    inventories.value = await inventoriesApi.fetchByLease(id)
-    invState.value = inventories.value.length ? 'success' : 'empty'
+    await Promise.all([loadLease(), loadBookings()])
+    state.value = 'ready'
+    // Lien direct (notification) : on déplie l'état des lieux visé.
+    if (!openId.value) openId.value = [...leaseRows.value, ...bookingRows.value].find(r => awaitingMySignature(r.inv, true))?.inv.id ?? null
   } catch {
-    invState.value = 'error'
+    state.value = 'error'
   }
 }
-watch(() => activeLease.value?.id, id => { if (id) loadInventories() }, { immediate: true })
 
-const TYPE_LABEL: Record<string, string> = { entry: "État des lieux d'entrée", exit: 'État des lieux de sortie' }
-const STATUS_LABEL: Record<string, string> = { draft: "En préparation par le propriétaire", pending_signature: 'En attente de signature', signed: 'Signé' }
-const STATUS_TONE: Record<string, 'ok' | 'warn' | 'neutral'> = { draft: 'neutral', pending_signature: 'warn', signed: 'ok' }
+onMounted(async () => {
+  await ensureLoaded()
+  const id = typeof route.query.lease === 'string' ? route.query.lease : null
+  if (id && leases.value.some(l => l.id === id)) selectLease(id)
+  load()
+})
+watch(() => activeLease.value?.id, (id, old) => { if (old && id !== old) load() })
 
-const openId = ref<string | null>(null)
+const rows = computed(() => [...leaseRows.value, ...bookingRows.value])
+
 function toggle(id: string) {
   openId.value = openId.value === id ? null : id
 }
 
-/**
- * Aucune capture de signature manuscrite n'existe dans ce projet (même
- * principe que `SignLeaseModal.vue`) : `signature` doit néanmoins être une
- * chaîne non vide pour que l'API enregistre réellement la signature — un
- * corps vide renvoie 200 sans rien enregistrer (vérifié en direct, Lot 28).
- */
-const SIGNATURE_PLACEHOLDER = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='
-const readyToSign = ref<Record<string, boolean>>({})
+/* ---- Signature (tracé réel, imprimé sur le PDF) ---- */
+const signatures = ref<Record<string, string>>({})
+const pads = ref<Record<string, { rememberIfAsked: () => Promise<void> } | null>>({})
 const signingId = ref<string | null>(null)
 const signError = ref('')
 async function sign(inv: InventoryDetail) {
-  if (!readyToSign.value[inv.id]) return
+  const signature = signatures.value[inv.id]
+  if (!signature) return
   signingId.value = inv.id
   signError.value = ''
   try {
-    const updated = await inventoriesApi.sign(inv.id, SIGNATURE_PLACEHOLDER)
-    inventories.value = inventories.value.map(i => (i.id === updated.id ? updated : i))
+    const updated = await inventoriesApi.sign(inv.id, signature)
+    for (const list of [leaseRows, bookingRows]) {
+      list.value = list.value.map(r => (r.inv.id === updated.id ? { ...r, inv: updated } : r))
+    }
+    await pads.value[inv.id]?.rememberIfAsked()
   } catch (e) {
-    signError.value = e instanceof ApiRequestError ? (e.mapped.bannerMessage ?? 'La signature a échoué.') : 'La signature a échoué.'
+    signError.value = e instanceof ApiRequestError ? errorText(e.mapped, 'La signature a échoué.') : 'La signature a échoué.'
   } finally {
     signingId.value = null
   }
+}
+
+const docError = ref('')
+async function openPdf(inv: InventoryDetail) {
+  const url = `/pdf/inventories/${inv.id}`
+  docError.value = (await doc.open(inv.id, url, url)) ?? ''
 }
 
 function formatDate(iso: string) {
@@ -65,68 +112,76 @@ function formatDate(iso: string) {
 
 <template>
   <div class="animate-[im-fade_.3s_ease_both]">
-    <div v-if="leaseState === 'loading' || invState === 'loading'" class="flex flex-col gap-3">
+    <div v-if="leaseState === 'loading' || state === 'loading'" class="flex flex-col gap-3">
       <DataSkeletonCard :height="120" :lines="1" />
     </div>
 
-    <FeedbackAlertBanner v-else-if="leaseState === 'error' || invState === 'error'" tone="danger">
+    <FeedbackAlertBanner v-else-if="state === 'error'" tone="danger">
       Impossible de charger vos états des lieux pour le moment.
-      <button type="button" class="ml-2 font-bold underline" @click="loadInventories">Réessayer</button>
+      <button type="button" class="ml-2 font-bold underline" @click="load">Réessayer</button>
     </FeedbackAlertBanner>
 
-    <FeedbackEmptyState v-else-if="leaseState === 'empty' || !activeLease" title="Aucun bail pour l'instant" description="Votre état des lieux apparaîtra ici une fois un bail signé." />
-
-    <FeedbackEmptyState v-else-if="invState === 'empty'" title="Aucun état des lieux pour l'instant" description="Le propriétaire n'a pas encore préparé d'état des lieux pour ce bail." />
+    <FeedbackEmptyState
+      v-else-if="!rows.length"
+      title="Aucun état des lieux pour l'instant"
+      :description="activeLease ? 'Le propriétaire le remplit à la remise des clés, puis vous l\'envoie : vous le relirez et le signerez ici.' : 'Il apparaîtra ici dès qu\'un propriétaire ou un hôte vous en enverra un.'"
+    />
 
     <template v-else>
-      <p v-if="signError" class="mb-3.5 text-[13px] font-semibold text-danger-fg">{{ signError }}</p>
+      <p class="mb-4 mt-0 text-[13.5px] leading-[1.55] text-[var(--text-muted)]">
+        L'état des lieux décrit le logement à votre arrivée et à votre départ. Relisez-le avant de signer : c'est la référence en cas de désaccord sur la caution.
+      </p>
+      <p v-if="signError" class="mb-3.5 rounded-md border border-danger-border bg-danger-bg px-3.5 py-2.5 text-[13px] font-semibold text-danger-fg">{{ signError }}</p>
+      <p v-if="docError" class="mb-3.5 text-[13px] font-semibold text-danger-fg">{{ docError }}</p>
 
-      <div v-for="inv in inventories" :key="inv.id" class="mb-3.5 overflow-hidden rounded-xl border border-[var(--border-subtle)] bg-white">
+      <div v-for="{ inv, context } in rows" :key="inv.id" class="mb-3.5 overflow-hidden rounded-xl border border-[var(--border-subtle)] bg-white">
         <button type="button" class="flex w-full items-center gap-3.5 px-5.5 py-4.5 text-left" @click="toggle(inv.id)">
           <span class="text-[13px] text-[var(--text-faint)] transition-transform" :class="openId === inv.id ? 'rotate-90' : 'rotate-0'">▶</span>
-          <p class="m-0 flex-1 text-base font-bold tracking-[-.015em]">{{ TYPE_LABEL[inv.type] ?? inv.type }}</p>
-          <CoreBadge :tone="STATUS_TONE[inv.status]">{{ STATUS_LABEL[inv.status] ?? inv.status }}</CoreBadge>
+          <span class="min-w-0 flex-1">
+            <span class="block text-base font-bold tracking-[-.015em]">{{ INVENTORY_TYPE_LABEL[inv.type] ?? inv.type }}</span>
+            <span class="mt-0.5 block truncate text-[12.5px] text-[var(--text-muted)]">{{ context }}</span>
+          </span>
+          <CoreBadge :tone="awaitingMySignature(inv, true) ? 'warn' : INVENTORY_STATUS_TONE[inv.status]">
+            {{ awaitingMySignature(inv, true) ? 'À signer' : inv.status === 'draft' ? 'En préparation' : INVENTORY_STATUS_LABEL[inv.status] }}
+          </CoreBadge>
         </button>
 
         <div v-if="openId === inv.id" class="px-5.5 pb-5">
-          <p v-if="inv.signed_at" class="m-0 text-[13px] text-[var(--text-muted)]">Signé le {{ formatDate(inv.signed_at) }}.</p>
-          <p v-if="inv.general_comment" class="mb-0 mt-2.5 text-[13.5px] leading-[1.55] text-[var(--text-secondary)]">{{ inv.general_comment }}</p>
-          <p v-if="inv.meter_readings" class="mb-0 mt-2.5 text-[12.5px] text-[var(--text-muted)]">
+          <p v-if="inv.status === 'draft'" class="m-0 text-[13px] text-[var(--text-muted)]">Le propriétaire est en train de le remplir. Vous pourrez le relire et le signer dès qu'il vous l'aura envoyé.</p>
+          <p v-if="inv.signed_at" class="m-0 text-[13px] text-[var(--text-muted)]">Signé par les deux parties le {{ formatDate(inv.signed_at) }}.</p>
+          <p v-if="inv.general_comment" class="mb-0 mt-2.5 text-[13.5px] leading-[1.55] text-[var(--text-secondary)] [overflow-wrap:anywhere]">{{ inv.general_comment }}</p>
+          <p v-if="inv.meter_readings?.electricity || inv.meter_readings?.water" class="mb-0 mt-2.5 text-[12.5px] text-[var(--text-muted)]">
             <template v-if="inv.meter_readings.electricity">Électricité : {{ inv.meter_readings.electricity }}</template>
             <template v-if="inv.meter_readings.electricity && inv.meter_readings.water"> · </template>
             <template v-if="inv.meter_readings.water">Eau : {{ inv.meter_readings.water }}</template>
           </p>
-
-          <p v-if="!inv.rooms.length" class="mb-0 mt-3.5 text-[13px] text-[var(--text-muted)]">Aucune pièce détaillée pour l'instant.</p>
-          <div v-for="room in inv.rooms" :key="room.name" class="mt-3.5 border-t border-sand-200 pt-3.5">
-            <p class="m-0 text-[14.5px] font-bold">{{ room.name }}</p>
-            <div v-for="(item, i) in room.items" :key="i" class="mt-2.5">
-              <div class="flex items-center gap-2.5">
-                <p class="m-0 flex-1 text-[13.5px] font-semibold">{{ item.name || 'Objet' }}</p>
-                <CoreBadge :tone="item.state === 'damaged' ? 'danger' : item.state === 'issue' ? 'warn' : 'ok'">
-                  {{ { good: 'Bon état', issue: 'À surveiller', damaged: 'Endommagé' }[item.state] ?? item.state }}
-                </CoreBadge>
+          <p v-if="inv.status !== 'draft' && !inv.rooms.length" class="mb-0 mt-3.5 text-[13px] text-[var(--text-muted)]">Aucune pièce détaillée.</p>
+          <template v-if="inv.status !== 'draft'">
+            <div v-for="(room, ri) in inv.rooms" :key="ri" class="mt-3.5 border-t border-sand-200 pt-3.5">
+              <p class="m-0 text-[14.5px] font-bold">{{ room.name }}</p>
+              <div v-for="(item, i) in room.items" :key="i" class="mt-2.5">
+                <div class="flex items-center gap-2.5">
+                  <p class="m-0 flex-1 text-[13.5px] font-semibold">{{ item.name || 'Élément' }}</p>
+                  <CoreBadge :tone="itemStateTone(item.state)">{{ itemStateLabel(item.state) }}</CoreBadge>
+                </div>
+                <p v-if="item.comment" class="mb-0 mt-1 text-[13px] text-[var(--text-muted)] [overflow-wrap:anywhere]">{{ item.comment }}</p>
               </div>
-              <p v-if="item.comment" class="mb-0 mt-1 text-[13px] text-[var(--text-muted)]">{{ item.comment }}</p>
             </div>
-          </div>
+          </template>
 
-          <div v-if="inv.status === 'pending_signature' && !inv.tenant_signature" class="mt-4.5 rounded-xl border border-[var(--border-escrow)] bg-[var(--surface-escrow)] p-5">
-            <p class="m-0 text-[14.5px] font-bold text-clay-700">Votre signature est nécessaire</p>
+          <div v-if="awaitingMySignature(inv, true)" class="mt-4.5 rounded-xl border border-[var(--border-escrow)] bg-[var(--surface-escrow)] p-5">
+            <p class="m-0 text-[14.5px] font-bold text-clay-700">Votre signature est attendue</p>
             <p class="mb-3.5 mt-2 text-[13px] leading-[1.6] text-clay-900">
-              En signant, vous reconnaissez l'état constaté. C'est ce document qui servira de référence en cas de retenue sur la garantie.
+              En signant, vous reconnaissez l'état décrit ci-dessus. S'il ne correspond pas à ce que vous constatez, ne signez pas : écrivez d'abord au propriétaire.
             </p>
-            <div
-              class="mb-3.5 grid h-[90px] cursor-pointer place-items-center rounded-md border-[1.5px] border-dashed bg-white"
-              :class="readyToSign[inv.id] ? 'border-green-600' : 'border-clay-300'"
-              @click="readyToSign[inv.id] = true"
-            >
-              <span v-if="readyToSign[inv.id]" class="-rotate-[4deg] font-display text-2xl italic text-green-800">Signé</span>
-              <span v-else class="text-[13px] text-[var(--text-faint)]">✎ Tracez votre signature ici</span>
-            </div>
-            <CoreButton tone="accent" :disabled="signingId === inv.id || !readyToSign[inv.id]" @click="sign(inv)">{{ signingId === inv.id ? 'Signature…' : "Signer l'état des lieux" }}</CoreButton>
+            <FormsSignaturePad :ref="(el: any) => { pads[inv.id] = el }" v-model="signatures[inv.id]" />
+            <CoreButton tone="accent" class="mt-3.5" :disabled="signingId === inv.id || !signatures[inv.id]" @click="sign(inv)">{{ signingId === inv.id ? 'Signature…' : "Signer l'état des lieux" }}</CoreButton>
           </div>
-          <p v-else-if="inv.status === 'pending_signature' && inv.tenant_signature" class="mt-4.5 text-[13px] text-[var(--text-muted)]">Vous avez signé — en attente du propriétaire.</p>
+          <p v-else-if="inv.status === 'pending_signature'" class="mt-4.5 text-[13px] text-[var(--text-muted)]">Vous avez signé — en attente de la signature du propriétaire.</p>
+
+          <button v-if="inv.status !== 'draft'" type="button" class="mt-4 text-[13px] font-bold text-green-700 underline disabled:opacity-60" :disabled="doc.loadingKey.value === inv.id" @click="openPdf(inv)">
+            {{ doc.loadingKey.value === inv.id ? 'Génération du PDF…' : 'Télécharger le PDF' }}
+          </button>
         </div>
       </div>
     </template>

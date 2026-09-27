@@ -1,6 +1,7 @@
 import type { LeaseSummary } from '~/types/tenant'
 import type { FetchState } from '~/utils/fetchState'
 import { deriveFetchState } from '~/utils/fetchState'
+import { pickDefaultLease } from '~/utils/leases'
 
 /**
  * Liste des baux du locataire connecté, partagée entre le sélecteur de
@@ -22,19 +23,23 @@ import { deriveFetchState } from '~/utils/fetchState'
  */
 export function useTenantLeases() {
   const leasesApi = useLeasesApi()
+  const authUser = useAuthUser()
   const leases = useState<LeaseSummary[]>('tenantLeases', () => [])
   const state = useState<FetchState>('tenantLeasesState', () => 'idle')
   const activeLeaseId = useState<string | null>('tenantActiveLeaseId', () => null)
   const nuxtApp = useNuxtApp() as unknown as { _tenantLeasesInFlight?: Promise<void> | null }
 
-  const activeLease = computed(() => leases.value.find(l => l.id === activeLeaseId.value) ?? leases.value[0] ?? null)
+  // Par défaut, le bail qui attend une action (signature, entrée) puis l'actif — plus le dernier créé, souvent un brouillon (Lot 50).
+  const activeLease = computed(() => leases.value.find(l => l.id === activeLeaseId.value) ?? pickDefaultLease(leases.value))
 
   async function reload() {
     state.value = 'loading'
     try {
-      leases.value = await leasesApi.fetchMine()
+      // `/leases/my` renvoie aussi les baux où l'on est propriétaire : l'espace locataire ne garde que les siens (Lot 50).
+      const me = authUser.value?.id
+      leases.value = (await leasesApi.fetchMine()).filter(l => !me || (l.tenant_id ?? l.tenant.id) === me)
       if (!activeLeaseId.value || !leases.value.some(l => l.id === activeLeaseId.value)) {
-        activeLeaseId.value = leases.value[0]?.id ?? null
+        activeLeaseId.value = pickDefaultLease(leases.value)?.id ?? null
       }
       state.value = deriveFetchState({ loading: false, errored: false, itemCount: leases.value.length })
     } catch {

@@ -2,8 +2,10 @@
 import type { CheckoutResult, PaymentGateway } from '~/types/wallet'
 import { pollTransactionStatus } from '~/utils/paymentPolling'
 import { ApiRequestError } from '~/utils/authenticatedFetcher'
+import { errorText } from '~/utils/apiErrors'
+import { nextPayableInvoice } from '~/utils/leases'
 
-const { open, mode, closePay } = usePaymentModal()
+const { open, mode, invoiceId, closePay } = usePaymentModal()
 const { activeLease, reload: reloadLeases } = useTenantLeases()
 const wallet = useTenantWallet()
 const walletApi = useWalletApi()
@@ -16,7 +18,15 @@ const errorMessage = ref('')
 const loading = ref(false)
 let cancelled = false
 
-const invoiceToPay = computed(() => activeLease.value?.invoices?.find(i => i.status !== 'paid') ?? null)
+/** Facture choisie dans l'échéancier, sinon la plus ancienne encore due — avant : la première non payée dans l'ordre de l'API, soit la plus récente. */
+const invoiceToPay = computed(() => {
+  const invoices = activeLease.value?.invoices ?? []
+  const picked = invoiceId.value ? invoices.find(i => i.id === invoiceId.value && i.status !== 'paid') : null
+  return picked ?? nextPayableInvoice(invoices)
+})
+const rentShortfall = computed(() => invoiceToPay.value && wallet.state.value === 'success'
+  ? Math.max(0, Number(invoiceToPay.value.amount) - wallet.balanceSavings.value)
+  : 0)
 
 /* ---- Recharge : passerelles ---- */
 const gateways = ref<PaymentGateway[]>([])
@@ -39,6 +49,7 @@ watch(open, v => {
   if (!v) return
   errorMessage.value = ''
   if (mode.value === 'loyer') {
+    wallet.reload()
     step.value = 'amount'
     amount.value = invoiceToPay.value ? String(Math.round(Number(invoiceToPay.value.amount))) : ''
   } else {
@@ -72,7 +83,7 @@ async function submitPayRent() {
     await Promise.all([reloadLeases(), wallet.reload()])
     step.value = 'done'
   } catch (e) {
-    errorMessage.value = e instanceof ApiRequestError ? (e.mapped.bannerMessage ?? 'Le paiement a échoué.') : 'Le paiement a échoué.'
+    errorMessage.value = e instanceof ApiRequestError ? errorText(e.mapped, 'Le paiement a échoué.') : 'Le paiement a échoué.'
     step.value = 'error'
   } finally {
     loading.value = false
@@ -127,7 +138,7 @@ async function submitRecharge() {
     }
     // 'cancelled' (modale fermée pendant le sondage) : ne touche plus à l'état, le composant est en train de disparaître.
   } catch (e) {
-    errorMessage.value = e instanceof ApiRequestError ? (e.mapped.bannerMessage ?? 'Le paiement a échoué.') : 'Le paiement a échoué.'
+    errorMessage.value = e instanceof ApiRequestError ? errorText(e.mapped, 'Le paiement a échoué.') : 'Le paiement a échoué.'
     step.value = 'error'
   } finally {
     loading.value = false
@@ -164,9 +175,14 @@ onUnmounted(() => { cancelled = true })
                 <div class="flex items-baseline gap-2 rounded-md border border-[var(--border-default)] bg-white px-[18px] py-4">
                   <span class="font-mono text-2xl font-bold">{{ formatFcfaShort(Number(invoiceToPay.amount)) }}</span>
                 </div>
+                <p class="mb-0 mt-1.5 text-[12.5px] text-[var(--text-muted)]">Échéance du {{ new Date(invoiceToPay.due_date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }) }}</p>
                 <p class="mb-0 mt-2.5 text-[12.5px] text-[var(--text-muted)]">Prélevé directement sur votre tirelire ({{ formatFcfaShort(wallet.balanceSavings.value) }} disponibles).</p>
+                <div v-if="rentShortfall > 0" class="mt-3 rounded-md border border-warn-border bg-warn-bg px-3.5 py-3 text-[13px] text-warn-fg">
+                  <p class="m-0 font-bold">Il vous manque {{ formatFcfa(rentShortfall) }} dans votre tirelire.</p>
+                  <button type="button" class="mt-1.5 font-bold underline" @click="mode = 'recharge'; step = 'amount'; amount = String(Math.ceil(rentShortfall)); loadGateways()">Recharger ma tirelire</button>
+                </div>
                 <p v-if="errorMessage" class="mb-0 mt-3 text-[13px] font-semibold text-danger-fg">{{ errorMessage }}</p>
-                <CoreButton size="lg" full-width class="mt-5" :disabled="loading" @click="submitPayRent">{{ loading ? 'Paiement…' : 'Payer' }}</CoreButton>
+                <CoreButton size="lg" full-width class="mt-5" :disabled="loading || rentShortfall > 0" @click="submitPayRent">{{ loading ? 'Paiement…' : 'Payer' }}</CoreButton>
               </template>
             </template>
             <template v-else-if="step === 'error'">

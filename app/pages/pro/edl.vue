@@ -1,21 +1,28 @@
 <script setup lang="ts">
 import type { InventoryDetail, InventoryType, LeaseSummary } from '~/types/tenant'
 import type { LandlordBookingSummary } from '~/types/landlordBookings'
+import { leasePhase } from '~/utils/leases'
+import { awaitingMySignature, INVENTORY_STATUS_LABEL, INVENTORY_STATUS_TONE, pickInventory } from '~/utils/inventories'
 
 definePageMeta({ layout: 'pro' })
 
+const route = useRoute()
 const leasesApi = useLeasesApi()
 const bookingsApi = useLandlordBookingsApi()
 const inventoriesApi = useInventoriesApi()
+const authUser = useAuthUser()
 
 interface EdlRow {
   key: string
   title: string
   meta: string
+  tenant: string
   leaseId?: string
   bookingId?: string
   type: InventoryType
   inventory: InventoryDetail | null
+  /** Réservation dont la retenue attend un état des lieux (`requires_booking_inventory`). */
+  required?: boolean
 }
 
 function tenantName(p?: { first_name?: string | null; last_name?: string | null; email?: string }) {
@@ -26,53 +33,91 @@ function tenantName(p?: { first_name?: string | null; last_name?: string | null;
 const rows = ref<EdlRow[]>([])
 const state = ref<'idle' | 'loading' | 'error' | 'empty' | 'success'>('idle')
 
-/** Pas d'endpoint « mes états des lieux » — reconstruit à partir des baux et réservations réels, un par un. */
+/** Priorité d'affichage : ce qui attend une action de votre part d'abord. */
+function rank(r: EdlRow) {
+  if (!r.inventory) return r.required ? 0 : 2
+  if (awaitingMySignature(r.inventory, false) || r.inventory.status === 'draft') return 1
+  if (r.inventory.status === 'pending_signature') return 3
+  return 4
+}
+
+/**
+ * Pas d'endpoint « mes états des lieux » — reconstruit à partir des baux et
+ * réservations réels. L'API peut créer un second état des lieux du même type
+ * (constaté Lot 50) : `pickInventory` retient le plus avancé.
+ */
 async function load() {
   state.value = 'loading'
   try {
     const [leases, bookings] = await Promise.all([leasesApi.fetchMine(), bookingsApi.fetchMine()])
     const out: EdlRow[] = []
-
-    const leaseCandidates = leases.filter((l: LeaseSummary) => ['signed', 'active', 'terminated'].includes(l.status))
+    const me = authUser.value?.id
+    const leaseCandidates = leases.filter((l: LeaseSummary) => (l.tenant_id ?? l.tenant.id) !== me && ['awaiting_entry', 'active', 'notice', 'terminated', 'inconsistent'].includes(leasePhase(l)))
     await Promise.all(leaseCandidates.map(async l => {
-      const invs = await inventoriesApi.fetchByLease(l.id).catch(() => [])
-      out.push({ key: `${l.id}-entry`, title: `Entrée — ${l.unit?.name ?? 'logement supprimé'}`, meta: `Bail · ${tenantName(l.tenant)}`, leaseId: l.id, type: 'entry', inventory: invs.find(i => i.type === 'entry') ?? null })
-      if (l.status === 'terminated') {
-        out.push({ key: `${l.id}-exit`, title: `Sortie — ${l.unit?.name ?? 'logement supprimé'}`, meta: `Bail clos · ${tenantName(l.tenant)}`, leaseId: l.id, type: 'exit', inventory: invs.find(i => i.type === 'exit') ?? null })
+      const invs = await inventoriesApi.fetchByLease(l.id).catch(() => [] as InventoryDetail[])
+      const unit = l.unit?.name ?? 'logement supprimé'
+      const phase = leasePhase(l)
+      out.push({ key: `${l.id}-entry`, title: `Entrée — ${unit}`, meta: `Bail · ${tenantName(l.tenant)}`, tenant: tenantName(l.tenant), leaseId: l.id, type: 'entry', inventory: pickInventory(invs, 'entry') })
+      // Sortie : dès le préavis (on la prépare avant le départ), ou si elle existe déjà.
+      const exit = pickInventory(invs, 'exit')
+      if (phase === 'notice' || phase === 'terminated' || exit) {
+        out.push({ key: `${l.id}-exit`, title: `Sortie — ${unit}`, meta: phase === 'notice' ? `Préavis donné · ${tenantName(l.tenant)}` : `Bail · ${tenantName(l.tenant)}`, tenant: tenantName(l.tenant), leaseId: l.id, type: 'exit', inventory: exit })
       }
     }))
-
     const bookingCandidates = bookings.filter((b: LandlordBookingSummary) => b.status === 'confirmed')
     await Promise.all(bookingCandidates.map(async b => {
-      const invs = await inventoriesApi.fetchByBooking(b.id).catch(() => [])
+      const invs = await inventoriesApi.fetchByBooking(b.id).catch(() => [] as InventoryDetail[])
       const checkIn = new Date(b.check_in).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })
-      out.push({ key: `${b.id}-entry`, title: `Réservation du ${checkIn}`, meta: `Séjour · ${tenantName(b.tenant)}`, bookingId: b.id, type: 'entry', inventory: invs.find(i => i.type === 'entry') ?? null })
+      out.push({
+        key: `${b.id}-entry`,
+        title: `Arrivée du ${checkIn} — ${b.unit?.name ?? 'logement supprimé'}`,
+        meta: `Séjour · ${tenantName(b.tenant)}`,
+        tenant: tenantName(b.tenant),
+        bookingId: b.id,
+        type: 'entry',
+        inventory: pickInventory(invs, 'entry'),
+        required: !!b.unit?.requires_booking_inventory
+      })
     }))
-
-    rows.value = out.sort((a, b) => (a.inventory ? 0 : 1) - (b.inventory ? 0 : 1))
+    rows.value = out.sort((a, b) => rank(a) - rank(b))
     state.value = rows.value.length ? 'success' : 'empty'
+    openFromQuery()
   } catch {
     state.value = 'error'
   }
 }
 onMounted(load)
 
-const STATUS_LABEL: Record<string, string> = { draft: 'Brouillon', pending_signature: 'En attente', signed: 'Signé' }
-const STATUS_TONE: Record<string, 'ok' | 'warn' | 'neutral'> = { draft: 'neutral', pending_signature: 'warn', signed: 'ok' }
+/** `?inventory=` (notification) ou `?lease=…&type=…` (fiche du bail) ouvre directement l'état des lieux. */
+let queryHandled = false
+function openFromQuery() {
+  if (queryHandled) return
+  queryHandled = true
+  const q = route.query
+  const r = typeof q.inventory === 'string'
+    ? rows.value.find(x => x.inventory?.id === q.inventory)
+    : typeof q.lease === 'string'
+      ? rows.value.find(x => x.leaseId === q.lease && x.type === (q.type === 'exit' ? 'exit' : 'entry'))
+      : undefined
+  if (r) editing.value = r
+}
+
+function badge(r: EdlRow): { label: string; tone: 'ok' | 'warn' | 'neutral' | 'danger' } {
+  if (!r.inventory) return r.required ? { label: 'Exigé', tone: 'danger' } : { label: 'À faire', tone: 'neutral' }
+  if (awaitingMySignature(r.inventory, false)) return { label: 'À signer', tone: 'warn' }
+  if (r.inventory.status === 'pending_signature') return { label: 'Chez le locataire', tone: 'warn' }
+  return { label: INVENTORY_STATUS_LABEL[r.inventory.status] ?? r.inventory.status, tone: INVENTORY_STATUS_TONE[r.inventory.status] ?? 'neutral' }
+}
 
 const editing = ref<EdlRow | null>(null)
-function openRow(r: EdlRow) {
-  editing.value = r
-}
 function onSaved() {
-  editing.value = null
   load()
 }
 </script>
 
 <template>
   <div class="animate-[im-fade_.3s_ease_both]">
-    <div v-if="state === 'loading'" class="flex flex-col gap-3.5">
+    <div v-if="state === 'loading' && !rows.length" class="flex flex-col gap-3.5">
       <DataSkeletonCard v-for="i in 3" :key="i" :height="70" :lines="1" />
     </div>
 
@@ -82,21 +127,27 @@ function onSaved() {
     </FeedbackAlertBanner>
 
     <p v-else-if="state === 'empty'" class="rounded-md border border-dashed border-[var(--border-default)] bg-white px-4 py-10 text-center text-[13.5px] text-[var(--text-muted)]">
-      Aucun bail signé ni réservation confirmée pour l'instant — un état des lieux se rattache à l'un des deux.
+      Aucun bail signé ni séjour confirmé pour l'instant : un état des lieux se rattache à l'un des deux.
     </p>
 
     <template v-else>
+      <p class="mb-4 mt-0 text-[13.5px] leading-[1.55] text-[var(--text-muted)]">
+        Faites l'état des lieux d'entrée à la remise des clés et celui de sortie au départ, idéalement ensemble : chacun signe sur son téléphone. Une fois signé des deux côtés, il ne peut plus être modifié.
+      </p>
       <div class="overflow-hidden rounded-2xl border border-[var(--border-subtle)] bg-white p-2">
-        <div v-for="r in rows" :key="r.key" class="flex items-center gap-3.5 border-b border-sand-200 p-3.5 last:border-b-0">
+        <div v-for="r in rows" :key="r.key" class="flex flex-wrap items-center gap-3.5 border-b border-sand-200 p-3.5 last:border-b-0">
           <div class="grid h-10 w-10 flex-none place-items-center rounded-md text-[15px]" :class="r.inventory?.status === 'signed' ? 'bg-ok-bg' : r.inventory ? 'bg-warn-bg' : 'bg-sand-200'">
             {{ r.type === 'exit' ? '⇤' : '☑' }}
           </div>
-          <div class="flex-1">
+          <div class="min-w-0 flex-1">
             <p class="m-0 text-[14.5px] font-bold">{{ r.title }}</p>
-            <p class="mb-0 mt-0.5 text-[12.5px] text-[var(--text-muted)]">{{ r.meta }}</p>
+            <p class="mb-0 mt-0.5 text-[12.5px] text-[var(--text-muted)]">
+              {{ r.meta }}<template v-if="r.required && !r.inventory"> · la retenue du séjour n'est versée qu'une fois l'état des lieux fait</template>
+            </p>
           </div>
-          <CoreBadge :tone="r.inventory ? STATUS_TONE[r.inventory.status] : 'neutral'">{{ r.inventory ? STATUS_LABEL[r.inventory.status] : 'Non créé' }}</CoreBadge>
-          <button type="button" class="rounded-pill border border-[var(--border-default)] bg-white px-3.5 py-2 text-[12.5px] font-bold" @click="openRow(r)">{{ r.inventory ? 'Ouvrir' : 'Créer' }}</button>
+          <CoreBadge :tone="badge(r).tone">{{ badge(r).label }}</CoreBadge>
+          <NuxtLink v-if="r.leaseId" :to="`/pro/baux/${r.leaseId}`" class="text-[12.5px] font-bold text-[var(--text-muted)] underline">Bail</NuxtLink>
+          <button type="button" class="rounded-pill border border-[var(--border-default)] bg-white px-3.5 py-2 text-[12.5px] font-bold" @click="editing = r">{{ r.inventory ? 'Ouvrir' : 'Commencer' }}</button>
         </div>
       </div>
     </template>
@@ -108,6 +159,7 @@ function onSaved() {
       :booking-id="editing.bookingId"
       :type="editing.type"
       :title="editing.title"
+      :tenant-name="editing.tenant"
       @close="editing = null"
       @saved="onSaved"
     />

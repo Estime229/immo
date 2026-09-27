@@ -12,11 +12,14 @@
  */
 export type LeaseStatus = 'draft' | 'pending_signature' | 'signed' | 'active' | 'terminated'
 
+/** `status` réel : pending · paid · overdue · partially_paid · refunded · cancelled (`InvoiceStatus` côté API, Lot 50). */
 export interface LeaseInvoice {
   id: string
   amount: string
   due_date: string
   status: string
+  paid_at?: string | null
+  title?: string | null
 }
 
 export interface LeasePartyRef {
@@ -54,6 +57,28 @@ export interface LeaseSummary {
   property: { id: string; name: string } | null
   unit: { id: string; name: string } | null
   invoices?: LeaseInvoice[]
+  /**
+   * Champs renvoyés par `GET /leases/my` (vérifiés en live, Lot 50) et jusqu'ici
+   * ignorés : le préavis (`renewal_intent`, `renewal_intent_date` = date où il
+   * a été donné, `notice_period` en mois), les signatures, le paiement
+   * d'entrée et ses montants cibles.
+   */
+  billing_frequency?: LeaseBillingFrequency
+  notice_period?: number | null
+  renewal_intent?: RenewalIntent | null
+  renewal_intent_date?: string | null
+  signed_at_landlord?: string | null
+  signed_at_tenant?: string | null
+  entry_paid_at?: string | null
+  advance_target?: string | null
+  prepaid_target?: string | null
+  advance_balance?: string | null
+  prepaid_balance?: string | null
+  next_billing_date?: string | null
+  contract_content?: string | null
+  tenant_id?: string
+  landlord_id?: string
+  created_at?: string
 }
 
 export type LeaseBillingFrequency = 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'semi_annual' | 'annual'
@@ -87,6 +112,18 @@ export interface CreateLeaseResult {
   signed_rent: string
   billing_frequency: LeaseBillingFrequency
   rent_source: string
+}
+
+/** Corps de PATCH /leases/:id (brouillon seulement) — camelCase comme la création ; `noticePeriod` n'existe qu'ici. */
+export interface UpdateLeaseDraftPayload {
+  monthlyRent?: number
+  depositAmount?: number
+  startDate?: string
+  endDate?: string | null
+  contractType?: LeaseContractType
+  noticePeriod?: number
+  billingFrequency?: LeaseBillingFrequency
+  depositAcknowledged?: boolean
 }
 
 /** Réponse de PATCH /leases/:id/send, /cancel-unpaid, /terminate — formes minimales, pas LeaseSummary complet. */

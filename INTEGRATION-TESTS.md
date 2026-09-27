@@ -3324,3 +3324,138 @@ Les montants de `hostAmounts` testés sont ceux du paiement réel (27 000 → 21
 En **production** (im-hazel.vercel.app) : A0-A3, C1-C6, D1-D5, Z1, Z0 rejoués — **19/19 PASS** (le paiement B1-B4 n'a pas été répété pour ne pas débiter une seconde fois le compte de test partagé).
 
 Données de test : bien `Lot49 nuitées …` du propriétaire `qa-landlord-1790282977@example.com` conservé (il porte une réservation payée) ; code promo `LOT49…` actif sur ce bien ; tirelire du propriétaire de test passée de 75 000 à 30 000 F (deux séjours payés).
+
+## Lot 50 — Baux et états des lieux : fiche du bail, phases réelles, signatures tracées, préavis relu depuis l'API
+
+Demande : « parcourir et tester le flow Baux avec les espaces et tout ce qui va avec, en consultant l'API : divergences, manques, écrans à ajouter, incohérences, messages d'erreur, et l'interaction avec l'état des lieux ».
+
+Backend relu :
+- `lease.controller.ts`, `lease-buffers.controller.ts`, `lease-pdf.controller.ts` ;
+- les handlers `create-lease`, `sign-lease`, `cancel-unpaid-lease`, `give-notice`, `cancel-notice`, `pay-lease-entry`, `pay-rent` ;
+- `lease-billing.service.ts`, `lease-cron.service.ts`, `overdue-payments` ;
+- `inventory.service.ts` / `.controller.ts`, `GET /pdf/inventories/:id` et son gabarit `etat-des-lieux.hbs`, `GET/PATCH /pdf/signature` ;
+- `booking-retention-cron.service.ts` ;
+- le module `rental/requests`.
+
+Rejoué en live :
+- propriétaire `qa-landlord-1790282977@example.com` (un bien « Lot50 baux », dix logements) ;
+- locataire vérifié sans solde (`tenant-visit-test-…`) ;
+- propriétaire de test `pro-landlord-test-…` utilisé comme **locataire** avec tirelire (seul moyen d'aller jusqu'au bail actif, voir #49 : aucune recharge possible) ;
+- locataire non vérifié.
+
+### Comportement réel de l'API (vérifié en live)
+
+| Cas | Réponse |
+|---|---|
+| Locataire inexistant · caution > 3 mois sans accord · locataire qui crée un bail | 404 « Locataire introuvable » · 400 Loi 2022-30 (message clair) · 403 « Accès réservé » |
+| `startDate: "abc"` | **500** |
+| Fin avant début · début il y a 60 jours · loyer 0 (caution 0) · bail avec soi-même · logement d'un autre bien | **201** (tous acceptés) |
+| Brouillon créé | le calendrier du logement est **bloqué** (`blocked_by: lease`, sans fin) → tout autre bail sur ce logement : 409 |
+| `PATCH` brouillon (caution, préavis, début) | 200 ; `next_billing_date` et blocage de calendrier **non déplacés** |
+| Le locataire signe un **brouillon non envoyé** | **200 `signed`, `signed_at_landlord: null`** (#54) |
+| Envoi · renvoi · `PATCH` après envoi | 200 `pending_signature` (vaut signature du propriétaire) · 403 · 403 |
+| Un autre locataire signe · re-signature | 403 · 200 (sans effet) |
+| Paiement d'entrée sans solde | 400 « Solde insuffisant. Votre tirelire contient 0 XOF, le paiement d'entrée (caution + avance + prépayé) est de 25000 XOF. » |
+| Annuler (impayé) avant 72 h · résilier un bail non actif · le locataire résilie | 400 « encore 72h » · 403 · **403 « Accès réservé »** (#60) |
+| Paiement d'entrée (10 000) | tirelire −10 000, bail `active`, propriétaire non crédité (séquestre) ; 2e paiement : 400 |
+| **Le locataire re-signe un bail actif** | **200 → `signed`** : plus facturé, plus résiliable (#55) |
+| Préavis | 201 `renewal_intent: leave`, `renewal_intent_date` = **aujourd'hui** ; départ (+3 mois) seulement dans la notification du propriétaire |
+| Préavis par le propriétaire · 2e préavis · annuler un préavis inexistant | 403 · 400 · 400 (messages clairs) |
+| Résiliation avec motif | 200 ; le locataire reçoit « Le bail a été résilié — motif : … » ; **caution non restituée** (#57) ; `renewal_intent` reste `leave` |
+| `auto-debit` sans `enabled` | 200, `null` enregistré |
+| État des lieux créé par le locataire · envoyé sans pièce | 201 · 400 « At least one room required » |
+| État « issue » (front) · état libre · `type: "foo"` | tous enregistrés (aucune validation) |
+| Signature sans corps | 200 sans effet |
+| **Le locataire réécrit l'état des lieux après la signature du propriétaire**, puis signe | 200, puis `signed` (#56) |
+| Modifier après double signature · recréer une « entrée » après signature | 400 « Cannot modify a signed inventory » · **201 : second état des lieux d'entrée** (#61) |
+| Un tiers lit un état des lieux | 403 « Not authorized » |
+| `GET /pdf/inventories/:id?format=html` | 200 ; états imprimés : `new/good/fair/damaged/missing` seulement ; signatures imprimées en images |
+
+### Constats côté écrans
+
+| # | Espace | Constat |
+|---|---|---|
+| K1 | Pro | **Aucune fiche de bail.** Ni échéancier, ni paiement d'entrée, ni préavis, ni état des lieux, ni contrat depuis la liste. |
+| K2 | Pro | « Envoyer pour signature » **signait à la place du propriétaire sans le dire**, sans confirmation. |
+| K3 | Pro | Pour un bail signé non payé, « Annuler (jamais payé) » était proposé dès la signature (l'API refuse avant 72 h). |
+| K4 | Pro | La résiliation n'envoyait aucun motif, alors que l'API le transmet au locataire. |
+| K5 | Pro | Brouillon non modifiable. |
+| K6 | Pro | Le préavis était invisible. |
+| K7 | Pro | Liste triée par création, sans distinction en cours / terminés. |
+| K8 | Pro | Création : aucun contrôle des dates, ni du loyer, ni du préavis. Le « id du locataire » était à coller à la main. |
+| K9 | Pro | Aucun lien depuis une visite réalisée vers la création du bail. |
+| K10 | Locataire | Préavis tenu dans une variable locale : perdu au rechargement. Il passait à « donné » dès l'ouverture de la fenêtre, même si l'on annulait. |
+| K11 | Locataire | La confirmation du préavis affichait la **date du jour** comme « fin de bail estimée ». |
+| K12 | Locataire | Paiement d'entrée sans montant ni solde affichés ; manque découvert au clic. |
+| K13 | Locataire | « Payer » d'une échéance payait la **plus récente** impayée, pas celle cliquée. |
+| K14 | Locataire | Le statut « late » attendu n'existe pas : le vrai statut est `overdue`, et les factures annulées ou remboursées étaient « à payer ». |
+| K15 | Locataire | Erreurs du prélèvement automatique et de l'annulation du préavis avalées. |
+| K16 | Locataire | Caution : « restituée sous 7 jours après l'état des lieux de sortie » — **faux**, aucun mécanisme n'existe (#57). |
+| K17 | Locataire | Signature du bail par un faux tracé non conservé, sans pouvoir lire le contrat avant de signer. |
+| K18 | Locataire | Le dernier bail créé (souvent un brouillon) masquait le bail actif. |
+| K19 | Locataire | Pour un compte propriétaire + locataire, chaque espace montrait les baux de l'autre côté. |
+| K20 | Locataire | Tableau de bord : les cartes ouvraient toujours le même bail, et « Payer maintenant » ne visait pas l'échéance en retard. |
+| K21 | EDL | États proposés « bon / à surveiller / endommagé ». « À surveiller » (`issue`) est inconnu de l'API et **imprimé vide sur le PDF**. |
+| K22 | EDL | Signatures envoyées comme **une image vide d'un pixel**, imprimée telle quelle sur le PDF. La route de signature enregistrée du profil (`/pdf/signature`) n'était pas utilisée. |
+| K23 | EDL | Le propriétaire pouvait modifier un état des lieux **déjà signé par une partie** (#56). |
+| K24 | EDL | Chaque élément se saisissait à la main, pièce par pièce. |
+| K25 | EDL | Pas de PDF ; pas d'état des lieux de sortie avant la résiliation (alors qu'il se fait au départ, pendant le préavis). |
+| K26 | EDL | Doublons non gérés : le premier trouvé était retenu. |
+| K27 | EDL | Le voyageur d'un séjour court n'avait **aucun écran** pour lire et signer l'état des lieux de son arrivée. |
+| K28 | Notifications | `leaseId` et `inventoryId` n'ouvraient rien. |
+
+### Ce qui a été livré
+
+| Fichier | Rôle |
+|---|---|
+| `app/utils/leases.ts` | **Nouveau** — `leasePhase` (brouillon, attend le locataire, entrée non payée, actif, préavis, terminé, annulé pour impayé, incohérent), libellés pro/locataire, `canTenantSign`, `noticeDepartureDate`, `departureIfNoticeToday`, `entryBreakdown`, `cancelUnpaidState` (72 h), `invoiceView` (statuts réels), `nextPayableInvoice`, `validateLeaseForm`, `startDateWarning`, `depositExceedsCap`, `pickDefaultLease` |
+| `app/utils/inventories.ts` | **Nouveau** — états alignés sur l'API (neuf, bon état, traces d'usage, abîmé, manquant ; « issue » relu), `pickInventory` (doublons), `inventoryEditable` (figé dès une signature), `validateInventoryForSend`, modèles de pièces pré-remplies |
+| `app/pages/pro/baux/[id].vue` | **Nouvelle fiche du bail**. Contenu : fil d'avancement ; action propre à chaque phase ; conditions ; échéancier et quittances ; états des lieux d'entrée et de sortie ouverts sur place ; contrat. Actions : modification du brouillon (préavis compris) ; « Signer et envoyer » avec confirmation ; annulation seulement après 72 h ; résiliation avec motif obligatoire, alerte si la sortie n'est pas signée, mention de la caution ; « Écrire au locataire ». |
+| `app/pages/pro/baux/index.vue` | Onglets En cours / Terminés, phase réelle, ligne « à faire », carte → fiche |
+| `app/pages/pro/baux/nouveau.vue` | Locataires issus des visites puis des conversations, champ d'identifiant si besoin, préavis, contrôles de dates, de loyer et de caution, 409 et 404 expliqués, redirection vers la fiche |
+| `app/pages/pro/visites.vue` | « Proposer un bail » sur une visite réalisée (formulaire pré-rempli) |
+| `app/components/pro/EdlEditorModal.vue` | Modèles de pièces, états de l'API, contenu figé dès une signature, validation et confirmation avant envoi, signature tracée juste après l'envoi (vue remontée sur la zone), PDF, relecture avant création (anti-doublon) |
+| `app/pages/pro/edl.vue` | État des lieux retenu malgré les doublons ; sortie proposée dès le préavis ; séjours à état des lieux exigé en tête ; `?inventory=` et `?lease=&type=` |
+| `app/components/forms/SignaturePad.vue`, `app/composables/useSignatureApi.ts` | **Nouveau** — signature au doigt ou à la souris ; signature du profil proposée puis mémorisée |
+| `app/pages/locataire/bail.vue` | Phases réelles. Entrée : détail, solde, manque, échéance des 72 h. Préavis relu depuis l'API, avec la vraie date de départ. Échéancier : statuts réels, « Payer » vise l'échéance cliquée. Tampons seulement une fois l'entrée payée. Erreurs affichées. Caution décrite honnêtement. Lien vers les états des lieux. `?lease=` et `?pay=`. |
+| `app/pages/locataire/edl.vue` | États des lieux du bail **et des séjours** ; signature tracée ; PDF ; `?inventory=` |
+| `app/components/tenant/SignLeaseModal.vue` | Montants d'entrée, « Lire le contrat avant de signer », consentement explicite, refus hors `pending_signature` |
+| `app/components/tenant/PreavisModal.vue` | Date de départ calculée **avant** de confirmer ; recharge le bail |
+| `app/components/tenant/PaymentModal.vue`, `useTenantSpace.ts` | Paiement de l'échéance choisie ; manque sur la tirelire → recharge |
+| `app/composables/useTenantLeases.ts` | Bail par défaut = celui qui attend une action ; seulement les baux où l'on est locataire |
+| `app/pages/locataire/index.vue`, `app/utils/tenantDashboard.ts` | Cartes → le bon bail ; « Payer maintenant » → l'échéance en retard ; statut réel ; garde `unit: null` |
+| `app/utils/housingRequest.ts` | Notifications `leaseId` → fiche du bail / « Mon bail », `inventoryId` → l'état des lieux |
+| `app/composables/useOpenDocument.ts` | Ouverture des documents PDF/HTML factorisée |
+| `app/composables/useLeasesApi.ts`, `app/types/tenant.ts` | `terminate(id, reason)`, `updateDraft` ; champs réels de `/leases/my` (préavis, signatures, entrée, tampons, fréquence) et des factures |
+
+### Tests automatisés
+
+```
+Test Files  24 passed (24)
+     Tests  199 passed (199)   [+26 : tests/leases.test.ts, tests/inventories.test.ts, notifications bail/EDL]
+```
+
+Les dates et montants testés sont ceux des réponses live : préavis du 27/09 → départ 27/12 ; entrée 15 000 + 10 000 = 25 000 ; doublon d'état des lieux signé + brouillon.
+
+Vérification de types : `vue-tsc` (lancé via `npx`, sans l'ajouter au projet) ne signale **aucune erreur dans les fichiers de ce lot**. Les 30 erreurs restantes sont antérieures et situées ailleurs (`layouts/pro.vue`, `UniteModal.vue`, `useFetchBlock.ts`…).
+
+### Vérification de bout en bout (Playwright, build de production local → API de production)
+
+| Id | Scénario | Résultat |
+|---|---|---|
+| A1-A2 | Liste : onglets En cours / Terminés, bail incohérent signalé, bail résilié daté | PASS |
+| A3-A5 | « Proposer un bail » pré-rempli ; fin avant début refusée ; création → fiche, préavis de 2 mois enregistré | PASS |
+| A6-A9 | Brouillon modifié (caution > 3 mois → accord exigé) ; « Signer et envoyer » confirmé ; « Attend la signature du locataire » | PASS |
+| B1-B3 | Locataire : `?lease=` ; montants + lien contrat, Signer bloqué sans consentement ; entrée à payer : « Il vous manque 40 000 », bouton bloqué, échéance des 72 h | PASS |
+| C1-C4 | Fiche : « annulable dans 7x h » ; EDL d'entrée avec Séjour + Cuisine pré-remplis (17 éléments), envoi confirmé, signature tracée ; « Chez le locataire » | PASS |
+| D1-D4 | Locataire : EDL ouvert d'office (Abîmé, relevé 04521) ; signé → **deux PNG tracés** (10 190 / 9 022 caractères) ; signature mémorisée sur le profil ; PDF ouvert | PASS |
+| E0 | Compte propriétaire + locataire : chaque espace ne montre que ses baux | PASS |
+| E1-E5 | Entrée payée depuis la page (−8 000) → Actif ; préavis : « 27 décembre 2026 » avant et après confirmation ; relu après rechargement ; annulé | PASS |
+| E6-E8 | Propriétaire : préavis + départ, sortie proposée, « ne se clôt pas seul » ; résiliation : motif exigé, alerte sortie non signée, caution ; motif reçu par le locataire | PASS |
+| F1 | Tableau de bord : la carte ouvre ce bail (`?lease=`) | PASS |
+| G1 | Voyageur : l'état des lieux d'arrivée d'un séjour apparaît et se signe | PASS |
+| Z | Zéro erreur JS | PASS |
+
+Relevé pendant ces tests et corrigé :
+- **Zone de signature hors de la vue** : après « Envoyer », la zone apparaît en haut de la fenêtre alors que l'on est en bas, sur les pièces. La fenêtre remonte désormais sur la zone.
+- **Doublon d'état des lieux** : ouvrir l'éditeur avant le chargement des états des lieux du bail en créait un second côté API (#61). Les boutons attendent maintenant la liste, et l'éditeur relit l'existant avant toute création.
