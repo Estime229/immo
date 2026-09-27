@@ -379,7 +379,7 @@ const TRUST_ITEMS = [
         <p class="mb-0 mt-2 text-[14.5px] text-[var(--text-muted)]">Les logements présentés sur toute la page suivent votre choix.</p>
       </div>
 
-      <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
         <button
           v-for="key in RENTAL_KEYS"
           :key="key"

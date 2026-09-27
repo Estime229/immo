@@ -1,8 +1,10 @@
 <script setup lang="ts">
 /**
  * Feuille qui monte du bas de l'écran — remplace, sur mobile, les menus
- * déroulants accrochés à l'en-tête. Se ferme au voile, à Échap, au ✕, ou en
- * la tirant vers le bas par sa poignée (comme une feuille native iOS/Android).
+ * déroulants accrochés à l'en-tête ; sur tablette (sm+), carte flottante
+ * centrée de 560px plutôt qu'une feuille pleine largeur. Se ferme au voile, à
+ * Échap, au ✕, ou en la tirant vers le bas par sa poignée (comme une feuille
+ * native iOS/Android).
  *
  * Le glissé passe par la propriété CSS `translate`, pas `transform` :
  * l'animation d'entrée (`im-sheet-up`, remplissage `both`) garde la main sur
@@ -54,14 +56,14 @@ onBeforeUnmount(() => {
   <Teleport to="body">
     <div
       v-if="open"
-      class="fixed inset-0 z-[92] flex animate-[im-veil_.22s_ease_both] items-end bg-black/45 backdrop-blur-[2px] lg:hidden"
+      class="fixed inset-0 z-[92] flex animate-[im-veil_.22s_ease_both] items-end bg-black/45 backdrop-blur-[2px] sm:px-4 sm:pb-[calc(1rem+env(safe-area-inset-bottom))] lg:hidden"
       @click="open = false"
     >
       <div
         role="dialog"
         aria-modal="true"
         :aria-label="title"
-        class="flex max-h-[92dvh] w-full animate-[im-sheet-up_.36s_var(--ease-standard)_both] flex-col overflow-hidden rounded-t-[28px] bg-[var(--surface-page)] shadow-overlay"
+        class="mx-auto flex max-h-[92dvh] w-full animate-[im-sheet-up_.36s_var(--ease-standard)_both] flex-col overflow-hidden rounded-t-[28px] bg-[var(--surface-page)] shadow-overlay sm:max-h-[85dvh] sm:max-w-[560px] sm:rounded-[28px]"
         :style="{ translate: `0 ${dragY}px`, transition: dragging ? 'none' : 'translate .25s var(--ease-standard)' }"
         @click.stop
       >
@@ -85,7 +87,7 @@ onBeforeUnmount(() => {
             </button>
           </div>
         </div>
-        <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))]">
+        <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:px-6 sm:pb-6">
           <slot />
         </div>
       </div>
