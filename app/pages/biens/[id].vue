@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { AvailabilityBlock, OwnerProfile, PointOfInterest, PropertySearchResult, ReviewItem, ReviewStats, UnitPricing, UnitSearchResult } from '~/types/property'
+import type { BookingSummary } from '~/types/tenant'
 import { buildCalendarDays } from '~/utils/availabilityCalendar'
 import { quoteStay, rangeHitsBlock, stayLengthError } from '~/utils/stayPricing'
 import { flattenSearchResults } from '~/utils/propertyListing'
@@ -21,6 +22,19 @@ const property = ref<PropertySearchResult | null>(null)
 const pageState = ref<'loading' | 'success' | 'error'>('loading')
 
 const selectedUnit = ref<UnitSearchResult | null>(null)
+/**
+ * Un bien peut avoir plusieurs logements : jusqu'au Lot 49 la fiche montrait
+ * seulement le premier renvoyé par l'API, sans aucun moyen d'atteindre les
+ * autres. Le choix est gardé dans l'URL (`?unit=`) pour être partageable.
+ */
+function pickUnit(u: UnitSearchResult) {
+  if (u.id === selectedUnit.value?.id) return
+  selectedUnit.value = u
+  checkIn.value = null
+  checkOut.value = null
+  bookingDone.value = false
+  navigateTo({ query: { ...route.query, unit: u.id } }, { replace: true })
+}
 
 async function load() {
   pageState.value = 'loading'
@@ -199,13 +213,35 @@ const cautionLabel = computed(() => {
 const bookingLoading = ref(false)
 const bookingError = ref('')
 const bookingDone = ref(false)
+/**
+ * Le paiement s'ouvre tout de suite, sur la fiche même : avant, l'écran disait
+ * « Vous avez 15 minutes pour la payer » et renvoyait vers « Mes réservations ».
+ * La réponse de `POST /bookings` n'a pas l'unité imbriquée : on la complète.
+ */
+const payingBooking = ref<BookingSummary | null>(null)
+const bookingConfirmed = ref(false)
+/** Dates prises entre-temps ou délai dépassé : on repart d'une sélection vierge, calendrier rafraîchi. */
+function onBookingChanged() {
+  bookingDone.value = false
+  payingBooking.value = null
+  checkIn.value = null
+  checkOut.value = null
+  if (selectedUnit.value) loadUnitAvailability(selectedUnit.value.id)
+}
 async function submitBooking() {
   if (!currentUser.value) { navigateTo(`/connexion?redirect=/biens/${propertyId}`); return }
   if (!selectedUnit.value || !checkIn.value || !checkOut.value) return
   bookingLoading.value = true
   bookingError.value = ''
   try {
-    await bookingsApi.create(selectedUnit.value.id, checkIn.value, checkOut.value)
+    const created = await bookingsApi.create(selectedUnit.value.id, checkIn.value, checkOut.value)
+    const u = selectedUnit.value
+    payingBooking.value = {
+      ...created,
+      retained_amount: null,
+      retention_released_at: null,
+      unit: { id: u.id, name: u.name, property_id: propertyId, min_duration_days: u.min_duration_days, booking_retention_percentage: u.booking_retention_percentage ?? null, requires_booking_inventory: u.requires_booking_inventory }
+    } as BookingSummary
     bookingDone.value = true
   } catch (e) {
     bookingError.value = e instanceof ApiRequestError ? errorText(e.mapped, 'La réservation a échoué.') : 'La réservation a échoué.'
@@ -401,6 +437,19 @@ async function onFavoriteSimilar(l: { propertyId: string | null }) {
 
         <div class="lg:sticky lg:top-[94px]">
           <div class="rounded-2xl border border-[var(--border-subtle)] bg-white p-6 shadow-panel">
+            <div v-if="(property?.units.length ?? 0) > 1" class="mb-4">
+              <p class="mb-2 mt-0 text-xs font-black uppercase tracking-[.05em] text-[var(--text-faint)]">{{ property?.units.length }} logements dans ce bien</p>
+              <div class="flex flex-wrap gap-1.5">
+                <button
+                  v-for="u in property?.units ?? []"
+                  :key="u.id"
+                  type="button"
+                  class="rounded-pill border px-3 py-1.5 text-[12.5px] font-semibold"
+                  :class="u.id === selectedUnit.id ? 'border-green-600 bg-green-50 text-green-800' : 'border-[var(--border-default)] bg-white text-[var(--text-secondary)]'"
+                  @click="pickUnit(u)"
+                >{{ u.name }}</button>
+              </div>
+            </div>
             <div class="flex items-baseline gap-2">
               <span class="font-mono text-[28px] font-bold tracking-[-.02em] text-green-900">{{ formatFcfaShort(isShortStay ? nightlyPrice : Number(selectedUnit.price)) }}</span>
               <span class="text-[15px] font-semibold text-[var(--text-muted)]">{{ isShortStay ? '/ nuit' : '/ mois' }}</span>
@@ -408,9 +457,9 @@ async function onFavoriteSimilar(l: { propertyId: string | null }) {
 
             <template v-if="bookingDone">
               <div class="mt-4 rounded-md border border-ok-border bg-ok-bg p-4 text-center">
-                <p class="m-0 text-sm font-bold text-ok-fg">Réservation créée</p>
-                <p class="mb-0 mt-1.5 text-[12.5px] text-ok-fg">Vous avez 15 minutes pour la payer.</p>
-                <NuxtLink to="/locataire/reservations" class="mt-3 inline-block rounded-md bg-[image:var(--action-primary)] px-4 py-2.5 text-[13px] font-bold text-white">Payer maintenant</NuxtLink>
+                <p class="m-0 text-sm font-bold text-ok-fg">{{ bookingConfirmed ? 'Séjour confirmé ✓' : 'Dates gardées 15 minutes' }}</p>
+                <p class="mb-0 mt-1.5 text-[12.5px] text-ok-fg">{{ bookingConfirmed ? 'Retrouvez-le, avec son reçu, dans vos réservations.' : 'Payez pour confirmer — sans paiement, les dates sont libérées.' }}</p>
+                <NuxtLink to="/locataire/reservations" class="mt-3 inline-block rounded-md bg-[image:var(--action-primary)] px-4 py-2.5 text-[13px] font-bold text-white">Mes réservations</NuxtLink>
               </div>
             </template>
             <template v-else-if="isShortStay">
@@ -467,6 +516,8 @@ async function onFavoriteSimilar(l: { propertyId: string | null }) {
           </div>
         </div>
       </div>
+
+      <TenantBookingPayModal v-if="payingBooking" :booking="payingBooking" @close="payingBooking = null" @paid="bookingConfirmed = true; payingBooking = null" @changed="onBookingChanged" />
 
       <TenantVisitRequestModal
         v-if="visitModalOpen && selectedUnit"

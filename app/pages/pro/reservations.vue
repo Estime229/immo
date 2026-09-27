@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import type { PropertySearchResult } from '~/types/property'
-import type { LandlordBookingStatus, LandlordBookingSummary, PromoCodeSummary } from '~/types/landlordBookings'
+import type { LandlordBookingSummary, PromoCodeSummary } from '~/types/landlordBookings'
+import { ApiRequestError } from '~/utils/authenticatedFetcher'
+import { errorText } from '~/utils/apiErrors'
+import { PHASE_LABEL, PHASE_TONE, bookingPhase, hostAmounts, type BookingPhase } from '~/utils/bookings'
 
 definePageMeta({ layout: 'pro' })
 
@@ -17,8 +20,58 @@ onMounted(() => {
   promoList.ensureLoaded()
 })
 
-const STATUS_LABEL: Record<LandlordBookingStatus, string> = { pending_payment: 'Paiement en attente', confirmed: 'Confirmée', cancelled: 'Annulée' }
-const STATUS_TONE: Record<LandlordBookingStatus, 'ok' | 'warn' | 'danger'> = { pending_payment: 'warn', confirmed: 'ok', cancelled: 'danger' }
+/**
+ * Onglets par phase réelle du séjour : l'API ne connaît que 3 statuts, et la
+ * liste mêlait séjours payés, holds de 15 min non payés et holds expirés
+ * (affichés « Annulée » en rouge), triés par date de création.
+ */
+type BookingTab = 'upcoming' | 'hold' | 'past' | 'cancelled'
+const BOOKING_TABS: { key: BookingTab; label: string; phases: BookingPhase[]; empty: string }[] = [
+  { key: 'upcoming', label: 'À venir', phases: ['upcoming', 'ongoing'], empty: 'Aucun séjour payé à venir.' },
+  { key: 'hold', label: 'Paiement en cours', phases: ['hold'], empty: 'Aucune réservation en attente de paiement.' },
+  { key: 'past', label: 'Terminées', phases: ['past'], empty: 'Aucun séjour terminé.' },
+  { key: 'cancelled', label: 'Annulées / expirées', phases: ['cancelled', 'hold_expired'], empty: 'Aucune réservation annulée.' }
+]
+const bookingTab = ref<BookingTab>('upcoming')
+const now = new Date()
+const phaseOf = (b: LandlordBookingSummary) => bookingPhase(b, now)
+const bookingCounts = computed(() => Object.fromEntries(BOOKING_TABS.map(t => [t.key, bookingsBlock.items.value.filter(b => t.phases.includes(phaseOf(b))).length])) as Record<BookingTab, number>)
+const bookingRows = computed(() => {
+  const t = BOOKING_TABS.find(x => x.key === bookingTab.value)
+  return bookingsBlock.items.value
+    .filter(b => t?.phases.includes(phaseOf(b)))
+    .sort((a, b) => {
+      const d = new Date(a.check_in).getTime() - new Date(b.check_in).getTime()
+      return bookingTab.value === 'upcoming' || bookingTab.value === 'hold' ? d : -d
+    })
+})
+const highlighted = ref(String(useRoute().query.booking ?? ''))
+watch(() => bookingsBlock.state.value, st => {
+  if (st !== 'success' && st !== 'empty') return
+  const target = bookingsBlock.items.value.find(b => b.id === highlighted.value)
+  if (target) {
+    bookingTab.value = BOOKING_TABS.find(t => t.phases.includes(phaseOf(target)))?.key ?? 'upcoming'
+    nextTick(() => document.getElementById(`booking-${target.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }))
+  }
+})
+function nightsOf(b: LandlordBookingSummary) {
+  return b.nights ?? Math.round((new Date(b.check_out).getTime() - new Date(b.check_in).getTime()) / 86400000)
+}
+const messagingApi = useMessagingApi()
+const bookingError = ref('')
+const contactingId = ref<string | null>(null)
+async function contactGuest(b: LandlordBookingSummary) {
+  contactingId.value = b.id
+  bookingError.value = ''
+  try {
+    const conv = await messagingApi.createConversation(b.unit_id, b.tenant_id)
+    await navigateTo(`/pro/messages?conversation=${conv.id}`)
+  } catch (e) {
+    bookingError.value = e instanceof ApiRequestError ? errorText(e.mapped, "Impossible d'ouvrir la conversation.") : "Impossible d'ouvrir la conversation."
+  } finally {
+    contactingId.value = null
+  }
+}
 
 function tenantName(b: LandlordBookingSummary) {
   if (!b.tenant) return 'Locataire'
@@ -61,13 +114,15 @@ function rewardLabel(p: PromoCodeSummary) {
 
 /* ---- Activer / désactiver ---- */
 const togglingId = ref<string | null>(null)
+const promoError = ref('')
 async function toggleActive(p: PromoCodeSummary) {
   togglingId.value = p.id
+  promoError.value = ''
   try {
     await usePromoCodesApi().update(p.id, { is_active: !p.is_active })
     await promoList.reload()
-  } catch {
-    // le prochain rechargement de la liste reflétera l'état réel si l'action a échoué côté serveur
+  } catch (e) {
+    promoError.value = e instanceof ApiRequestError ? errorText(e.mapped, 'La modification du code a échoué.') : 'La modification du code a échoué.'
   } finally {
     togglingId.value = null
   }
@@ -93,13 +148,46 @@ async function toggleActive(p: PromoCodeSummary) {
         Aucune réservation courte durée reçue pour l'instant.
       </p>
       <template v-else>
-        <div v-for="b in bookingsBlock.items.value" :key="b.id" class="mb-3.5 rounded-2xl border border-[var(--border-subtle)] bg-white p-5">
-          <div class="flex items-center gap-2.5">
-            <p class="m-0 text-[15.5px] font-bold">{{ tenantName(b) }}</p>
-            <CoreBadge :tone="STATUS_TONE[b.status]">{{ STATUS_LABEL[b.status] }}</CoreBadge>
+        <div class="mb-4 flex flex-wrap gap-1.5">
+          <button
+            v-for="t in BOOKING_TABS"
+            :key="t.key"
+            type="button"
+            class="rounded-pill border px-3.5 py-2 text-[12.5px] font-bold"
+            :class="bookingTab === t.key ? 'border-green-900 bg-green-900 text-white' : 'border-[var(--border-default)] bg-white text-[var(--text-secondary)]'"
+            @click="bookingTab = t.key"
+          >{{ t.label }}<span v-if="bookingCounts[t.key] && t.key !== 'cancelled'" class="ml-1.5">({{ bookingCounts[t.key] }})</span></button>
+        </div>
+        <p v-if="bookingError" class="mb-3.5 rounded-md border border-danger-border bg-danger-bg px-3.5 py-2.5 text-[13px] font-semibold text-danger-fg">{{ bookingError }}</p>
+        <p v-if="!bookingRows.length" class="rounded-md border border-dashed border-[var(--border-default)] bg-white px-4 py-10 text-center text-[13.5px] text-[var(--text-muted)]">{{ BOOKING_TABS.find(t => t.key === bookingTab)?.empty }}</p>
+        <div
+          v-for="b in bookingRows"
+          :id="`booking-${b.id}`"
+          :key="b.id"
+          class="mb-3.5 rounded-2xl border bg-white p-5"
+          :class="highlighted === b.id ? 'border-green-600 shadow-raised' : 'border-[var(--border-subtle)]'"
+        >
+          <div class="flex flex-wrap items-start gap-3">
+            <div class="min-w-0 flex-1">
+              <div class="flex flex-wrap items-center gap-2.5">
+                <p class="m-0 text-[15.5px] font-bold">{{ b.unit?.name ?? 'Logement supprimé' }}</p>
+                <CoreBadge :tone="PHASE_TONE[phaseOf(b)]">{{ PHASE_LABEL[phaseOf(b)] }}</CoreBadge>
+                <CoreBadge v-if="b.extended_from_booking_id" tone="neutral">Prolongation</CoreBadge>
+              </div>
+              <p class="mb-0 mt-1 text-[13px] text-[var(--text-secondary)]">{{ tenantName(b) }} · {{ fmtDate(b.check_in) }} → {{ fmtDate(b.check_out) }} · {{ nightsOf(b) }} nuit{{ nightsOf(b) > 1 ? 's' : '' }}</p>
+            </div>
+            <CoreButton v-if="phaseOf(b) !== 'cancelled' && phaseOf(b) !== 'hold_expired' && phaseOf(b) !== 'past'" size="sm" tone="ghost" :disabled="contactingId === b.id" @click="contactGuest(b)">Écrire au voyageur</CoreButton>
           </div>
-          <p class="mb-0 mt-1 text-[13px] text-[var(--text-muted)]">{{ fmtDate(b.check_in) }} → {{ fmtDate(b.check_out) }}</p>
-          <p class="mb-0 mt-2.5 text-[14px] font-bold text-green-800">{{ fmtFcfa(b.total_price) }}</p>
+          <div v-if="b.status === 'confirmed'" class="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <div class="rounded-md bg-[var(--surface-page)] px-3 py-2"><p class="m-0 text-[11px] font-bold uppercase text-[var(--text-faint)]">Payé</p><p class="m-0 font-mono text-[14px] font-bold">{{ formatFcfaShort(hostAmounts(b).paid) }}</p></div>
+            <div v-if="Number(b.discount_amount ?? 0) > 0" class="rounded-md bg-[var(--surface-page)] px-3 py-2"><p class="m-0 text-[11px] font-bold uppercase text-[var(--text-faint)]">Réduction</p><p class="m-0 font-mono text-[14px] font-bold">−{{ formatFcfaShort(Number(b.discount_amount)) }}</p></div>
+            <div class="rounded-md bg-ok-bg px-3 py-2"><p class="m-0 text-[11px] font-bold uppercase text-ok-fg">Reçu</p><p class="m-0 font-mono text-[14px] font-bold text-green-900">{{ formatFcfaShort(hostAmounts(b).received) }}</p></div>
+            <div v-if="hostAmounts(b).retained > 0" class="rounded-md bg-[var(--surface-escrow)] px-3 py-2"><p class="m-0 text-[11px] font-bold uppercase text-clay-900">{{ hostAmounts(b).released ? 'Retenue versée' : 'Retenu jusqu\'au départ' }}</p><p class="m-0 font-mono text-[14px] font-bold text-clay-900">{{ formatFcfaShort(hostAmounts(b).retained) }}</p></div>
+          </div>
+          <p v-else class="mb-0 mt-2 font-mono text-[14px] font-bold text-[var(--text-muted)]">{{ fmtFcfa(b.total_price) }}<span v-if="phaseOf(b) === 'hold'" class="ml-2 font-body text-[12px] font-semibold">— le voyageur a 15 min pour payer, rien n'est encore bloqué.</span></p>
+          <p v-if="b.status === 'confirmed' && b.unit?.requires_booking_inventory && !b.retention_released_at" class="mb-0 mt-3 rounded-md bg-warn-bg px-3.5 py-2.5 text-[12.5px] text-warn-fg">
+            État des lieux exigé pour ce logement : la retenue n'est versée qu'une fois l'état des lieux d'arrivée fait. <NuxtLink to="/pro/edl" class="font-bold underline">Faire l'état des lieux</NuxtLink>
+          </p>
         </div>
       </template>
     </template>
@@ -109,6 +197,7 @@ async function toggleActive(p: PromoCodeSummary) {
         <CoreButton size="sm" @click="modal = 'promo'">+ Créer un code</CoreButton>
       </div>
 
+      <p v-if="promoError" class="mb-3 rounded-md border border-danger-border bg-danger-bg px-3.5 py-2.5 text-[13px] font-semibold text-danger-fg">{{ promoError }}</p>
       <div v-if="promoList.state.value === 'loading'" class="flex flex-col gap-3">
         <DataSkeletonCard v-for="i in 2" :key="i" :height="60" :lines="1" />
       </div>

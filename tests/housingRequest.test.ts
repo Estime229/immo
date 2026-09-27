@@ -49,6 +49,10 @@ describe('notificationTarget', () => {
     expect(notificationTarget({ metadata: null })).toBeNull()
     expect(notificationTarget({})).toBeNull()
   })
+  it('réservation : vers la page réservations de l\'espace courant', () => {
+    expect(notificationTarget({ metadata: { bookingId: 'b-1', amount: '30000.00' } }, 'pro')).toBe('/pro/reservations?booking=b-1')
+    expect(notificationTarget({ metadata: { bookingId: 'b-1' } })).toBe('/locataire/reservations?booking=b-1')
+  })
   it('visite : vers la page visites de l\'espace courant', () => {
     expect(notificationTarget({ metadata: { visitId: 'v-1' } }, 'pro')).toBe('/pro/visites?visit=v-1')
     expect(notificationTarget({ metadata: { visitId: 'v-1' } })).toBe('/locataire/visites?visit=v-1')

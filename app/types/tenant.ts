@@ -119,7 +119,12 @@ export interface BookingSummary {
   extended_from_booking_id: string | null
   retained_amount: string | null
   retention_released_at: string | null
-  unit: { id: string; name: string }
+  discount_amount?: string | null
+  reward_amount?: string | null
+  landlord_id?: string
+  currency?: string
+  /** Unité complète jointe par `GET /bookings/mine` (vérifié en live) — `null` si le logement a été supprimé. */
+  unit: null | { id: string; name: string; property_id?: string | null; min_duration_days?: number | null; booking_retention_percentage?: number | string | null; requires_booking_inventory?: boolean }
 }
 
 /** Réponse de POST /bookings, POST /bookings/:id/extend, PATCH /bookings/:id/cancel — pas de `unit` imbriqué, contrairement à la liste. */

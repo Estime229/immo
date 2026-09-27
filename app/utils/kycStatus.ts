@@ -22,7 +22,8 @@ export interface VerificationNotice {
 
 /** Actions réellement bloquées sans KYC — 403 `KYC_REQUIRED` constatés en direct (visites, création de bien) et règle affichée sur /kyc. */
 const BLOCKED_ACTIONS: Record<VerificationSpace, string> = {
-  locataire: 'réserver un logement, demander une visite ni retirer de l\'argent',
+  // Réserver un séjour n'exige PAS de vérification côté API (constaté en live, Lot 49) — seules les visites (403 KYC_REQUIRED) et les retraits.
+  locataire: 'demander une visite ni retirer de l\'argent',
   pro: 'publier un bien ni retirer de l\'argent',
   artisan: 'retirer vos gains'
 }

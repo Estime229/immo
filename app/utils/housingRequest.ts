@@ -76,6 +76,8 @@ export function notificationTarget(n: { metadata?: Record<string, unknown> | nul
   const m = n.metadata ?? {}
   if (typeof m.housing_request_id === 'string') return `/locataire/demandes?request=${m.housing_request_id}`
   if (typeof m.visitId === 'string') return `/${space}/visites?visit=${m.visitId}`
+  // Réservation payée, récompense de parrainage… (Lot 49, `bookingId` en camelCase lui aussi).
+  if (typeof m.bookingId === 'string') return `/${space}/reservations?booking=${m.bookingId}`
   return null
 }
 

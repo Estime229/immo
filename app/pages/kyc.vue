@@ -290,7 +290,7 @@ function goSpace() {
       <span class="text-[12.5px] font-bold text-green-800">Parcours adapté à votre {{ ROLE_LABEL[role] }}</span>
     </div>
     <p class="mb-0 mt-2.5 max-w-[640px] text-[15px] text-[var(--text-muted)]">
-      Tant que la vérification n'est pas complète, vous pouvez consulter les annonces mais pas réserver, publier un bien ni retirer d'argent.
+      Tant que la vérification n'est pas complète, vous pouvez consulter les annonces et réserver un séjour, mais pas demander de visite, publier un bien ni retirer d'argent.
     </p>
 
     <div class="mt-[22px] flex items-center gap-3.5 rounded-xl border px-5 py-4" :class="BANNER_TONE[kycStatusBanner.tone]">

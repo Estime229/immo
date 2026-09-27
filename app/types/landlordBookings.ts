@@ -12,15 +12,25 @@
 export type LandlordBookingStatus = 'pending_payment' | 'confirmed' | 'cancelled'
 
 /** `tenant` n'a que `first_name` dans l'exemple Swagger — pas de nom de famille garanti. */
+/** Forme réelle de `GET /bookings/landlord` (vérifiée en live, Lot 49) — l'écran n'en affichait que 4 champs. */
 export interface LandlordBookingSummary {
   id: string
   unit_id: string
   tenant_id: string
   check_in: string
   check_out: string
+  nights?: number
   total_price: string
   status: LandlordBookingStatus
+  expires_at?: string | null
+  extended_from_booking_id?: string | null
+  discount_amount?: string | null
+  reward_amount?: string | null
+  retained_amount?: string | null
+  retention_released_at?: string | null
+  promo_code_id?: string | null
   tenant?: { id: string; first_name?: string | null; last_name?: string | null }
+  unit?: { id: string; name: string; property_id?: string | null; requires_booking_inventory?: boolean } | null
 }
 
 export type PromoDiscountType = 'percentage' | 'fixed'
