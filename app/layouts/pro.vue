@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import type { MobileTab } from '~/utils/mobileNav'
+
 const route = useRoute()
 const currentUser = useAuthUser()
 const displayName = computed(() => {
@@ -46,6 +48,25 @@ function liveCount(key: string) {
 const drawerOpen = ref(false)
 
 watch(() => route.path, () => { drawerOpen.value = false })
+
+/** Barre d'onglets mobile — même principe que l'espace locataire (quatre raccourcis + « Menu »). */
+const MOBILE_SHORTCUTS = [
+  { key: 'apercu', label: 'Aperçu', icon: 'grid' },
+  { key: 'biens', label: 'Biens', icon: 'building' },
+  { key: 'demandes', label: 'Demandes', icon: 'inbox' },
+  { key: 'messages', label: 'Messages', icon: 'message' }
+] as const
+const mobileTabs = computed<MobileTab[]>(() => {
+  const items = NAV_GROUPS.flatMap<{ key: string; to: string }>(g => g.items)
+  const tabs: MobileTab[] = MOBILE_SHORTCUTS.map(t => ({
+    ...t,
+    to: items.find(n => n.key === t.key)!.to,
+    active: !drawerOpen.value && currentKey.value === t.key,
+    badge: liveCount(t.key)
+  }))
+  tabs.push({ key: 'menu', label: 'Menu', icon: 'menu', active: drawerOpen.value || !tabs.some(t => t.active) })
+  return tabs
+})
 </script>
 
 <template>
@@ -86,9 +107,9 @@ watch(() => route.path, () => { drawerOpen.value = false })
     </aside>
 
     <main class="min-w-0">
+      <LayoutAppDownloadBanner />
       <header class="sticky top-0 z-20 flex h-[70px] items-center justify-between gap-3 border-b border-[var(--border-subtle)] bg-[rgba(250,248,244,.9)] px-4 backdrop-blur-[12px] sm:px-8">
         <div class="flex min-w-0 items-center gap-3.5">
-          <button type="button" class="grid h-9 w-9 flex-none place-items-center rounded-pill border border-[var(--border-default)] bg-white text-base lg:hidden" @click="drawerOpen = true">☰</button>
           <h1 class="m-0 truncate font-display text-[19px] font-bold tracking-[-.025em] sm:text-[22px]">{{ pageTitle }}</h1>
         </div>
         <div class="flex flex-none items-center gap-3">
@@ -97,10 +118,12 @@ watch(() => route.path, () => { drawerOpen.value = false })
         </div>
       </header>
 
-      <div class="max-w-[1120px] px-4 pb-[60px] pt-7 sm:px-8">
+      <div class="max-w-[1120px] px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] pt-7 sm:px-8 lg:pb-[60px]">
         <slot />
       </div>
     </main>
+
+    <LayoutMobileTabBar :items="mobileTabs" @select="drawerOpen = !drawerOpen" />
 
     <ProRetraitModal />
     <ProInviteModal />

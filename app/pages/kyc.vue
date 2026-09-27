@@ -298,12 +298,12 @@ function goSpace() {
       <p class="m-0 text-[14.5px] font-semibold">{{ kycStatusBanner.text }}</p>
     </div>
 
-    <div class="my-[18px] flex w-fit gap-[5px] rounded-pill bg-sand-200 p-1">
+    <div class="my-[18px] flex w-full gap-[5px] rounded-pill bg-sand-200 p-1 sm:w-fit">
       <button
         v-for="tab in KYC_TABS"
         :key="tab.key"
         type="button"
-        class="rounded-pill px-5 py-2.5 text-[13.5px] font-bold transition-all"
+        class="flex-1 whitespace-nowrap rounded-pill px-3 py-2.5 text-[13.5px] font-bold transition-all sm:flex-none sm:px-5"
         :class="kycTab === tab.key ? 'bg-white text-green-900 shadow-card' : 'bg-transparent text-[var(--text-secondary)]'"
         @click="kycTab = tab.key"
       >{{ tab.label }}</button>

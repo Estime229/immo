@@ -18,7 +18,13 @@ export default defineNuxtConfig({
     apiBase: 'https://immo-b89b.onrender.com/v1/api',
     public: {
       // Chemin relatif appelé par le navigateur — même origine, donc pas de CORS.
-      apiProxyBase: '/api/proxy'
+      apiProxyBase: '/api/proxy',
+      // Liens des applications mobiles, affichés par la bannière « Téléchargez
+      // l'application » (LayoutAppDownloadBanner). Vides tant que les apps ne
+      // sont pas publiées : la bannière affiche alors « Bientôt » sans lien.
+      // Surchargeables via NUXT_PUBLIC_APP_STORE_URL / NUXT_PUBLIC_PLAY_STORE_URL.
+      appStoreUrl: '',
+      playStoreUrl: ''
     }
   },
   vite: {
