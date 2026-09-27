@@ -3166,3 +3166,85 @@ Test Files  20 passed (20)
 **21/21 PASS** en production (et en local avant déploiement).
 
 Données de test : demandes `Lot47 …` fermées, bien `Lot47 demandes …` supprimé.
+
+---
+
+## Lot 48 — Visites : la bonne date partout, des succès affichés comme tels, un vrai parcours propriétaire
+
+Demande : « parcourir et tester le flow Visites avec les espaces et tout ce qui va avec, en consultant l'API : divergences, manques, écrans à ajouter, incohérences, messages d'erreur ». Backend relu : `visit.controller.ts`, `visit.service.ts`, `visit.model.ts`. Rejoué en live avec le locataire vérifié `tenant-visit-test-1790021098@example.com`, le locataire non vérifié `qa-lot46-tenant-*` et le propriétaire vérifié de test.
+
+### Comportement réel de l'API (vérifié en live)
+
+| Action | Réponse HTTP | Effet réel |
+|---|---|---|
+| Demande par un locataire non vérifié | 403 `error.KYC_REQUIRED` | — |
+| Date passée | 400 « …doit etre dans le futur. » | — |
+| `unit_id` invalide | **500** | — |
+| Demande valide | **500** | **visite créée** |
+| Doublon (visite en attente sur le même logement) | 400 « Vous avez deja une visite en attente… » | — |
+| Confirmer (même à une date de **2025**) | **500** | **confirmée**, à la date passée |
+| Refuser avec motif | **500** | **refusée**, motif enregistré |
+| Annuler (locataire ou propriétaire, même une visite déjà refusée) | **500** | **annulée** |
+| Replanifier dans le passé / dans le futur | 400 / **200** | seule action qui ne plante pas (son email est entouré d'un `.catch`) |
+| Marquer « réalisée » 8 jours avant la date | 200 | réalisée |
+| Le propriétaire demande à visiter son propre logement | 500 | créée |
+| Liste locataire | — | pas de propriétaire (seul `GET /visits/:id` l'a) |
+| Après suppression du bien | — | visites toujours listées, `unit: null` |
+
+**Cause des 500** : `visit.service.ts` attend l'envoi d'un email après l'enregistrement, sans `catch` ; l'email ne part pas en production (BACKEND-ISSUES #1, #11).
+
+### Constats côté écrans
+
+| # | Espace | Constat |
+|---|---|---|
+| G1 | Les deux | **Date affichée = date demandée**, jamais l'horaire confirmé ou replanifié : après une replanification, le locataire voyait l'ancien jour. |
+| G2 | Les deux | Chaque 500 s'affichait comme un échec alors que l'action avait eu lieu → nouvelle tentative → « déjà une visite en attente ». |
+| G3 | Locataire | Motif de refus jamais affiché ; « Annulée » sans savoir par qui ; demande restée sans réponse et dépassée toujours « À venir » ; tri du plus lointain au plus proche ; annulation sans confirmation ; aucun lien vers l'annonce ni moyen de joindre le propriétaire. |
+| G4 | Locataire (demande) | Heure libre (3 h du matin possible), pas de limite au message, erreur KYC découverte après avoir tout rempli — et le message KYC parlait de « publier un bien ». |
+| G5 | Propriétaire | Liste unique sans priorité ; confirmer seulement au créneau demandé (l'API accepte un autre horaire) ; refus sans motif ni confirmation ; pas d'annulation ; « Marquer réalisée » avant la visite ; aucun moyen d'écrire au candidat ; messages d'erreur sans accents affichés tels quels. |
+| G6 | Menu Pro | Aucun compteur des demandes de visite à traiter. |
+| G7 | Les deux | Un message de 5 000 caractères sans espace étirait la page à **33 000 px** de large. |
+| G8 | Plusieurs pages | Un logement supprimé renvoie `unit: null` : « Mes visites » et « Visites » plantaient (`unit.name`), des réservations ne s'affichaient plus. |
+
+### Ce qui a été livré
+
+| Fichier | Rôle |
+|---|---|
+| `app/utils/visits.ts` | **Nouveau** — `visitDate`/`visitMoved` (l'horaire du propriétaire fait foi), `visitBucket` (à traiter / à venir / à clôturer / historique), `visitExpired`, `canComplete`, créneaux 7 h–20 h, `validateVisitSlot` (≥ 2 h à l'avance), statuts attendus par action |
+| `app/composables/useVisitsApi.ts` | Sur un 500, relit l'état réel (visite ou liste) avant de conclure à un échec ; `role` toujours envoyé ; `fetchOne` |
+| `app/components/tenant/VisitRequestModal.vue` | Vérification d'identité expliquée d'emblée ; créneaux ; message ≤ 500 ; doublon → lien « Voir mes visites » ; récapitulatif du créneau |
+| `app/pages/locataire/visites.vue` | Date effective + « Nouvel horaire fixé par le propriétaire » ; « Restée sans réponse » ; motif de refus ; « Annulée par vous / par le propriétaire » ; tri par proximité ; annulation confirmée ; « Écrire au propriétaire » ; « Voir l'annonce » ; lien profond `?visit=` |
+| `app/pages/pro/visites.vue` | Réécrit : onglets À traiter / À venir / À clôturer / Historique ; confirmer le créneau ou un autre horaire ; refus avec motifs suggérés ; replanifier ; annuler (confirmé) ; « Marquer réalisée » seulement après la date ; « Écrire » ; « Demandée pour le … » |
+| `app/layouts/pro.vue` | Badge « Visites » = demandes à traiter |
+| `app/utils/housingRequest.ts`, `NotificationBell.vue` | Les notifications de visite (`metadata.visitId`) ouvrent la visite dans l'espace courant |
+| `app/utils/apiErrors.ts` | Messages du module visites réécrits en bon français ; message KYC neutre (« publier un bien, demander une visite… ») |
+| Pages visites et demandes | Texte saisi par l'utilisateur coupé proprement (plus de débordement) |
+| `pro/documents.vue`, `pro/baux/index.vue`, `pro/edl.vue`, `locataire/reservations.vue`, `BookingPayModal.vue`, `BookingExtendModal.vue` | Même protection contre `unit: null` |
+
+### Tests automatisés
+
+```
+Test Files  21 passed (21)
+     Tests  165 passed (165)   [+11 : tests/visits.test.ts, notifications de visite]
+```
+
+### Vérification de bout en bout (Playwright, production im-hazel.vercel.app → API de production)
+
+| Id | Scénario | Résultat |
+|---|---|---|
+| W1 | Créneau à moins de 2 h refusé ; créneaux 7 h–20 h ; demande « envoyée » alors que l'API répond 500, et bien enregistrée | PASS |
+| W2 | Doublon : message clair + « Voir mes visites » | PASS |
+| W3-W4 | « Mes visites » : en attente, lien annonce ; locataire non vérifié prévenu avant de remplir | PASS |
+| P1 | Badge « Visites 1 » ; onglet « À traiter » ouvert sur la demande | PASS |
+| P2 | « Autre horaire » à 16 h (500 → état relu) ; rangée dans « À venir » avec « Demandée pour le … » | PASS |
+| W5 | Le locataire voit le nouvel horaire et l'explication, plus l'ancienne date | PASS |
+| P3-P4 | Replanifiée à 11 h ; annulée par le propriétaire (500 → état relu) | PASS |
+| P5 | Refus avec motif suggéré (500 → état relu) ; historique « Refusée · Motif… », « Annulée par vous » | PASS |
+| T1-T2 | Annulation par le locataire confirmée, sans faux message d'erreur ; « Passées » : motif, « Annulée par le propriétaire » | PASS |
+| P6, T3 | Aucun débordement horizontal (visite de test avec un message de 5 000 caractères) | PASS |
+| Z1 | Notification « Visite refusée » → la visite, mise en évidence | PASS |
+| Z0 | Zéro erreur JS | PASS |
+
+**20/20 PASS** en production. Après suppression du bien de test : « Mes visites » (13 visites) et « Visites » (14) s'affichent avec « Logement retiré de la plateforme », zéro erreur JS ; les 2 réservations orphelines d'un locataire de test s'affichent de nouveau.
+
+Données de test : bien `Lot48 visites …` supprimé (ses visites restent, orphelines, côté API — BACKEND-ISSUES #46).

@@ -22,7 +22,7 @@ Mis à jour le 26/09/2026. Statut : **ouvert** sauf mention contraire.
 | 8 | 🟠 | `finalize` ne valide pas IFU/RCCM, écritures partielles | `POST /onboarding/finalize` | 44 |
 | 9 | 🟠 | `finalize` écrase les rôles existants | `POST /onboarding/finalize` | 44 |
 | 10 | 🟠 | Équipements enregistrés mais jamais renvoyés au public | `GET /property/:id`, `GET /property/search` | 45 |
-| 11 | 🟠 | Écritures réussies malgré une réponse 500 | `POST /visits`, `PATCH /visits/:id/cancel` | 40 |
+| 11 | 🔴 | Écritures réussies malgré une réponse 500 (cause trouvée : email envoyé après l'enregistrement) | `POST /visits`, `PATCH /visits/:id/confirm` · `reject` · `cancel` | 40, 48 |
 | 12 | 🟠 | Premier paiement en échec si le wallet n'a jamais été lu | `POST /payment/verify-return` | 40 |
 | 13 | 🟠 | Pas de filtre « à la nuit / au mois » dans la recherche | `GET /property/search` | 41, 42 |
 | 14 | 🟠 | Aucun endpoint pour enregistrer le téléphone après l'OTP | `/onboarding/draft`, `/user/update` | 44 |
@@ -51,6 +51,13 @@ Mis à jour le 26/09/2026. Statut : **ouvert** sauf mention contraire.
 | 37 | 🟡 | Budget min > max et date d'emménagement passée acceptés | `POST /housing-requests` | 47 |
 | 38 | 🟡 | Identifiant non-UUID → erreur 500 | `/housing-requests/:id/*` | 47 |
 | 39 | 🟡 | Aucun propriétaire n'est prévenu d'une nouvelle demande qui correspond à ses biens | notifications | 47 |
+| 40 | 🟠 | Confirmation d'une visite à une date passée acceptée | `PATCH /visits/:id/confirm` | 48 |
+| 41 | 🟠 | Une visite peut être marquée « réalisée » avant d'avoir eu lieu ; les demandes n'expirent jamais | `PATCH /visits/:id/complete` | 48 |
+| 42 | 🟠 | Logement sans bien parent : personne ne peut traiter la visite | `POST /visits` | 48 |
+| 43 | 🟡 | Aucune validation du corps de `POST /visits` | `POST /visits` | 48 |
+| 44 | 🟡 | Un propriétaire peut demander à visiter son propre logement ; statut du logement ignoré | `POST /visits` | 48 |
+| 45 | 🟡 | Incohérences diverses du module visites | `visit` | 48 |
+| 46 | 🟠 | Supprimer un bien laisse ses visites et réservations orphelines (`unit: null`) | `DELETE /property/:id` | 48 |
 
 ---
 
@@ -133,9 +140,13 @@ La recherche (`search-properties.handler.ts`) montre tout bien non suspendu ayan
 - **Impact** : les locataires ne voient jamais la clim, le wifi, le groupe électrogène…
 - **Attendu** : inclure `resolved_features` (code + libellés) dans la fiche publique et la recherche.
 
-### 11. Écritures réussies malgré une réponse 500
+### 11. 🔴 Écritures réussies malgré une réponse 500 — cause trouvée (Lot 48)
 
-`POST /visits` et `PATCH /visits/:id/cancel` renvoient parfois une 500 alors que l'écriture a bien eu lieu. L'utilisateur réessaie et tombe sur l'anti-doublon. Attendu : la réponse doit refléter le succès réel.
+- **Routes concernées** : `POST /visits`, `PATCH /visits/:id/confirm`, `…/reject` et `…/cancel` répondent **systématiquement 500** en production, alors que l'action est enregistrée.
+- **Rejoué le 27/09** : création, confirmation, refus et annulation par le locataire et par le propriétaire, avec relecture de l'état à chaque fois.
+- **Cause** (`visit.service.ts`) : chaque méthode enregistre la visite, notifie, puis fait `await this.emailService.send(...)` **sans `catch`**. L'envoi d'email échouant en production (voir #1), l'exception remonte après l'enregistrement. Seule `reschedule` a un `.catch(() => {})` sur l'email, et c'est la seule qui répond 200.
+- **Impact** : l'utilisateur voit une erreur, réessaie, et tombe sur « Vous avez deja une visite en attente ». Le frontend relit désormais l'état réel après un 500, mais c'est un contournement.
+- **Attendu** : ne jamais faire échouer la requête sur un email. Ajouter `.catch` et journaliser, ou mieux, passer l'envoi en file d'attente après la transaction. Probablement le même motif dans d'autres modules qui envoient des emails.
 
 ### 12. Premier paiement d'un compte neuf en échec
 
@@ -304,4 +315,60 @@ L'API renvoie une 400 explicite : l'annulation avec remboursement partiel n'est 
 ### 39. 🟡 Aucun propriétaire n'est prévenu d'une nouvelle demande
 
 La place de marché repose entièrement sur des propriétaires qui viennent consulter la liste. Attendu : notifier les propriétaires dont un logement libre correspond (ville, fréquence, budget) quand une demande est publiée.
+
+---
+
+## Ajouts du Lot 48 — Visites
+
+### 40. 🟠 Confirmation d'une visite à une date passée acceptée
+
+- **Rejoué** : `PATCH /visits/:id/confirm { "confirmed_at": "2025-02-02T10:00:00Z" }` → visite `confirmed` au 2 février **2025**.
+- `reschedule` refuse pourtant une date passée (« La date doit etre valide et dans le futur. »).
+- **Attendu** : même contrôle sur `confirm`.
+
+### 41. 🟠 Visite « réalisée » avant d'avoir eu lieu ; demandes jamais expirées
+
+- `PATCH /visits/:id/complete` sur une visite confirmée **8 jours plus tard** → 200 `completed`.
+- Une visite `pending` dont la date est passée reste `pending` indéfiniment. Il n'y a pas non plus de statut « candidat absent ».
+- **Attendu** :
+  - `complete` seulement une fois `confirmed_at` passé ;
+  - expiration automatique des demandes dépassées ;
+  - éventuellement un statut `no_show`.
+
+### 42. 🟠 Logement sans bien parent : personne ne peut traiter la visite
+
+- `create` calcule `landlord_id = unit.property?.owner_id ?? null` et ignore `unit.owner_id` des unités autonomes (sans `property_id`).
+- La visite est alors créée sans propriétaire : elle n'apparaît chez personne, et personne ne peut la confirmer.
+- Constaté dans le code, pas rejoué (pas d'unité autonome de test).
+- **Attendu** : `unit.property?.owner_id ?? unit.owner_id`.
+
+### 43. 🟡 Aucune validation du corps de `POST /visits`
+
+- Le corps est typé en objet brut, sans DTO : aucune règle `class-validator` ne s'applique.
+- `unit_id: "abc"` → **500**.
+- Une note de 5 000 caractères est acceptée.
+- 3 h du matin est accepté comme horaire de visite.
+- **Attendu** : DTO avec `@IsUUID`, `@MaxLength` sur la note, et éventuellement une plage horaire.
+
+### 44. 🟡 Un propriétaire peut demander à visiter son propre logement ; statut ignoré
+
+- Aucune vérification de rôle ni de propriété à la création : le propriétaire de test a pu demander une visite de son propre logement.
+- Le statut du logement (occupé, suspendu) n'est pas contrôlé non plus.
+
+### 45. 🟡 Incohérences diverses du module visites
+
+- **Messages sans accents** (« deja », « etre », « confirmee », « Acces interdit ») ; le frontend les corrige un par un.
+- **Informations manquantes** : la liste `GET /visits` ne contient pas le propriétaire (seul le détail l'a), donc le locataire ne voit pas qui confirme.
+- **Transition incohérente** : une visite **refusée** peut encore être « annulée » (200 → `cancelled`).
+- **Métadonnées** des notifications en camelCase (`visitId`), alors que le reste de l'API est en snake_case (`housing_request_id`).
+- **Délégation impossible** : seul `landlord_id` peut agir, un membre d'équipe ne peut pas gérer les visites.
+- **Paramètre implicite** : sans `?role=`, `GET /visits` prend le rôle actif du compte (documenté comme « tenant par défaut »).
+
+### 46. 🟠 Supprimer un bien laisse ses visites et réservations orphelines
+
+- **Rejoué** : après `DELETE /property/:id`, les 13 visites du bien restent dans `GET /visits` des deux parties avec `unit: null`, y compris celles encore `pending` ou `confirmed`.
+- Les réservations (`GET /bookings/mine`) du bien supprimé au Lot 46 reviennent aussi avec `unit: null`.
+- Le locataire n'est ni prévenu ni libéré : une visite confirmée reste « à venir » pour un logement qui n'existe plus.
+- **Côté frontend**, ces pages plantaient (`unit.name` sur `null`) ; elles sont désormais protégées (Lot 48).
+- **Attendu** : à la suppression d'un bien ou d'une unité, annuler et notifier les visites en attente ou confirmées ainsi que les réservations à venir. Refuser la suppression s'il existe un bail actif (voir #5).
 
