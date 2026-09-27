@@ -3459,3 +3459,15 @@ Vérification de types : `vue-tsc` (lancé via `npx`, sans l'ajouter au projet) 
 Relevé pendant ces tests et corrigé :
 - **Zone de signature hors de la vue** : après « Envoyer », la zone apparaît en haut de la fenêtre alors que l'on est en bas, sur les pièces. La fenêtre remonte désormais sur la zone.
 - **Doublon d'état des lieux** : ouvrir l'éditeur avant le chargement des états des lieux du bail en créait un second côté API (#61). Les boutons attendent maintenant la liste, et l'éditeur relit l'existant avant toute création.
+
+En **production** (im-hazel.vercel.app, déploiement `im-4ddyjj0jm`), le scénario complet A1 à Z a été rejoué, plus E0/E0b (filtre par côté), F1 et G1-G2 : **35/35 PASS**. Le paiement d'entrée E1 a été fait avec une caution de 2 000, le solde restant du compte de test.
+
+Données de test :
+- **Bien** « Lot50 baux … » du propriétaire `qa-landlord-1790282977@example.com`, conservé : douze logements, baux dans toutes les phases.
+- **Bail bloqué** `52cc38b3-…` : bail re-signé, laissé dans l'état incohérent #55 pour que le backend puisse le constater.
+- **Tirelire** du propriétaire de test `pro-landlord-test-…` (utilisé comme locataire) : passée de 30 000 à 0 F. Les cautions sont restées en séquestre, faute de restitution (#57).
+- **Brouillons à nettoyer** : plusieurs brouillons et un état des lieux en double restent sur ce bien, faute de route de suppression (#58, #61).
+
+Reste à faire, hors de ce lot :
+- **Candidatures** : le module `rental/requests` n'est pas branché côté front. L'API permet au locataire de postuler sur un logement ; en acceptant, le propriétaire crée automatiquement le brouillon de bail, avec la caution et l'avance du logement. C'est le chemin naturel « visite → candidature → bail ».
+- **Photos d'état des lieux** : aucune route d'envoi n'existe côté API (seulement le téléchargement par index).
