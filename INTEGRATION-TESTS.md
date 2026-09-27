@@ -3721,3 +3721,10 @@ Test Files  26 passed (26)
 Relevé et corrigé pendant les tests : un membre qui a un nom n'était affiché que par son nom. Son e-mail s'affiche désormais aussi, pour savoir qui a été invité.
 
 Non testable de bout en bout : l'**acceptation** d'une invitation d'équipe. L'API ne rend jamais le jeton (#4) et n'a pas de route pour un compte existant (#74). La page `/invite/:token` et le cas « 201 avec jeton » de la fenêtre sont prêts pour le jour où ce sera corrigé.
+
+En **production** (im-hazel.vercel.app, déploiement `im-d8f49763j`), le scénario complet T1 à Z a été rejoué : **21/21 PASS**.
+
+Données de test :
+- **Équipe** « Agence QA Lot53 » du propriétaire `qa-landlord-1790282977@example.com` : quatre invitations « pending » vers des adresses neuves, impossibles à annuler (#75). Elles expirent au bout de 7 jours.
+- **Agent** `qa-agent-1790550087@example.com` (rôles propriétaire + agent) : plusieurs mandats terminés, aucun actif.
+- **Compte orphelin** : `qa-agent-…` créé lors d'une première tentative interrompue, sans nom ni rôle agent.
