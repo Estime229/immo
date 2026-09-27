@@ -262,6 +262,27 @@ watch(rentalMode, key => {
   search()
 })
 
+/**
+ * La pilule de recherche de l'en-tête mobile relance une recherche en changeant
+ * l'URL sans quitter cette page : le composant n'est pas recréé, donc on reporte
+ * ici les paramètres qui ont réellement changé dans l'URL — et seulement eux, pour
+ * ne pas écraser un critère saisi dans la page (le `replace` du mode ci-dessus ne
+ * touche que `mode`, déjà égal à `rentalMode`, et ne relance donc rien).
+ */
+watch(
+  () => [String(route.query.q ?? ''), String(route.query.city ?? ''), String(route.query.budget ?? ''), String(route.query.mode ?? '')] as const,
+  ([q, city, b, mode], [q0, city0, b0]) => {
+    if (route.path !== '/recherche') return // on quitte la page : rien à relancer
+    let changed = false
+    if (q !== q0) { query.value = q; changed = true }
+    if (city !== city0) { cityName.value = city; changed = true }
+    if (b !== b0) { budget.value = b; changed = true }
+    const nextMode: RentalFilter = mode === 'nuit' || mode === 'mois' ? mode : 'tous'
+    if (nextMode !== rentalMode.value) rentalMode.value = nextMode // son watcher relance la recherche
+    else if (changed) search()
+  }
+)
+
 const resultCount = computed(() => (shownTotal.value > 1 ? `${shownTotal.value} logements disponibles` : `${shownTotal.value} logement disponible`))
 const resultShort = computed(() => (shownTotal.value > 1 ? `${shownTotal.value} logements` : `${shownTotal.value} logement`))
 
@@ -293,8 +314,8 @@ const geoPoints = computed(() => {
 </script>
 
 <template>
-  <div class="mx-auto max-w-[1240px] px-[26px] pb-[60px] pt-6">
-    <div class="rounded-2xl border border-[var(--border-subtle)] bg-white p-5 shadow-card sm:p-6">
+  <div class="mx-auto max-w-[1240px] px-4 pb-[60px] pt-6 sm:px-[26px]">
+    <div class="rounded-2xl border border-[var(--border-subtle)] bg-white p-4 shadow-card sm:p-6">
       <div class="mb-4 flex flex-wrap items-baseline justify-between gap-5">
         <div class="flex items-baseline gap-3">
           <h1 class="m-0 font-display text-2xl font-bold tracking-[-.03em]">Rechercher un logement</h1>
@@ -350,12 +371,12 @@ const geoPoints = computed(() => {
             <option value="price_desc">Prix ↓</option>
           </select>
           <div class="flex gap-1.5 sm:contents">
-            <button type="button" class="flex h-[46px] flex-1 items-center justify-center gap-[9px] rounded-pill px-5 text-sm font-bold transition-all sm:flex-none sm:justify-start" :class="filtersOpen ? 'bg-green-600 text-white' : 'bg-transparent text-sand-900'" @click="filtersOpen = true">
+            <button type="button" class="flex h-[46px] flex-1 items-center justify-center gap-[9px] rounded-pill px-4 text-sm font-bold transition-all sm:flex-none sm:justify-start sm:px-5" :class="filtersOpen ? 'bg-green-600 text-white' : 'bg-transparent text-sand-900'" @click="filtersOpen = true">
               <span class="flex flex-col gap-[2.5px]"><span class="h-0.5 w-[15px] rounded-sm bg-current" /><span class="h-0.5 w-[10px] rounded-sm bg-current" /><span class="h-0.5 w-[13px] rounded-sm bg-current" /></span>
               Filtres
               <span v-if="filterCount" class="grid h-5 min-w-[20px] place-items-center rounded-pill bg-white px-1.5 text-[11.5px] font-black text-green-700">{{ filterCount }}</span>
             </button>
-            <button type="button" class="flex h-[46px] flex-1 items-center justify-center gap-2 rounded-pill bg-[image:var(--action-primary)] px-6 text-sm font-bold text-white shadow-action sm:flex-none" @click="search">
+            <button type="button" class="flex h-[46px] flex-1 items-center justify-center gap-2 rounded-pill bg-[image:var(--action-primary)] px-4 text-sm font-bold text-white shadow-action sm:flex-none sm:px-6" @click="search">
               <span class="h-3.5 w-3.5 flex-none rounded-pill border-2 border-white" />Rechercher
             </button>
           </div>
