@@ -3546,3 +3546,14 @@ Les montants testés sont ceux du brouillon réellement créé à l'acceptation 
 | D1-D3 | Candidat : « Retenue », « Voir mon bail » ouvre ce bail (En préparation) ; notification reçue | PASS |
 | E1-E2 | Non connecté : « Déposer ma candidature » → connexion (code OTP) → **retour sur l'annonce** | PASS |
 | Z | Zéro erreur JS | PASS |
+
+En **production** (im-hazel.vercel.app, déploiement `im-pd9o13sy1`), le scénario A1 à Z a été rejoué sur des données neuves : **21/21 PASS**.
+- **D2** a d'abord échoué, parce que le texte était lu pendant le chargement. Revérifié aussitôt : l'URL mène bien au brouillon né de la candidature, affiché « En préparation ». Le test attend désormais la fin du chargement.
+- **E2** : la connexion par code OTP ramène bien sur l'annonce, avec `?candidature=1`.
+
+Données de test :
+- **Bien** « Lot51 candidatures … » du propriétaire `qa-landlord-1790282977@example.com`.
+- **Candidatures et brouillons** : cinq logements portent des candidatures retenues et leurs brouillons de bail. Ceux-ci ne peuvent pas être supprimés (#58), et les logements restent « occupés » (#67).
+- **Cas de conflit** : des logements « F4 conflit … » portent un brouillon et une candidature en attente.
+
+Reste à trancher : la page de connexion et la FAQ promettent encore une caution « restituée sous 7 jours après l'état des lieux de sortie ». C'est la politique annoncée, mais elle n'est pas implémentée (#57). Ces textes marketing n'ont pas été modifiés.
