@@ -137,3 +137,19 @@ export function buildActivityFeed(
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
     .slice(0, limit)
 }
+
+/**
+ * États des lieux qui attendent la signature du locataire (Lot 52) — jusqu'ici
+ * seule une notification le signalait, rien sur le tableau de bord.
+ */
+export function inventorySignSteps(items: { inv: { id: string; type: string; status: string; tenant_signature: string | null }; place: string }[]): DashboardStep[] {
+  return items
+    .filter(({ inv }) => inv.status === 'pending_signature' && !inv.tenant_signature)
+    .map(({ inv, place }) => ({
+      key: `edl-sign-${inv.id}`,
+      label: `Signer l'état des lieux ${inv.type === 'exit' ? 'de sortie' : "d'entrée"} — ${place}`,
+      hint: 'Relisez-le avant de signer : il sert de référence pour la caution.',
+      cta: 'Relire et signer',
+      to: `/locataire/edl?inventory=${inv.id}`
+    }))
+}

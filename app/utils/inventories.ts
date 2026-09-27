@@ -27,19 +27,37 @@ export function itemStateTone(state: string): 'ok' | 'warn' | 'danger' | 'neutra
   return 'neutral'
 }
 
-/** Copie éditable des pièces, états hérités convertis vers un code accepté par l'API. */
+/**
+ * Copie éditable des pièces, états hérités convertis vers un code accepté par
+ * l'API. Chaque élément garde sa position d'origine et la liste des photos
+ * serveur (`_existing`, des index) : l'API ne renvoie que leur nombre, et un
+ * enregistrement sans leurs URLs les effacerait (#71). Elles sont donc
+ * récupérées puis renvoyées avant tout enregistrement (`useInventoryPhotos`).
+ */
 export function editableRooms(rooms: InventoryRoom[] | undefined): InventoryRoom[] {
-  return (rooms ?? []).map(r => ({
+  return (rooms ?? []).map((r, ri) => ({
     name: r.name,
-    items: r.items.map(i => ({ name: i.name, state: LEGACY_STATE[i.state] ?? i.state, comment: i.comment ?? '' }))
+    items: r.items.map((i, ii) => ({
+      name: i.name,
+      state: LEGACY_STATE[i.state] ?? i.state,
+      comment: i.comment ?? '',
+      photos: [],
+      _origin: { ri, ii },
+      _existing: Array.from({ length: i.photo_count ?? 0 }, (_, k) => k)
+    }))
   }))
 }
 
-/** Nettoie avant envoi : noms rognés, objets sans nom retirés (l'API ne valide rien, #58). */
+/** Des photos du serveur n'ont pas encore été récupérées : enregistrer maintenant les effacerait. */
+export function hasUnresolvedPhotos(rooms: InventoryRoom[]): boolean {
+  return rooms.some(r => r.items.some(i => (i._existing?.length ?? 0) > 0))
+}
+
+/** Nettoie avant envoi : noms rognés, objets sans nom retirés, champs internes ôtés (l'API ne valide rien, #63). */
 export function cleanRooms(rooms: InventoryRoom[]): InventoryRoom[] {
   return rooms.map(r => ({
     name: r.name.trim(),
-    items: r.items.filter(i => i.name.trim()).map(i => ({ name: i.name.trim(), state: i.state, comment: (i.comment ?? '').trim() }))
+    items: r.items.filter(i => i.name.trim()).map(i => ({ name: i.name.trim(), state: i.state, comment: (i.comment ?? '').trim(), photos: [...(i.photos ?? [])] }))
   }))
 }
 
@@ -112,3 +130,66 @@ export function nextRoomName(name: string, existing: string[]): string {
 export function presetRoom(preset: { name: string; items: string[] }, existing: string[]): InventoryRoom {
   return { name: nextRoomName(preset.name, existing), items: preset.items.map(name => ({ name, state: 'good', comment: '' })) }
 }
+
+/* ---- Sortie comparée à l'entrée (Lot 52) ---- */
+
+/** Gravité croissante ; « issue » (ancien état du front) vaut « traces d'usage ». */
+export const STATE_RANK: Record<string, number> = { new: 0, good: 1, fair: 2, issue: 2, damaged: 3, missing: 4 }
+
+function norm(s: string) {
+  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim()
+}
+function key(room: string, item: string) {
+  return `${norm(room)}|${norm(item)}`
+}
+
+/** État d'entrée de chaque élément, retrouvé par nom de pièce et d'élément (accents et casse ignorés). */
+export function entryStates(entryRooms: InventoryRoom[] | undefined): Map<string, string> {
+  const m = new Map<string, string>()
+  for (const r of entryRooms ?? []) for (const i of r.items) m.set(key(r.name, i.name), i.state)
+  return m
+}
+
+export function compareItem(entry: Map<string, string>, room: string, item: string, state: string): { entryState: string | null; degraded: boolean } {
+  const entryState = entry.get(key(room, item)) ?? null
+  const degraded = entryState !== null && (STATE_RANK[state] ?? 0) > (STATE_RANK[entryState] ?? 0)
+  return { entryState, degraded }
+}
+
+/** Ce qui s'est dégradé entre l'entrée et la sortie — la base d'une discussion sur la caution. */
+export function exitDegradations(exitRooms: InventoryRoom[], entryRooms: InventoryRoom[] | undefined): { room: string; item: string; from: string; to: string }[] {
+  const entry = entryStates(entryRooms)
+  const out: { room: string; item: string; from: string; to: string }[] = []
+  for (const r of exitRooms) for (const i of r.items) {
+    const c = compareItem(entry, r.name, i.name, i.state)
+    if (c.degraded && c.entryState) out.push({ room: r.name, item: i.name, from: c.entryState, to: i.state })
+  }
+  return out
+}
+
+/** Point de départ d'une sortie : les pièces et éléments de l'entrée, avec leur état d'alors, sans photos ni remarques. */
+export function roomsFromEntry(entryRooms: InventoryRoom[] | undefined): InventoryRoom[] {
+  return (entryRooms ?? []).map(r => ({
+    name: r.name,
+    items: r.items.map(i => ({ name: i.name, state: LEGACY_STATE[i.state] ?? i.state, comment: '', photos: [], _existing: [] }))
+  }))
+}
+
+/** Consommation entre les deux relevés (compteurs saisis en texte libre ; ignorée si illisible ou négative). */
+export function meterConsumption(entry: { electricity?: string; water?: string } | null | undefined, exit: { electricity?: string; water?: string } | null | undefined) {
+  const num = (v?: string) => {
+    const n = Number((v ?? '').replace(/\s/g, '').replace(',', '.'))
+    return v && Number.isFinite(n) ? n : null
+  }
+  const diff = (a?: string, b?: string) => {
+    const x = num(a); const y = num(b)
+    return x !== null && y !== null && y >= x ? Math.round((y - x) * 100) / 100 : null
+  }
+  return { electricity: diff(entry?.electricity, exit?.electricity), water: diff(entry?.water, exit?.water) }
+}
+
+/** Le contenu a-t-il changé depuis qu'on l'a affiché ? (vérifié juste avant de signer) */
+export function inventoryChanged(shown: Pick<InventoryDetail, 'updated_at'>, fresh: Pick<InventoryDetail, 'updated_at'>): boolean {
+  return shown.updated_at !== fresh.updated_at
+}
+

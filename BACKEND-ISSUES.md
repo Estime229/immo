@@ -82,6 +82,9 @@ Mis à jour le 27/09/2026. Statut : **ouvert** sauf mention contraire.
 | 68 | 🟡 | Bail préparé à l'acceptation : prépayé ignoré, notification trompeuse, id du bail non renvoyé | `PATCH /rental/requests/:id/accept` | 51 |
 | 69 | 🟡 | Le candidat ne peut pas retirer sa candidature ; refus sans motif ; statuts indiscernables | `/rental/requests` | 51 |
 | 70 | 🟡 | Candidature : date invalide → 500, date passée acceptée, message trop long sans détail ; équipe exclue | `/rental/requests` | 51 |
+| 71 | 🟠 | Photos d'état des lieux effacées à chaque modification | `GET` / `PATCH /inventories/:id` | 52 |
+| 72 | 🟠 | Le PDF de l'état des lieux n'a ni photos ni comparaison avec l'entrée ; la sortie n'alimente rien | `GET /pdf/inventories/:id` | 52 |
+| 73 | 🟡 | État des lieux accepté sur une réservation annulée ; URL de photo relative → 500 | `POST /inventories`, relais photo | 52 |
 
 ---
 
@@ -616,3 +619,28 @@ La place de marché repose entièrement sur des propriétaires qui viennent cons
 - Les messages de `create` sont en anglais pour un logement introuvable (« Unit not found »).
 - Accepter et refuser sont réservés au propriétaire : un membre d'équipe autorisé sur le bien ne peut pas traiter les candidatures.
 
+---
+
+## Ajouts du Lot 52 — États des lieux (photos, sortie)
+
+### 71. 🟠 Photos d'état des lieux effacées à chaque modification
+
+- `POST /files` puis `rooms[].items[].photos` fonctionnent. Rejoué : une photo envoyée est stockée, puis consultable par le locataire et le propriétaire via le relais par index (un tiers reçoit 403).
+- Mais `GET /inventories/:id` ne renvoie jamais les URLs, seulement `photo_count`, et `PATCH` remplace `rooms` en entier.
+- **Rejoué** : relire l'état des lieux puis renvoyer ses pièces telles quelles (avec un commentaire modifié) → `photo_count` passe de 1 à 0. Toute modification efface les photos.
+- Le frontend contourne le problème, au prix d'un doublon de chaque photo à chaque session d'édition : avant d'enregistrer, il récupère les photos existantes par le relais, puis les renvoie par `POST /files`.
+- **Attendu** : accepter des identifiants de fichiers (`POST /files` renvoie un `id`), ou fusionner les photos existantes quand un élément n'en fournit pas.
+
+### 72. 🟠 Le PDF de l'état des lieux n'a ni photos ni comparaison ; la sortie n'alimente rien
+
+- Le gabarit `etat-des-lieux.hbs` n'imprime aucune photo : la pièce justificative principale d'un litige sur la caution est absente du document signé.
+- **Sortie** : le PDF ne la compare pas à l'entrée. Le frontend affiche désormais les dégradations et la consommation des compteurs.
+- **Caution** : l'état des lieux de sortie ne déclenche rien (voir #57) : ni retenue proposée, ni restitution.
+- **Séjour court** : le PDF d'un état des lieux de séjour affiche « — » pour le bien et le logement (déjà signalé en #63).
+
+### 73. 🟡 Cas limites acceptés
+
+- **Réservation annulée** : `POST /inventories` sur une réservation `cancelled` → 201.
+- **Bail résilié** : un état des lieux de sortie sur un bail résilié est accepté. C'est souhaitable, la sortie se fait souvent après.
+- **URL relative** : une photo enregistrée avec une URL relative (`/uploads/…`, format documenté par `POST /files` pour le stockage local) → le relais répond 500.
+- **Identifiant invalide** : un identifiant non UUID → « Validation failed (uuid is expected) » (message traduit côté front).

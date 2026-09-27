@@ -445,10 +445,16 @@ export type InventoryStatus = 'draft' | 'pending_signature' | 'signed'
  */
 export interface InventoryRoomItem {
   name: string
-  /** Pas d'énumération publiée — traité en chaîne libre (voir `INVENTORY_ITEM_STATES` côté front). */
+  /** `new/good/fair/damaged/missing` côté API (`ItemState`, non validé) — voir `INVENTORY_ITEM_STATES`. */
   state: string
+  /** Lecture : nombre de photos seulement (URLs masquées par l'API). */
   photo_count?: number
+  /** Écriture : URLs issues de `POST /files` (Lot 52). Absentes d'un `PATCH`, les photos existantes sont effacées (#71). */
+  photos?: string[]
   comment: string
+  /** Côté front seulement : position d'origine et photos serveur pas encore récupérées (jamais envoyés). */
+  _origin?: { ri: number; ii: number }
+  _existing?: number[]
 }
 
 export interface InventoryRoom {

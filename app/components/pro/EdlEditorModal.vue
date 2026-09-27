@@ -3,8 +3,9 @@ import type { InventoryDetail, InventoryRoom, InventoryType } from '~/types/tena
 import { ApiRequestError } from '~/utils/authenticatedFetcher'
 import { errorText } from '~/utils/apiErrors'
 import {
-  awaitingMySignature, cleanRooms, editableRooms, INVENTORY_ITEM_STATES, INVENTORY_STATUS_LABEL, inventoryEditable,
-  itemStateLabel, nextRoomName, pickInventory, presetRoom, ROOM_PRESETS, validateInventoryForSend
+  awaitingMySignature, cleanRooms, compareItem, editableRooms, entryStates, exitDegradations, hasUnresolvedPhotos, INVENTORY_ITEM_STATES,
+  INVENTORY_STATUS_LABEL, inventoryChanged, inventoryEditable, itemStateLabel, meterConsumption, nextRoomName, pickInventory, presetRoom,
+  ROOM_PRESETS, roomsFromEntry, validateInventoryForSend
 } from '~/utils/inventories'
 
 const props = defineProps<{
@@ -21,6 +22,7 @@ const emit = defineEmits<{ close: []; saved: [] }>()
 
 const inventoriesApi = useInventoriesApi()
 const doc = useOpenDocument()
+const photos = useInventoryPhotos()
 
 const detail = ref<InventoryDetail | null>(props.inventory)
 const loading = ref(false)
@@ -42,12 +44,17 @@ function syncFrom(inv: InventoryDetail) {
   meterWater.value = inv.meter_readings?.water ?? ''
 }
 
+/** État des lieux d'entrée du même bail/séjour : point de départ et référence d'une sortie (Lot 52). */
+const entryRef = ref<InventoryDetail | null>(null)
+
 onMounted(async () => {
-  if (detail.value) return
   loading.value = true
   try {
-    // L'API crée un doublon dès que l'existant n'est plus un brouillon (#58) : on relit avant de créer.
-    const existing = pickInventory(props.leaseId ? await inventoriesApi.fetchByLease(props.leaseId) : await inventoriesApi.fetchByBooking(props.bookingId!), props.type)
+    const all = props.leaseId ? await inventoriesApi.fetchByLease(props.leaseId) : await inventoriesApi.fetchByBooking(props.bookingId!)
+    if (props.type === 'exit') entryRef.value = pickInventory(all, 'entry')
+    if (detail.value) return
+    // L'API crée un doublon dès que l'existant n'est plus un brouillon (#61) : on relit avant de créer.
+    const existing = pickInventory(all, props.type)
     if (existing) {
       syncFrom(existing)
       return
@@ -85,17 +92,43 @@ function removeItem(room: InventoryRoom, i: number) {
   room.items.splice(i, 1)
 }
 
+/* ---- Sortie comparée à l'entrée ---- */
+const entryMap = computed(() => (props.type === 'exit' && entryRef.value ? entryStates(entryRef.value.rooms) : null))
+function comparison(room: InventoryRoom, item: InventoryRoom['items'][number]) {
+  return entryMap.value ? compareItem(entryMap.value, room.name, item.name, item.state) : null
+}
+const degradations = computed(() => (entryRef.value ? exitDegradations(rooms.value, entryRef.value.rooms) : []))
+const consumption = computed(() => (entryRef.value ? meterConsumption(entryRef.value.meter_readings, { electricity: meterElectricity.value, water: meterWater.value }) : null))
+function startFromEntry() {
+  if (entryRef.value) rooms.value = roomsFromEntry(entryRef.value.rooms)
+}
+
+/* ---- Photos ---- */
+const photoProgress = ref('')
+function removeExisting(item: InventoryRoom['items'][number], pi: number) {
+  item._existing = (item._existing ?? []).filter(x => x !== pi)
+}
+function removeUrl(item: InventoryRoom['items'][number], url: string) {
+  item.photos = (item.photos ?? []).filter(x => x !== url)
+}
+
 async function save(): Promise<boolean> {
   if (!detail.value) return false
   loading.value = true
   errorMessage.value = ''
   try {
+    // L'API efface toute photo absente du PATCH et ne renvoie jamais leurs URLs (#71) : on les récupère d'abord.
+    if (hasUnresolvedPhotos(rooms.value)) {
+      const lost = await photos.resolveExisting(detail.value.id, rooms.value, (d, t) => { photoProgress.value = `Conservation des photos… ${d}/${t}` })
+      photoProgress.value = lost ? `${lost} photo${lost > 1 ? 's' : ''} déjà enregistrée${lost > 1 ? 's' : ''} n'${lost > 1 ? 'ont' : 'a'} pas pu être récupérée${lost > 1 ? 's' : ''}.` : ''
+    }
     const meters = { electricity: meterElectricity.value.trim() || undefined, water: meterWater.value.trim() || undefined }
-    syncFrom(await inventoriesApi.update(detail.value.id, {
+    // Les pièces locales restent la référence (elles portent les URLs des photos) : seul le reste est relu.
+    detail.value = await inventoriesApi.update(detail.value.id, {
       rooms: cleanRooms(rooms.value),
       general_comment: generalComment.value.trim() || undefined,
       meter_readings: meters.electricity || meters.water ? meters : undefined
-    }))
+    })
     changed.value = true
     return true
   } catch (e) {
@@ -138,6 +171,15 @@ async function submitSignature() {
   loading.value = true
   errorMessage.value = ''
   try {
+    // Contenu figé : on vérifie qu'il n'a pas changé depuis l'ouverture (l'autre partie peut encore l'écrire côté API, #56).
+    if (!editable.value) {
+      const fresh = await inventoriesApi.fetchOne(detail.value.id)
+      if (inventoryChanged(detail.value, fresh)) {
+        syncFrom(fresh)
+        errorMessage.value = "Cet état des lieux vient d'être modifié : relisez-le, puis signez."
+        return
+      }
+    }
     detail.value = await inventoriesApi.sign(detail.value!.id, signature.value)
     changed.value = true
     await pad.value?.rememberIfAsked()
@@ -187,6 +229,7 @@ const statusLine = computed(() => {
         <div ref="body" class="overflow-y-auto p-6">
           <p v-if="!detail && loading" class="m-0 text-sm text-[var(--text-muted)]">Création en cours…</p>
           <p v-if="errorMessage" class="mb-3.5 mt-0 rounded-md border border-danger-border bg-danger-bg px-3.5 py-2.5 text-[13px] font-semibold text-danger-fg">{{ errorMessage }}</p>
+          <p v-if="photoProgress" class="mb-3.5 mt-0 text-[12.5px] font-semibold text-[var(--text-muted)]">{{ photoProgress }}</p>
           <template v-if="detail">
             <div v-if="statusLine" class="mb-4 rounded-md border p-4" :class="detail.status === 'signed' ? 'border-ok-border bg-ok-bg' : 'border-warn-border bg-warn-bg'">
               <p class="m-0 text-[13.5px] font-semibold" :class="detail.status === 'signed' ? 'text-green-900' : 'text-warn-fg'">{{ statusLine }}</p>
@@ -217,6 +260,23 @@ const statusLine = computed(() => {
               <textarea v-model="generalComment" :disabled="!editable" rows="2" maxlength="2000" class="w-full resize-y rounded-md border border-[var(--border-default)] bg-white p-3 text-sm outline-none disabled:bg-sand-100" />
             </label>
 
+            <!-- Sortie : comparée à l'entrée (Lot 52) -->
+            <div v-if="type === 'exit' && entryRef" class="mt-4 rounded-md border p-4" :class="degradations.length ? 'border-danger-border bg-danger-bg' : 'border-[var(--border-subtle)] bg-white'">
+              <p class="m-0 text-[13.5px] font-bold" :class="degradations.length ? 'text-danger-fg' : ''">
+                {{ degradations.length ? `${degradations.length} élément${degradations.length > 1 ? 's' : ''} dégradé${degradations.length > 1 ? 's' : ''} depuis l'entrée` : "Aucun élément dégradé depuis l'entrée" }}
+              </p>
+              <ul v-if="degradations.length" class="mb-0 mt-1.5 list-disc pl-5 text-[12.5px] text-danger-fg">
+                <li v-for="d in degradations" :key="`${d.room}|${d.item}`">{{ d.room }} · {{ d.item }} : {{ itemStateLabel(d.from) }} → {{ itemStateLabel(d.to) }}</li>
+              </ul>
+              <p v-if="consumption && (consumption.electricity !== null || consumption.water !== null)" class="mb-0 mt-1.5 text-[12.5px] text-[var(--text-muted)]">
+                Consommation depuis l'entrée :<template v-if="consumption.electricity !== null"> électricité {{ consumption.electricity }}</template><template v-if="consumption.electricity !== null && consumption.water !== null"> ·</template><template v-if="consumption.water !== null"> eau {{ consumption.water }}</template>
+              </p>
+            </div>
+            <p v-else-if="type === 'exit' && !loading" class="mb-0 mt-4 text-[12.5px] text-[var(--text-muted)]">Aucun état des lieux d'entrée : la sortie ne pourra pas lui être comparée.</p>
+            <button v-if="editable && type === 'exit' && !rooms.length && entryRef?.rooms.length" type="button" class="mt-3 w-full rounded-md border border-dashed border-green-600 bg-green-50 px-4 py-3 text-[13px] font-bold text-green-800" @click="startFromEntry">
+              Reprendre les {{ entryRef.rooms.length }} pièces de l'état des lieux d'entrée
+            </button>
+
             <div v-for="(room, ri) in rooms" :key="ri" class="mt-4 rounded-lg border border-[var(--border-subtle)] bg-white p-4">
               <div class="flex items-center justify-between gap-2.5">
                 <input v-if="editable" v-model="room.name" class="h-9 min-w-0 flex-1 rounded-sm border border-transparent bg-transparent px-1 text-[14.5px] font-bold outline-none hover:border-[var(--border-default)] focus:border-[var(--border-default)]" aria-label="Nom de la pièce">
@@ -239,6 +299,20 @@ const statusLine = computed(() => {
                   </div>
                   <span class="flex-none text-[12.5px] font-bold text-[var(--text-secondary)]">{{ itemStateLabel(item.state) }}</span>
                 </div>
+                <p v-if="comparison(room, item)?.entryState" class="mb-0 mt-1 text-[11.5px]" :class="comparison(room, item)?.degraded ? 'font-bold text-danger-fg' : 'text-[var(--text-faint)]'">
+                  À l'entrée : {{ itemStateLabel(comparison(room, item)?.entryState ?? '') }}{{ comparison(room, item)?.degraded ? ' — dégradé' : '' }}
+                </p>
+                <EdlPhotoStrip
+                  :api="photos"
+                  :inventory-id="detail.id"
+                  :origin="item._origin ?? null"
+                  :existing="item._existing ?? []"
+                  :urls="item.photos ?? []"
+                  :editable="editable"
+                  @added="item.photos = [...(item.photos ?? []), $event]"
+                  @remove-existing="removeExisting(item, $event)"
+                  @remove-url="removeUrl(item, $event)"
+                />
               </div>
               <p v-if="!room.items.length" class="mb-0 mt-2 text-[12.5px] text-[var(--text-faint)]">Aucun élément constaté.</p>
               <button v-if="editable" type="button" class="mt-3 text-[12.5px] font-bold text-green-700" @click="addItem(room)">+ Ajouter un élément</button>

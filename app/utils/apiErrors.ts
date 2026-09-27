@@ -85,6 +85,9 @@ const BUSINESS_CODE_MESSAGES: Record<string, string> = {
  * explicites — remplacés à l'identique, jamais par motif, pour ne pas toucher
  * aux autres messages. Vérifiés en live (Lot 48).
  */
+/** Messages de garde sans information (rôle, jeton) : remplacés par un texte générique en 403. */
+const GENERIC_FORBIDDEN = /^(forbidden( resource)?|acc[eè]s r[eé]serv[eé]|acc[eè]s (refus[eé]|interdit)|access denied|unauthorized)\.?$/i
+
 const BACKEND_MESSAGE_FIXES: Record<string, string> = {
   'La date de visite doit etre dans le futur.': 'La date de visite doit être dans le futur.',
   'Vous avez deja une visite en attente pour ce logement.': 'Vous avez déjà une demande de visite en attente pour ce logement : attendez la réponse du propriétaire, ou annulez-la depuis « Mes visites ».',
@@ -94,7 +97,18 @@ const BACKEND_MESSAGE_FIXES: Record<string, string> = {
   'Seule une visite confirmee peut etre marquee comme effectuee.': 'Seule une visite confirmée peut être marquée comme réalisée.',
   'Seule une visite en attente ou confirmee peut etre replanifiee.': 'Seule une visite en attente ou confirmée peut être replanifiée.',
   'La date doit etre valide et dans le futur.': 'La nouvelle date doit être dans le futur.',
-  'Acces interdit.': 'Accès interdit.'
+  'Acces interdit.': 'Accès interdit.',
+  // Module états des lieux : messages renvoyés en anglais (#63, Lot 52).
+  'At least one room required': "Ajoutez au moins une pièce avant d'envoyer l'état des lieux.",
+  'Only draft can be sent for signature': 'Cet état des lieux a déjà été envoyé : rechargez la page.',
+  'Inventory must be pending signature': "Cet état des lieux n'est pas en attente de signature (pas encore envoyé, ou déjà signé) : rechargez la page.",
+  'Cannot modify a signed inventory': 'Cet état des lieux est signé des deux côtés : il ne peut plus être modifié.',
+  'Inventory not found': 'État des lieux introuvable : il a peut-être été supprimé.',
+  'Not authorized': "Cet état des lieux ne vous concerne pas : seuls le locataire et le propriétaire y ont accès.",
+  'Lease not found': 'Bail introuvable.',
+  'Booking not found': 'Réservation introuvable.',
+  'Unit not found': 'Logement introuvable.',
+  'Validation failed (uuid is expected)': 'Lien invalide : l\'identifiant est incorrect.'
 }
 
 /**
@@ -212,6 +226,11 @@ export function mapApiError(
     // Doublons KYB renvoyés en 403 par PATCH /profile/me (vérifié en live, Lot 44) — ce n'est pas un problème de droits.
     if (message && BUSINESS_CODE_MESSAGES[message]) {
       return { kind: 'conflict', fieldErrors: {}, bannerMessage: BUSINESS_CODE_MESSAGES[message] }
+    }
+    // Refus métier explicites (« Seul un bail actif peut être résilié »…) : plus utiles que le texte générique,
+    // qui ne reste que pour les refus bruts des gardes (Lot 52).
+    if (message && !GENERIC_FORBIDDEN.test(message)) {
+      return { kind: 'forbidden', fieldErrors: {}, bannerMessage: message }
     }
     return {
       kind: 'forbidden',

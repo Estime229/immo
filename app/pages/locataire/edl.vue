@@ -3,7 +3,7 @@ import type { BookingSummary, InventoryDetail } from '~/types/tenant'
 import { ApiRequestError } from '~/utils/authenticatedFetcher'
 import { errorText } from '~/utils/apiErrors'
 import { bookingPhase } from '~/utils/bookings'
-import { awaitingMySignature, INVENTORY_STATUS_LABEL, INVENTORY_STATUS_TONE, INVENTORY_TYPE_LABEL, itemStateLabel, itemStateTone } from '~/utils/inventories'
+import { awaitingMySignature, compareItem, entryStates, exitDegradations, INVENTORY_STATUS_LABEL, INVENTORY_STATUS_TONE, INVENTORY_TYPE_LABEL, inventoryChanged, itemStateLabel, itemStateTone, meterConsumption, pickInventory } from '~/utils/inventories'
 
 definePageMeta({ layout: 'locataire' })
 
@@ -12,6 +12,7 @@ const { activeLease, leases, state: leaseState, ensureLoaded, selectLease } = us
 const inventoriesApi = useInventoriesApi()
 const bookingsApi = useBookingsApi()
 const doc = useOpenDocument()
+const photos = useInventoryPhotos()
 
 interface Row { inv: InventoryDetail; context: string }
 
@@ -76,6 +77,32 @@ function toggle(id: string) {
   openId.value = openId.value === id ? null : id
 }
 
+/* ---- Sortie comparée à l'entrée du même bail ou séjour (Lot 52) ---- */
+function entryFor(inv: InventoryDetail): InventoryDetail | null {
+  if (inv.type !== 'exit') return null
+  const same = rows.value.map(r => r.inv).filter(i => (inv.lease_id ? i.lease_id === inv.lease_id : i.booking_id === inv.booking_id))
+  return pickInventory(same, 'entry')
+}
+function comparison(inv: InventoryDetail, room: string, item: string, state: string) {
+  const e = entryFor(inv)
+  return e ? compareItem(entryStates(e.rooms), room, item, state) : null
+}
+function degradationsOf(inv: InventoryDetail) {
+  const e = entryFor(inv)
+  return e ? exitDegradations(inv.rooms, e.rooms) : []
+}
+function consumptionOf(inv: InventoryDetail) {
+  const e = entryFor(inv)
+  return e ? meterConsumption(e.meter_readings, inv.meter_readings) : null
+}
+function hasConsumption(inv: InventoryDetail) {
+  const c = consumptionOf(inv)
+  return !!c && (c.electricity !== null || c.water !== null)
+}
+function range(n?: number) {
+  return Array.from({ length: n ?? 0 }, (_, k) => k)
+}
+
 /* ---- Signature (tracé réel, imprimé sur le PDF) ---- */
 const signatures = ref<Record<string, string>>({})
 const pads = ref<Record<string, { rememberIfAsked: () => Promise<void> } | null>>({})
@@ -87,6 +114,13 @@ async function sign(inv: InventoryDetail) {
   signingId.value = inv.id
   signError.value = ''
   try {
+    // Le propriétaire peut encore modifier tant que personne n'a signé : on vérifie qu'on signe bien ce qui est affiché.
+    const fresh = await inventoriesApi.fetchOne(inv.id)
+    if (inventoryChanged(inv, fresh)) {
+      for (const list of [leaseRows, bookingRows]) list.value = list.value.map(r => (r.inv.id === fresh.id ? { ...r, inv: fresh } : r))
+      signError.value = "Le propriétaire vient de modifier cet état des lieux : relisez-le, puis signez."
+      return
+    }
     const updated = await inventoriesApi.sign(inv.id, signature)
     for (const list of [leaseRows, bookingRows]) {
       list.value = list.value.map(r => (r.inv.id === updated.id ? { ...r, inv: updated } : r))
@@ -156,6 +190,17 @@ function formatDate(iso: string) {
             <template v-if="inv.meter_readings.water">Eau : {{ inv.meter_readings.water }}</template>
           </p>
           <p v-if="inv.status !== 'draft' && !inv.rooms.length" class="mb-0 mt-3.5 text-[13px] text-[var(--text-muted)]">Aucune pièce détaillée.</p>
+          <div v-if="inv.type === 'exit' && inv.status !== 'draft' && entryFor(inv)" class="mt-3.5 rounded-md border p-3.5" :class="degradationsOf(inv).length ? 'border-danger-border bg-danger-bg' : 'border-[var(--border-subtle)] bg-[var(--surface-page)]'">
+            <p class="m-0 text-[13px] font-bold" :class="degradationsOf(inv).length ? 'text-danger-fg' : ''">
+              {{ degradationsOf(inv).length ? `${degradationsOf(inv).length} élément${degradationsOf(inv).length > 1 ? 's' : ''} noté${degradationsOf(inv).length > 1 ? 's' : ''} en moins bon état qu'à l'entrée` : "Rien n'est noté en moins bon état qu'à l'entrée" }}
+            </p>
+            <ul v-if="degradationsOf(inv).length" class="mb-0 mt-1.5 list-disc pl-5 text-[12.5px] text-danger-fg">
+              <li v-for="d in degradationsOf(inv)" :key="`${d.room}|${d.item}`">{{ d.room }} · {{ d.item }} : {{ itemStateLabel(d.from) }} → {{ itemStateLabel(d.to) }}</li>
+            </ul>
+            <p v-if="hasConsumption(inv)" class="mb-0 mt-1.5 text-[12.5px] text-[var(--text-muted)]">
+              Consommation depuis l'entrée :<template v-if="consumptionOf(inv)?.electricity !== null"> électricité {{ consumptionOf(inv)?.electricity }}</template><template v-if="consumptionOf(inv)?.water !== null"> · eau {{ consumptionOf(inv)?.water }}</template>
+            </p>
+          </div>
           <template v-if="inv.status !== 'draft'">
             <div v-for="(room, ri) in inv.rooms" :key="ri" class="mt-3.5 border-t border-sand-200 pt-3.5">
               <p class="m-0 text-[14.5px] font-bold">{{ room.name }}</p>
@@ -165,6 +210,10 @@ function formatDate(iso: string) {
                   <CoreBadge :tone="itemStateTone(item.state)">{{ itemStateLabel(item.state) }}</CoreBadge>
                 </div>
                 <p v-if="item.comment" class="mb-0 mt-1 text-[13px] text-[var(--text-muted)] [overflow-wrap:anywhere]">{{ item.comment }}</p>
+                <p v-if="comparison(inv, room.name, item.name, item.state)?.entryState" class="mb-0 mt-1 text-[11.5px]" :class="comparison(inv, room.name, item.name, item.state)?.degraded ? 'font-bold text-danger-fg' : 'text-[var(--text-faint)]'">
+                  À l'entrée : {{ itemStateLabel(comparison(inv, room.name, item.name, item.state)?.entryState ?? '') }}
+                </p>
+                <EdlPhotoStrip v-if="item.photo_count" :api="photos" :inventory-id="inv.id" :origin="{ ri, ii: i }" :existing="range(item.photo_count)" />
               </div>
             </div>
           </template>

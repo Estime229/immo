@@ -3557,3 +3557,76 @@ Données de test :
 - **Cas de conflit** : des logements « F4 conflit … » portent un brouillon et une candidature en attente.
 
 Reste à trancher : la page de connexion et la FAQ promettent encore une caution « restituée sous 7 jours après l'état des lieux de sortie ». C'est la politique annoncée, mais elle n'est pas implémentée (#57). Ces textes marketing n'ont pas été modifiés.
+
+## Lot 52 — États des lieux : photos, sortie comparée à l'entrée, relecture avant signature
+
+Demande : « parcourir et tester le flow États des lieux avec les espaces et tout ce qui va avec, en consultant l'API : divergences, manques, écrans à ajouter, incohérences, messages d'erreur ». Le Lot 50 avait déjà repris l'édition, la signature tracée et le PDF. Ce lot traite ce qui restait : photos, état des lieux de sortie, séjours courts, messages en anglais, contenu modifié pendant la relecture.
+
+Backend relu :
+- `inventory.controller.ts` (relais photo par index) et `inventory.service.ts` ;
+- `redact-inventory-photos.helper.ts` et `proxy-file-download.helper.ts` ;
+- `file.controller.ts` (`POST /files`) ;
+- le gabarit `etat-des-lieux.hbs` ;
+- `booking-retention-cron.service.ts`.
+
+### Comportement réel de l'API (vérifié en live)
+
+| Cas | Réponse |
+|---|---|
+| `POST /files` (image) | 201, stockée en WebP, URL de stockage renvoyée |
+| Élément avec `photos: [url]` | 200 ; la lecture ne renvoie que `photo_count: 1` |
+| Photo par le relais : propriétaire · locataire · tiers | 200 image · 200 image · 403 « Not authorized » |
+| Relire l'état des lieux puis renvoyer ses pièces (commentaire modifié) | 200, **`photo_count` 1 → 0** : photo effacée (#71) |
+| Photo à URL relative (`/uploads/…`) | relais → 500 |
+| État des lieux de sortie sur un bail **résilié** · sur une réservation **annulée** · départ d'un séjour | 201 · **201** · 201 |
+| Identifiant inexistant · non UUID · signer un brouillon | 404 « Inventory not found » · 400 « Validation failed (uuid is expected) » · 400 « Inventory must be pending signature » |
+| PDF | aucune photo imprimée, aucune comparaison avec l'entrée (#72) |
+
+### Constats côté écrans
+
+| # | Espace | Constat |
+|---|---|---|
+| S1 | Pro | Aucune photo possible, alors que l'API les accepte. C'est la pièce clé d'un litige sur la caution. |
+| S2 | Pro | L'état des lieux de sortie se tapait de zéro, sans lien avec l'entrée. Rien ne montrait ce qui s'était dégradé. |
+| S3 | Locataire | La sortie se signait sans voir l'état d'entrée de chaque élément. |
+| S4 | Les deux | Contenu signé sans relecture : le propriétaire peut encore le modifier côté API après sa signature (#56), et le locataire signait ce qu'il avait chargé. |
+| S5 | Les deux | Messages de l'API en anglais affichés tels quels (« At least one room required », « Not authorized »…). |
+| S6 | Toute l'app | Tout 403 devenait « Vous n'avez pas les droits pour cette action », même quand l'API expliquait précisément le refus (« Seul un bail actif peut être résilié »). |
+| S7 | Pro | Liste unique, sans distinguer « à faire », « chez le locataire » et « signé » ; aucun état des lieux de départ pour un séjour court. |
+| S8 | Locataire | Tableau de bord muet sur un état des lieux à signer (seule une notification le signalait). |
+
+### Ce qui a été livré
+
+| Fichier | Rôle |
+|---|---|
+| `app/composables/useInventoryPhotos.ts` | **Nouveau** — envoi (compression, 4 Mo max), aperçus par le relais authentifié. Avant chaque enregistrement, les photos existantes sont récupérées puis renvoyées, pour qu'aucune modification ne les efface (#71). |
+| `app/components/edl/PhotoStrip.vue` | **Nouveau** — photos d'un élément : appareil photo ou galerie, aperçus, agrandissement, retrait |
+| `app/utils/inventories.ts` | Photos (`_origin`, `_existing`, `hasUnresolvedPhotos`). Comparaison entrée/sortie : `entryStates`, `compareItem` (accents et casse ignorés), `exitDegradations`, `roomsFromEntry`, `meterConsumption`. Contrôle de fraîcheur : `inventoryChanged`. |
+| `app/components/pro/EdlEditorModal.vue` | Photos par élément. Sortie : « Reprendre les N pièces de l'entrée », « À l'entrée : … — dégradé » sous chaque élément, synthèse des dégradations et de la consommation. Relecture forcée si le contenu a changé avant la signature du propriétaire. |
+| `app/pages/locataire/edl.vue` | Photos consultables. Sortie comparée à l'entrée (synthèse et ligne par élément). Signature bloquée si le propriétaire a modifié le contenu pendant la relecture, le nouveau contenu étant alors affiché ; la signature tracée est conservée. |
+| `app/pages/pro/edl.vue` | Onglets À faire / Chez le locataire / Signés ; « Départ » des séjours commencés ; `?inventory=` ouvre le bon onglet |
+| `app/pages/locataire/index.vue`, `app/utils/tenantDashboard.ts` | « Signer l'état des lieux… » dans les prochaines étapes |
+| `app/utils/apiErrors.ts` | Messages anglais du module traduits ; en 403, le message métier de l'API est affiché (le texte générique ne reste que pour les refus bruts des gardes) |
+
+### Tests automatisés
+
+```
+Test Files  25 passed (25)
+     Tests  222 passed (222)   [+9 : photos, comparaison entrée/sortie, consommation, fraîcheur, messages traduits, 403 explicites, étape du tableau de bord]
+```
+
+`vue-tsc` : aucune erreur dans les fichiers de ce lot (30 erreurs antérieures, inchangées).
+
+### Vérification de bout en bout (Playwright, build de production local → API de production)
+
+| Id | Scénario | Résultat |
+|---|---|---|
+| A1 | Liste pro : onglets avec compteurs | PASS |
+| B1-B3 | Sortie vide ouverte par `?inventory=` : « Reprendre les 2 pièces de l'entrée » → 5 éléments et leurs états ; Murs passé « Abîmé » → « À l'entrée : Bon état — dégradé », synthèse « Séjour · Murs : Bon état → Abîmé », consommation « électricité 369 » | PASS |
+| B4-B5 | Photo ajoutée (aperçu) ; enregistré : état « damaged », `photo_count: 1` côté API | PASS |
+| C1-C2 | Réouverture : la photo s'affiche via le relais ; remarque ajoutée puis enregistrée → **photo conservée** (l'API l'aurait effacée) | PASS |
+| D1 | Envoi confirmé, signature tracée du propriétaire | PASS |
+| E1 | Tableau de bord locataire : « Signer l'état des lieux de sortie » | PASS |
+| E2 | Locataire : « 1 élément noté en moins bon état qu'à l'entrée », « À l'entrée : Bon état », remarque, photo | PASS |
+| E3-E4 | Le propriétaire modifie par l'API pendant la relecture → signature bloquée, nouveau contenu affiché, signature tracée gardée ; relu puis signé | PASS |
+| Z | Zéro erreur JS | PASS |

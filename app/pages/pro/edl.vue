@@ -2,6 +2,7 @@
 import type { InventoryDetail, InventoryType, LeaseSummary } from '~/types/tenant'
 import type { LandlordBookingSummary } from '~/types/landlordBookings'
 import { leasePhase } from '~/utils/leases'
+import { bookingPhase } from '~/utils/bookings'
 import { awaitingMySignature, INVENTORY_STATUS_LABEL, INVENTORY_STATUS_TONE, pickInventory } from '~/utils/inventories'
 
 definePageMeta({ layout: 'pro' })
@@ -78,6 +79,13 @@ async function load() {
         inventory: pickInventory(invs, 'entry'),
         required: !!b.unit?.requires_booking_inventory
       })
+      // Départ : proposé dès le début du séjour (l'API l'accepte), pour constater l'état au check-out.
+      const exit = pickInventory(invs, 'exit')
+      const phase = bookingPhase(b)
+      if (exit || phase === 'ongoing' || phase === 'past') {
+        const checkOut = new Date(b.check_out).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })
+        out.push({ key: `${b.id}-exit`, title: `Départ du ${checkOut} — ${b.unit?.name ?? 'logement supprimé'}`, meta: `Séjour · ${tenantName(b.tenant)}`, tenant: tenantName(b.tenant), bookingId: b.id, type: 'exit', inventory: exit })
+      }
     }))
     rows.value = out.sort((a, b) => rank(a) - rank(b))
     state.value = rows.value.length ? 'success' : 'empty'
@@ -99,7 +107,10 @@ function openFromQuery() {
     : typeof q.lease === 'string'
       ? rows.value.find(x => x.leaseId === q.lease && x.type === (q.type === 'exit' ? 'exit' : 'entry'))
       : undefined
-  if (r) editing.value = r
+  if (r) {
+    tab.value = category(r)
+    editing.value = r
+  }
 }
 
 function badge(r: EdlRow): { label: string; tone: 'ok' | 'warn' | 'neutral' | 'danger' } {
@@ -108,6 +119,19 @@ function badge(r: EdlRow): { label: string; tone: 'ok' | 'warn' | 'neutral' | 'd
   if (r.inventory.status === 'pending_signature') return { label: 'Chez le locataire', tone: 'warn' }
   return { label: INVENTORY_STATUS_LABEL[r.inventory.status] ?? r.inventory.status, tone: INVENTORY_STATUS_TONE[r.inventory.status] ?? 'neutral' }
 }
+
+/** Onglets : ce qui attend une action de votre part, ce qui attend le locataire, ce qui est signé. */
+const tab = ref<'todo' | 'waiting' | 'done'>('todo')
+function category(r: EdlRow): 'todo' | 'waiting' | 'done' {
+  if (!r.inventory || r.inventory.status === 'draft' || awaitingMySignature(r.inventory, false)) return 'todo'
+  return r.inventory.status === 'signed' ? 'done' : 'waiting'
+}
+const counts = computed(() => ({
+  todo: rows.value.filter(r => category(r) === 'todo').length,
+  waiting: rows.value.filter(r => category(r) === 'waiting').length,
+  done: rows.value.filter(r => category(r) === 'done').length
+}))
+const shown = computed(() => rows.value.filter(r => category(r) === tab.value))
 
 const editing = ref<EdlRow | null>(null)
 function onSaved() {
@@ -134,8 +158,16 @@ function onSaved() {
       <p class="mb-4 mt-0 text-[13.5px] leading-[1.55] text-[var(--text-muted)]">
         Faites l'état des lieux d'entrée à la remise des clés et celui de sortie au départ, idéalement ensemble : chacun signe sur son téléphone. Une fois signé des deux côtés, il ne peut plus être modifié.
       </p>
-      <div class="overflow-hidden rounded-2xl border border-[var(--border-subtle)] bg-white p-2">
-        <div v-for="r in rows" :key="r.key" class="flex flex-wrap items-center gap-3.5 border-b border-sand-200 p-3.5 last:border-b-0">
+      <div class="mb-4 flex gap-1.5 rounded-pill bg-sand-200 p-1" style="width: fit-content">
+        <button type="button" class="rounded-pill px-3.5 py-1.5 text-[12.5px] font-bold" :class="tab === 'todo' ? 'bg-white shadow-sm' : 'text-[var(--text-muted)]'" @click="tab = 'todo'">À faire ({{ counts.todo }})</button>
+        <button type="button" class="rounded-pill px-3.5 py-1.5 text-[12.5px] font-bold" :class="tab === 'waiting' ? 'bg-white shadow-sm' : 'text-[var(--text-muted)]'" @click="tab = 'waiting'">Chez le locataire ({{ counts.waiting }})</button>
+        <button type="button" class="rounded-pill px-3.5 py-1.5 text-[12.5px] font-bold" :class="tab === 'done' ? 'bg-white shadow-sm' : 'text-[var(--text-muted)]'" @click="tab = 'done'">Signés ({{ counts.done }})</button>
+      </div>
+      <p v-if="!shown.length" class="rounded-md border border-dashed border-[var(--border-default)] bg-white px-4 py-8 text-center text-[13.5px] text-[var(--text-muted)]">
+        {{ tab === 'todo' ? 'Rien à faire pour l\'instant.' : tab === 'waiting' ? 'Aucun état des lieux en attente du locataire.' : 'Aucun état des lieux signé.' }}
+      </p>
+      <div v-else class="overflow-hidden rounded-2xl border border-[var(--border-subtle)] bg-white p-2">
+        <div v-for="r in shown" :key="r.key" class="flex flex-wrap items-center gap-3.5 border-b border-sand-200 p-3.5 last:border-b-0">
           <div class="grid h-10 w-10 flex-none place-items-center rounded-md text-[15px]" :class="r.inventory?.status === 'signed' ? 'bg-ok-bg' : r.inventory ? 'bg-warn-bg' : 'bg-sand-200'">
             {{ r.type === 'exit' ? '⇤' : '☑' }}
           </div>

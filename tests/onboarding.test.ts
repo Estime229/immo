@@ -121,3 +121,16 @@ describe('safeRedirect — retour à la page d\'origine après connexion, sans r
     for (const v of ['//evil.com', 'https://evil.com', '/\\evil.com', 'biens/abc', '/connexion?redirect=/x', undefined, ['/a']]) expect(safeRedirect(v)).toBeNull()
   })
 })
+
+describe('messages anglais du module états des lieux, traduits (Lot 52)', () => {
+  it('traduit les messages bruts constatés en live', () => {
+    const m = (message: string, status = 400) => mapApiError({ statusCode: status, message } as never, status)
+    expect(errorText(m('At least one room required'), 'x')).toMatch(/au moins une pièce/)
+    expect(errorText(m('Cannot modify a signed inventory'), 'x')).toMatch(/signé des deux côtés/)
+    expect(errorText(m('Not authorized', 403), 'x')).toMatch(/ne vous concerne pas/)
+    expect(errorText(m('Seul un bail actif peut être résilié', 403), 'x')).toBe('Seul un bail actif peut être résilié')
+    expect(errorText(m('Accès réservé', 403), 'x')).toBe("Vous n'avez pas les droits pour cette action.")
+    expect(errorText(m('Forbidden resource', 403), 'x')).toBe("Vous n'avez pas les droits pour cette action.")
+    expect(errorText(m('Validation failed (uuid is expected)'), 'x')).toMatch(/Lien invalide/)
+  })
+})

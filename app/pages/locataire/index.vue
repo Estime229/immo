@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { leasePhase, LEASE_PHASE_TONE, TENANT_LEASE_PHASE_LABEL } from '~/utils/leases'
-import { buildActivityFeed, buildNextSteps, findLateLeaseInvoice } from '~/utils/tenantDashboard'
+import { buildActivityFeed, buildNextSteps, findLateLeaseInvoice, inventorySignSteps } from '~/utils/tenantDashboard'
 
 definePageMeta({ layout: 'locataire' })
 
@@ -69,12 +69,21 @@ function openLease(id: string) {
 }
 
 /* ---- Prochaines étapes (dérivées de baux + réservations + demandes + liste d'attente) ---- */
-const nextSteps = computed(() => buildNextSteps({
+/* États des lieux à signer : un appel par bail en cours (entrée payée ou à payer, préavis, terminé récemment). */
+const inventoriesApi = useInventoriesApi()
+const inventorySteps = ref<ReturnType<typeof inventorySignSteps>>([])
+watch(() => leasesBlock.leases.value, async leases => {
+  const relevant = leases.filter(l => ['awaiting_entry', 'active', 'notice', 'terminated'].includes(leasePhase(l)))
+  const lists = await Promise.all(relevant.map(async l => (await inventoriesApi.fetchByLease(l.id).catch(() => [])).map(inv => ({ inv, place: l.unit?.name ?? 'votre logement' }))))
+  inventorySteps.value = inventorySignSteps(lists.flat())
+}, { immediate: true })
+
+const nextSteps = computed(() => [...inventorySteps.value, ...buildNextSteps({
   leases: leasesBlock.leases.value,
   bookings: bookingsBlock.items.value,
   housingRequests: housingRequestsBlock.items.value,
   waitlist: waitlistBlock.items.value
-}))
+})])
 const nextStepsLoading = computed(() =>
   [leasesBlock.state.value, bookingsBlock.state.value, housingRequestsBlock.state.value, waitlistBlock.state.value].includes('loading')
 )

@@ -130,3 +130,16 @@ describe('pickDefaultLease — un brouillon récent ne masque plus le bail actif
     expect(pickDefaultLease([])).toBeNull()
   })
 })
+
+import { inventorySignSteps } from '../app/utils/tenantDashboard'
+describe('tableau de bord : états des lieux à signer (Lot 52)', () => {
+  it('seulement ceux envoyés et pas encore signés par le locataire', () => {
+    const steps = inventorySignSteps([
+      { inv: { id: 'a', type: 'entry', status: 'pending_signature', tenant_signature: null }, place: 'F2' },
+      { inv: { id: 'b', type: 'exit', status: 'pending_signature', tenant_signature: 'data:x' }, place: 'F2' },
+      { inv: { id: 'c', type: 'exit', status: 'draft', tenant_signature: null }, place: 'F2' }
+    ])
+    expect(steps.map(s => s.to)).toEqual(['/locataire/edl?inventory=a'])
+    expect(steps[0]!.label).toBe("Signer l'état des lieux d'entrée — F2")
+  })
+})
