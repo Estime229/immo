@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { SIGNUP_ROLE_TO_API, apiRoleToSignupRole, needsOnboarding, validateIfu, validateRccm, validateSignup } from '../app/utils/onboarding'
+import { SIGNUP_ROLE_TO_API, apiRoleToSignupRole, needsOnboarding, safeRedirect, validateIfu, validateRccm, validateSignup } from '../app/utils/onboarding'
 import { errorText, mapApiError } from '../app/utils/apiErrors'
 import { UPLOAD_MAX_BYTES, checkUploadFile, shouldCompress } from '../app/utils/uploadFile'
 
@@ -110,5 +110,14 @@ describe('IFU déjà utilisé', () => {
   })
   it('un 403 ordinaire reste un refus de droits', () => {
     expect(mapApiError({ statusCode: 403, message: 'Accès refusé.' }, 403).bannerMessage).toMatch(/droits/)
+  })
+})
+
+describe('safeRedirect — retour à la page d\'origine après connexion, sans redirection ouverte', () => {
+  it('accepte un chemin interne, avec sa query', () => {
+    expect(safeRedirect('/biens/abc?unit=u1&candidature=1')).toBe('/biens/abc?unit=u1&candidature=1')
+  })
+  it('refuse les destinations externes ou absurdes', () => {
+    for (const v of ['//evil.com', 'https://evil.com', '/\\evil.com', 'biens/abc', '/connexion?redirect=/x', undefined, ['/a']]) expect(safeRedirect(v)).toBeNull()
   })
 })

@@ -31,9 +31,12 @@ const pageTitle = computed(() => PAGE_TITLES[currentKey.value] ?? '')
  */
 const housingRequestsApi = useHousingRequestsApi()
 const visitsApi = useVisitsApi()
+const rentalApi = useRentalRequestsApi()
 const liveCounts = ref<Record<string, number>>({})
 onMounted(async () => {
-  const [open, visits] = await Promise.allSettled([housingRequestsApi.fetchOpen({ limit: 1 }), visitsApi.fetchMine('landlord')])
+  const [open, visits, rental] = await Promise.allSettled([housingRequestsApi.fetchOpen({ limit: 1 }), visitsApi.fetchMine('landlord'), rentalApi.fetchMine('landlord')])
+  // Le propriétaire n'est pas notifié d'une nouvelle candidature (#66) : le compteur est son seul signal.
+  if (rental.status === 'fulfilled') liveCounts.value = { ...liveCounts.value, candidatures: rental.value.filter(r => r.status === 'pending').length }
   // pas de compteur plutôt qu'un faux en cas d'échec
   if (open.status === 'fulfilled') liveCounts.value = { ...liveCounts.value, demandes: open.value.total }
   if (visits.status === 'fulfilled') liveCounts.value = { ...liveCounts.value, visites: visits.value.filter(v => visitBucket(v) === 'todo').length }

@@ -27,6 +27,7 @@ export const NAV_GROUPS = [
     items: [
       { key: 'demandes', to: '/pro/demandes', icon: '✎', label: 'Demandes', count: '' },
       { key: 'visites', to: '/pro/visites', icon: '⚑', label: 'Visites', count: '' },
+      { key: 'candidatures', to: '/pro/candidatures', icon: '☷', label: 'Candidatures', count: '' },
       { key: 'reservations', to: '/pro/reservations', icon: '◱', label: 'Réservations', count: '' },
       { key: 'baux', to: '/pro/baux', icon: '⎘', label: 'Baux', count: '' },
       { key: 'edl', to: '/pro/edl', icon: '☑', label: 'États des lieux', count: '' }
@@ -52,7 +53,7 @@ export const NAV_GROUPS = [
 
 export const PAGE_TITLES: Record<string, string> = {
   apercu: 'Aperçu', profil: 'Profil', guide: 'Guide', biens: 'Mes biens', tarifs: 'Tarifs et disponibilité',
-  documents: 'Documents', demandes: 'Demandes', visites: 'Visites',
+  documents: 'Documents', demandes: 'Demandes', visites: 'Visites', candidatures: 'Candidatures',
   reservations: 'Réservations', baux: 'Baux', edl: 'États des lieux', equipe: 'Équipe', mandats: 'Mandats',
   artisans: 'Artisans', wallet: 'Wallet', signalements: 'Signalements', messages: 'Messages',
   addBien: 'Ajouter un bien', newBail: 'Créer un bail', bienFiche: 'Fiche du bien'

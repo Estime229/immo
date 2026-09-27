@@ -151,6 +151,8 @@ async function contactOwner(v: VisitSummary) {
         <p v-if="v.status === 'rejected'" class="mb-0 mt-3 text-[12.5px] text-danger-fg [overflow-wrap:anywhere]">{{ v.rejection_reason ? `Motif : ${v.rejection_reason}` : 'Aucun motif précisé par le propriétaire.' }}</p>
         <p v-if="visitExpired(v)" class="mb-0 mt-3 text-[12.5px] text-[var(--text-muted)]">Le propriétaire n'a pas répondu avant la date. Vous pouvez redemander une visite depuis l'annonce.</p>
         <p v-if="v.note" class="mb-0 mt-2 line-clamp-4 text-[12.5px] text-[var(--text-secondary)] [overflow-wrap:anywhere]">Votre message : « {{ v.note }} »</p>
+        <!-- Suite naturelle d'une visite réalisée (Lot 51) : l'annonce s'ouvre sur la candidature. -->
+        <NuxtLink v-if="v.status === 'completed' && v.unit && (v.unit.property_id ?? v.property_id)" :to="`/biens/${v.unit.property_id ?? v.property_id}?unit=${v.unit_id}&candidature=1`" class="mr-4 mt-2 inline-block rounded-sm bg-[image:var(--action-primary)] px-3.5 py-2 text-[12.5px] font-bold text-white">Déposer ma candidature</NuxtLink>
         <NuxtLink v-if="v.unit && (v.unit.property_id ?? v.property_id)" :to="`/biens/${v.unit.property_id ?? v.property_id}`" class="mt-2 inline-block text-[12.5px] font-bold text-green-700">Voir l'annonce →</NuxtLink>
 
         <div v-if="confirmCancelId === v.id" class="mt-3 flex flex-wrap items-center gap-2.5 rounded-md border border-warn-border bg-warn-bg px-3.5 py-2.5">

@@ -486,3 +486,46 @@ export interface UpdateInventoryPayload {
   general_comment?: string
   meter_readings?: { electricity?: string; water?: string }
 }
+
+/**
+ * Candidature sur un logement (`/rental/requests`) — module API jamais branché
+ * avant le Lot 51. Trois statuts seulement : un candidat écarté parce qu'un
+ * autre a été retenu est `rejected` comme un refus explicite (vérifié en live).
+ * `unit` est joint complet (règles d'entrée comprises) ; `tenant` seulement
+ * côté propriétaire (`for=landlord`), avec réputation et badge de confiance.
+ */
+export type RentalRequestStatus = 'pending' | 'accepted' | 'rejected'
+
+export interface RentalRequestSummary {
+  id: string
+  unit_id: string
+  tenant_id: string
+  status: RentalRequestStatus
+  message: string | null
+  desired_move_in_at: string | null
+  created_at: string
+  responded_at: string | null
+  conversation_id: string | null
+  unit: null | {
+    id: string
+    name: string
+    price: string
+    property_id?: string | null
+    unit_status?: string
+    caution_months?: number | null
+    avance_months?: number | null
+    prepaye_months?: number | null
+    property?: { id: string; name: string; address?: string | null } | null
+    city?: { name?: string } | null
+  }
+  tenant?: {
+    id: string
+    first_name: string | null
+    last_name: string | null
+    email: string
+    phone_number: string | null
+    avatar_url: string | null
+    is_verified: boolean
+    profile?: { reputation_score: number; trust_badge: boolean }
+  } | null
+}

@@ -81,6 +81,8 @@ export function notificationTarget(n: { metadata?: Record<string, unknown> | nul
   // Bail (envoi, signature, paiement d'entrée, préavis, résiliation) et état des lieux (Lot 50, camelCase aussi).
   if (typeof m.leaseId === 'string') return space === 'pro' ? `/pro/baux/${m.leaseId}` : `/locataire/bail?lease=${m.leaseId}`
   if (typeof m.inventoryId === 'string') return `/${space}/edl?inventory=${m.inventoryId}`
+  // Candidature retenue ou non (Lot 51) — pour un candidat écarté, l'id est celui de la candidature retenue : la page s'ouvre quand même.
+  if (typeof m.requestId === 'string') return `/${space}/candidatures?request=${m.requestId}`
   return null
 }
 

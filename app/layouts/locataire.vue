@@ -17,6 +17,7 @@ const PAGE_TITLES: Record<string, string> = {
   dash: 'Bonjour',
   demandes: 'Mes demandes',
   visites: 'Mes visites',
+  candidatures: 'Mes candidatures',
   reservations: 'Mes réservations',
   bail: 'Mon bail',
   edl: 'État des lieux',

@@ -92,7 +92,7 @@ const escrowLabel = computed(() => {
     </div>
 
     <FeedbackEscrowNotice v-if="escrowLabel" :amount="escrowLabel" class="mt-4.5">
-      Ce montant existe mais n'est pas dans votre solde. Libéré 7 jours après l'état des lieux de sortie.
+      Ce montant existe mais n'est pas dans votre solde. Sa restitution en fin de bail n'est pas encore gérée dans l'application.
     </FeedbackEscrowNotice>
 
     <div class="mt-4.5 rounded-2xl border border-[var(--border-subtle)] bg-white p-6">

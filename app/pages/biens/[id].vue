@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import type { AvailabilityBlock, OwnerProfile, PointOfInterest, PropertySearchResult, ReviewItem, ReviewStats, UnitPricing, UnitSearchResult } from '~/types/property'
-import type { BookingSummary } from '~/types/tenant'
+import type { BookingSummary, RentalRequestSummary } from '~/types/tenant'
 import { buildCalendarDays } from '~/utils/availabilityCalendar'
 import { quoteStay, rangeHitsBlock, stayLengthError } from '~/utils/stayPricing'
 import { flattenSearchResults } from '~/utils/propertyListing'
 import { ApiRequestError } from '~/utils/authenticatedFetcher'
 import { errorText } from '~/utils/apiErrors'
+import { latestRequestFor } from '~/utils/rentalRequests'
 
 const route = useRoute()
 const searchApi = usePropertySearchApi()
@@ -248,6 +249,42 @@ async function submitBooking() {
   } finally {
     bookingLoading.value = false
   }
+}
+
+/* ---- Candidature (longue durée) : `POST /rental/requests`, jamais branché avant le Lot 51 ---- */
+const rentalApi = useRentalRequestsApi()
+const myRequests = ref<RentalRequestSummary[]>([])
+const candidatureOpen = ref(false)
+const myRequest = computed(() => (selectedUnit.value ? latestRequestFor(myRequests.value, selectedUnit.value.id) : null))
+const unitTaken = computed(() => !!selectedUnit.value?.unit_status && selectedUnit.value.unit_status !== 'available')
+const myRequestsLoaded = ref(false)
+async function loadMyRequests() {
+  try {
+    if (currentUser.value) myRequests.value = await rentalApi.fetchMine('tenant')
+  } catch {
+    myRequests.value = []
+  } finally {
+    myRequestsLoaded.value = true
+  }
+}
+onMounted(loadMyRequests)
+// Lien « Déposer ma candidature » depuis une visite réalisée (Mes visites) : une fois le logement et mes candidatures connus.
+let candidatureQueryHandled = false
+watch(() => pageState.value === 'success' && myRequestsLoaded.value, ready => {
+  if (!ready || candidatureQueryHandled) return
+  candidatureQueryHandled = true
+  if (route.query.candidature === '1') openCandidature()
+})
+function openCandidature() {
+  if (!currentUser.value) { navigateTo(`/connexion?redirect=${encodeURIComponent(`/biens/${propertyId}${selectedUnit.value ? `?unit=${selectedUnit.value.id}&candidature=1` : ''}`)}`); return }
+  if (unitTaken.value || myRequest.value?.status === 'pending' || myRequest.value?.status === 'accepted') return
+  candidatureOpen.value = true
+}
+function onCandidatureCreated(r: RentalRequestSummary) {
+  myRequests.value = [r, ...myRequests.value]
+}
+function shortDate(iso: string) {
+  return new Date(iso).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })
 }
 
 /* ---- Demander une visite (longue durée uniquement — pas de sens pour une réservation courte durée déjà datée) ---- */
@@ -502,15 +539,30 @@ async function onFavoriteSimilar(l: { propertyId: string | null }) {
                   <DataMoneyLine v-for="l in entryLines" :key="l.label" :label="l.label" :value="l.value" />
                   <DataMoneyLine label="Total à l'entrée" :value="entryTotal" total />
                   <FeedbackEscrowNotice v-if="cautionLabel" :amount="`Dont ${cautionLabel} de caution séquestrée`" class="mt-3.5">
-                    Conservée par Immo, ni par vous ni par le propriétaire. Restituée sous 7 jours après l'état des lieux de sortie.
+                    Versée à Immo, pas au propriétaire : personne n'y touche pendant le bail. Sa restitution en fin de bail n'est pas encore gérée dans l'application.
                   </FeedbackEscrowNotice>
                 </template>
                 <p v-else class="m-0 text-[13px] text-[var(--text-muted)]">Détail des frais d'entrée communiqué par le propriétaire.</p>
               </div>
 
-              <p v-if="contactError" class="mb-0 mt-3 text-[13px] font-semibold text-danger-fg">{{ contactError }}</p>
-              <CoreButton size="lg" full-width class="mt-4" :disabled="contactLoading" @click="sendInquiry">{{ contactLoading ? 'Envoi…' : 'Envoyer une demande' }}</CoreButton>
+              <div v-if="unitTaken" class="mt-4 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-page)] p-3.5 text-[13px] leading-[1.55] text-[var(--text-secondary)]">
+                Ce logement est déjà loué : les candidatures sont fermées pour l'instant.
+              </div>
+              <div v-else-if="myRequest?.status === 'pending'" class="mt-4 rounded-md border border-warn-border bg-warn-bg p-3.5 text-[13px] leading-[1.55] text-warn-fg">
+                <p class="m-0 font-bold">Candidature envoyée le {{ shortDate(myRequest.created_at) }}</p>
+                <p class="mb-0 mt-1">Le propriétaire ne l'a pas encore traitée. <NuxtLink :to="`/locataire/candidatures?request=${myRequest.id}`" class="font-bold underline">Suivre ma candidature</NuxtLink></p>
+              </div>
+              <div v-else-if="myRequest?.status === 'accepted'" class="mt-4 rounded-md border border-ok-border bg-ok-bg p-3.5 text-[13px] leading-[1.55] text-green-900">
+                <p class="m-0 font-bold">Votre candidature a été retenue ✓</p>
+                <p class="mb-0 mt-1">Le propriétaire prépare le bail. <NuxtLink to="/locataire/bail" class="font-bold underline">Voir mon bail</NuxtLink></p>
+              </div>
+              <template v-else>
+                <p v-if="myRequest?.status === 'rejected'" class="mb-0 mt-3 text-[12.5px] text-[var(--text-muted)]">Votre précédente candidature n'a pas été retenue. Vous pouvez en déposer une nouvelle.</p>
+                <CoreButton size="lg" full-width class="mt-4" @click="openCandidature">Déposer ma candidature</CoreButton>
+              </template>
               <CoreButton tone="secondary" size="lg" full-width class="mt-2.5" @click="openVisitModal">Demander une visite</CoreButton>
+              <p v-if="contactError" class="mb-0 mt-3 text-[13px] font-semibold text-danger-fg">{{ contactError }}</p>
+              <button type="button" class="mt-3 block w-full text-center text-[13px] font-bold text-green-700 underline disabled:opacity-60" :disabled="contactLoading" @click="sendInquiry">{{ contactLoading ? 'Ouverture…' : 'Poser une question au propriétaire' }}</button>
               <p class="mb-0 mt-2.5 text-center text-[12.5px] text-[var(--text-faint)]">Aucun montant prélevé à cette étape</p>
             </template>
           </div>
@@ -518,6 +570,14 @@ async function onFavoriteSimilar(l: { propertyId: string | null }) {
       </div>
 
       <TenantBookingPayModal v-if="payingBooking" :booking="payingBooking" @close="payingBooking = null" @paid="bookingConfirmed = true; payingBooking = null" @changed="onBookingChanged" />
+
+      <TenantCandidatureModal
+        v-if="candidatureOpen && selectedUnit"
+        :unit="selectedUnit"
+        :property-name="property.name"
+        @close="candidatureOpen = false"
+        @created="onCandidatureCreated"
+      />
 
       <TenantVisitRequestModal
         v-if="visitModalOpen && selectedUnit"

@@ -2,7 +2,7 @@
 definePageMeta({ layout: 'locataire' })
 
 const GUIDE_CARDS = [
-  { icon: '⛨', title: 'La caution séquestrée', text: "Immo détient votre caution pendant tout le bail. Ni vous ni le propriétaire n'y avez accès. Elle revient sous 7 jours après l'état des lieux de sortie." },
+  { icon: '⛨', title: 'La caution séquestrée', text: "Immo détient votre caution pendant tout le bail. Ni vous ni le propriétaire n'y avez accès. Elle vous revient en fin de bail, après l'état des lieux de sortie — cette restitution n'est pas encore gérée dans l'application." },
   { icon: '⎈', title: 'La tirelire', text: "C'est la part de votre wallet réservée au logement. Elle seule sert à payer un loyer ou une réservation — un solde disponible ne suffit pas." },
   { icon: '☑', title: 'L’état des lieux', text: "Signé des deux côtés à l'entrée, il est l'unique référence à la sortie. Toute retenue doit s'appuyer sur un écart constaté, photos à l'appui." },
   { icon: '✎', title: 'Le préavis', text: "Donner son préavis est une déclaration d'intention : le bail ne s'arrête pas aussitôt et les loyers restent dus jusqu'au terme des 3 mois." }

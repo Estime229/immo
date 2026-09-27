@@ -61,3 +61,15 @@ export function validateRccm(rccm: string): string | null {
   if (!v) return null
   return /^RB\/[a-zA-Z]+\/\d{2}\s*[a-zA-Z]\s*\d+$/.test(v) ? null : `RCCM invalide. ${RCCM_FORMAT_HINT}`
 }
+
+/**
+ * Destination après connexion (`?redirect=` posé par l'annonce, la visite, la
+ * candidature…) — ignorée jusqu'au Lot 51. Chemins internes seulement : ni
+ * `//domaine`, ni `https://…`, ni `/\\domaine` (redirection ouverte).
+ */
+export function safeRedirect(value: unknown): string | null {
+  if (typeof value !== 'string' || !value.startsWith('/')) return null
+  if (value.startsWith('//') || value.startsWith('/\\') || /[\r\n]/.test(value)) return null
+  if (value.startsWith('/connexion')) return null
+  return value
+}

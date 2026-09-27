@@ -3,7 +3,7 @@ import type { SessionOutcome } from '~/utils/sessionOutcome'
 import { ApiRequestError } from '~/utils/authenticatedFetcher'
 import { errorText } from '~/utils/apiErrors'
 import { roleHomePath } from '~/utils/roleRoutes'
-import { SIGNUP_ROLE_TO_API, apiRoleToSignupRole, needsOnboarding, validateSignup } from '~/utils/onboarding'
+import { SIGNUP_ROLE_TO_API, apiRoleToSignupRole, needsOnboarding, safeRedirect, validateSignup } from '~/utils/onboarding'
 
 definePageMeta({ layout: 'blank' })
 
@@ -13,6 +13,7 @@ type CodeContext = 'login' | 'reset'
 /** À l'étape 'forgot', d'où vient la preuve d'identité déjà apportée. */
 type ResetMethod = 'otp' | 'recovery'
 
+const route = useRoute()
 const auth = useAuthApi()
 
 const HERO_IMAGES = ['/images/hero/hero-1.jpg', '/images/hero/hero-2.jpg', '/images/hero/hero-3.jpg']
@@ -55,7 +56,7 @@ function handleOutcome(outcome: SessionOutcome) {
   }
   if (outcome.kind === 'ok' || outcome.kind === 'restricted') {
     // Redirige selon le rôle réel renvoyé par l'API — jamais le rôle choisi localement à l'étape signup.
-    navigateTo(roleHomePath(outcome.user.role))
+    navigateTo(safeRedirect(route.query.redirect) ?? roleHomePath(outcome.user.role))
   }
 }
 

@@ -77,6 +77,11 @@ Mis à jour le 27/09/2026. Statut : **ouvert** sauf mention contraire.
 | 63 | 🟡 | États des lieux : aucune validation, messages en anglais, PDF d'un séjour incomplet | `/inventories`, `GET /pdf/inventories/:id` | 50 |
 | 64 | 🟡 | `auto-debit` sans `enabled` enregistre `null` | `PATCH /leases/:id/auto-debit` | 50 |
 | 65 | 🟡 | Pas de `GET /leases/:id` ; `/leases/my` mêle les deux rôles | `GET /leases/my` | 50 |
+| 66 | 🟠 | Candidatures : ni le propriétaire (nouvelle candidature) ni le candidat refusé ne sont prévenus | `POST /rental/requests`, `…/reject` | 51 |
+| 67 | 🟠 | Retenir un candidat crée un second bail sur un logement déjà engagé ; logement « loué » dès l'acceptation, sans retour possible | `PATCH /rental/requests/:id/accept` | 51 |
+| 68 | 🟡 | Bail préparé à l'acceptation : prépayé ignoré, notification trompeuse, id du bail non renvoyé | `PATCH /rental/requests/:id/accept` | 51 |
+| 69 | 🟡 | Le candidat ne peut pas retirer sa candidature ; refus sans motif ; statuts indiscernables | `/rental/requests` | 51 |
+| 70 | 🟡 | Candidature : date invalide → 500, date passée acceptée, message trop long sans détail ; équipe exclue | `/rental/requests` | 51 |
 
 ---
 
@@ -559,4 +564,55 @@ La place de marché repose entièrement sur des propriétaires qui viennent cons
 - La fiche d'un bail doit relire toute la liste. `/leases/my` renvoie indistinctement les baux où l'on est locataire et ceux où l'on est propriétaire, sans indicateur. Le frontend filtre par `tenant_id` / `landlord_id`.
 - Un membre d'équipe autorisé sur un bien (`team:leases:*`) ne voit pas ses baux dans `/leases/my`.
 - Le locataire voit les brouillons de son propriétaire avant leur envoi.
+
+---
+
+## Ajouts du Lot 51 — Candidatures
+
+### 66. 🟠 Candidatures : personne n'est prévenu
+
+- **Rejoué** : une candidature créée → aucune notification pour le propriétaire. Seule une conversation est ouverte, avec le message s'il y en a un.
+- **Rejoué** : une candidature refusée explicitement (`reject`) → aucune notification pour le candidat. Sa conversation est archivée en silence.
+- Seules l'acceptation et le refus automatique des autres candidats notifient.
+- **Attendu** : notifier le propriétaire à chaque candidature (`metadata.requestId`) et le candidat à chaque refus.
+- En attendant, le frontend :
+  - affiche un compteur de candidatures en attente dans le menu du propriétaire ;
+  - envoie un message au candidat dans la conversation avant chaque refus.
+
+### 67. 🟠 Retenir un candidat crée un second bail sur un logement déjà engagé
+
+- `AcceptRentalRequestHandler` ne vérifie que `unit_status === available`. Or un brouillon de bail créé par `POST /leases` ne change pas ce statut (il bloque seulement le calendrier, #58).
+- **Rejoué** : un brouillon de bail existant sur le logement, puis acceptation d'une candidature → 200. Il y a alors **deux brouillons qui se chevauchent** sur le même logement.
+- **À l'acceptation, le logement passe « occupé »**, alors qu'aucun bail n'est ni signé ni payé.
+  - **Aucun retour possible** : un brouillon ne peut être ni supprimé ni annulé (#58). Si le candidat ne signe jamais, le logement reste « occupé » et bloqué dans le calendrier, et n'accepte plus de candidature (400 « pas disponible »).
+- **Attendu** :
+  - vérifier le calendrier (`isRangeAvailable`) comme `POST /leases` ;
+  - passer le logement « occupé » à l'activation du bail, pas à l'acceptation ;
+  - permettre d'annuler une acceptation tant que rien n'est signé.
+- Le frontend bloque « Retenir ce candidat » quand un bail est en cours ou en préparation sur le logement, sauf si c'est un préavis dont le départ tombe avant l'emménagement.
+
+### 68. 🟡 Bail préparé à l'acceptation : écarts avec `POST /leases`
+
+- **Prépayé** : `prepaye_months` du logement est ignoré (`prepaid_target: 0`). `POST /leases` le reprend.
+- **Loyer** : c'est le prix affiché (`unit.price`) qui est repris, jamais la grille tarifaire.
+- **Date de début** : la date souhaitée par le candidat, **même passée** (#70), sinon le jour de l'acceptation.
+- **Notification au candidat** : « un bail a été préparé, **en attente de signature** ». Faux : c'est un brouillon, que le locataire ne peut pas signer tant que le propriétaire ne l'a pas envoyé (et qu'il ne doit pas signer, #54).
+- **Réponse** : elle renvoie la candidature, pas l'id du bail créé. Le frontend doit le retrouver dans `/leases/my`.
+- **Autres candidats** : leur notification porte `requestId` = la candidature **retenue**, pas la leur.
+
+### 69. 🟡 Cycle de vie trop limité
+
+- Le candidat ne peut pas retirer sa candidature : il n'existe pas de route, et la candidature reste « en attente » jusqu'à la réponse du propriétaire.
+- Le refus ne prend pas de motif.
+- Trois statuts seulement : un candidat écarté parce qu'un autre a été retenu est `rejected`, exactement comme un refus explicite.
+- **Attendu** : `withdrawn` (retrait par le candidat), un `reason` au refus, et la distinction « non retenu » / « refusé ».
+
+### 70. 🟡 Validation de la candidature
+
+- `desired_move_in_at: "abc"` → **500** (colonne `date`, champ validé seulement comme chaîne).
+- Une date passée est acceptée, et devient la date de début du bail à l'acceptation.
+- Un message de 2001 caractères → 400 « Données invalides », sans indiquer le champ.
+- `unit_id` non UUID → 400 « Données invalides ».
+- Les messages de `create` sont en anglais pour un logement introuvable (« Unit not found »).
+- Accepter et refuser sont réservés au propriétaire : un membre d'équipe autorisé sur le bien ne peut pas traiter les candidatures.
 

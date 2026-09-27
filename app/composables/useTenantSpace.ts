@@ -58,6 +58,7 @@ export const NAV_ITEMS = [
   { key: 'dash', to: '/locataire', icon: '◧', label: 'Tableau de bord', count: '' },
   { key: 'demandes', to: '/locataire/demandes', icon: '✎', label: 'Mes demandes', count: '' },
   { key: 'visites', to: '/locataire/visites', icon: '⚑', label: 'Mes visites', count: '' },
+  { key: 'candidatures', to: '/locataire/candidatures', icon: '☷', label: 'Mes candidatures', count: '' },
   { key: 'reservations', to: '/locataire/reservations', icon: '⌂', label: 'Mes réservations', count: '' },
   { key: 'bail', to: '/locataire/bail', icon: '⎙', label: 'Mon bail', count: '' },
   { key: 'edl', to: '/locataire/edl', icon: '☑', label: 'État des lieux', count: '' },

@@ -3471,3 +3471,78 @@ Données de test :
 Reste à faire, hors de ce lot :
 - **Candidatures** : le module `rental/requests` n'est pas branché côté front. L'API permet au locataire de postuler sur un logement ; en acceptant, le propriétaire crée automatiquement le brouillon de bail, avec la caution et l'avance du logement. C'est le chemin naturel « visite → candidature → bail ».
 - **Photos d'état des lieux** : aucune route d'envoi n'existe côté API (seulement le téléchargement par index).
+
+## Lot 51 — Candidatures : de la visite au bail préparé
+
+Suite du Lot 50 (« continue ») : le module `rental/requests` de l'API existait sans aucun écran. Or c'est le chemin naturel entre une visite réussie et un bail : le locataire postule, le propriétaire retient un candidat, et l'API prépare aussitôt le brouillon de bail.
+
+Backend relu : `rental.controller.ts`, les handlers `create`, `accept` et `reject`, les deux requêtes de liste, `rental-request.model.ts`. Rejoué en live :
+- **propriétaire** : `qa-landlord-1790282977@example.com`, avec un bien « Lot51 candidatures » ;
+- **candidats** : locataire vérifié, propriétaire de test (vérifié), locataire non vérifié.
+
+### Comportement réel de l'API (vérifié en live)
+
+| Cas | Réponse |
+|---|---|
+| Candidat non vérifié · le propriétaire postule sur son logement · logement occupé · `unit_id` invalide | 403 `error.KYC_REQUIRED` · 403 (message clair) · 400 « pas disponible » · 400 « Données invalides » |
+| `desired_move_in_at: "abc"` · date passée · message de 2001 caractères | **500** · **201** · 400 « Données invalides » |
+| Candidature valide · doublon en attente · sans message ni date | 201 (`conversation_id` renvoyé) · 400 « déjà une demande en attente » · 201 |
+| Liste côté candidat | candidature + logement complet (caution, avance, prépayé, bien, ville) + `conversation_id` |
+| Liste côté propriétaire | + candidat : nom, email, téléphone, `is_verified`, `reputation_score`, `trust_badge` |
+| Notification au propriétaire à la réception | **aucune** (#66) |
+| Refus par un autre propriétaire · refus · notification au candidat refusé · accepter une candidature refusée | 403 · 200 · **aucune** · 403 « déjà traitée » |
+| Accepter alors qu'un brouillon de bail existe sur le logement | **200 → deux brouillons qui se chevauchent** (#67) |
+| Acceptation | 200 (la candidature, **pas l'id du bail**). Brouillon créé : loyer 50 000, caution 100 000 (2 mois), avance 50 000, **prépayé 0** alors que le logement en prévoit 1 mois, début = date souhaitée. Logement → `occupied`, calendrier bloqué. |
+| Autres candidats en attente | refusés automatiquement, notifiés « attribué à un autre candidat » (`requestId` = celle retenue) |
+| Notification au candidat retenu | « un bail a été préparé, **en attente de signature** » — c'est un brouillon non envoyé (#68) |
+| Nouvelle candidature sur le logement attribué | 400 « pas disponible » |
+
+### Constats côté écrans
+
+| # | Espace | Constat |
+|---|---|---|
+| Q1 | Annonce | « Envoyer une demande » ouvrait une simple conversation : aucun moyen de postuler, alors que l'API le permet. |
+| Q2 | Annonce | Logement déjà loué : rien ne le disait. Caution « restituée sous 7 jours » (#57). |
+| Q3 | Locataire | Aucun écran pour suivre ses candidatures, ni lien entre une visite réalisée et la suite. |
+| Q4 | Pro | Aucun écran pour voir les candidats, les comparer, en retenir un ou les refuser. Le bail se créait à la main, à partir d'une conversation. |
+| Q5 | Connexion | `?redirect=`, posé par l'annonce (visite, réservation, candidature), était **ignoré** : après connexion, retour au tableau de bord. |
+| Q6 | Wallet, guide locataire | Caution « libérée 7 jours après l'état des lieux de sortie » (#57). |
+
+### Ce qui a été livré
+
+| Fichier | Rôle |
+|---|---|
+| `app/utils/rentalRequests.ts` | **Nouveau** — `validateCandidature`, `acceptancePreview` (ce que l'API prépare), `leaseStartIfAccepted`, `conflictingLease` (préavis compris), `draftLeaseFor`, `groupByUnit`, `latestRequestFor`, `visitOf` |
+| `app/composables/useRentalRequestsApi.ts`, `app/types/tenant.ts` | **Nouveau** — les quatre routes, forme réelle des deux listes |
+| `app/components/tenant/CandidatureModal.vue` | **Nouveau** — ce que voit le propriétaire, montants d'entrée si retenu, date et message contrôlés, blocage clair sans identité vérifiée |
+| `app/pages/biens/[id].vue` | « Déposer ma candidature » ; état de ma candidature (en attente, retenue, non retenue : repostuler) ; logement déjà loué ; « Poser une question au propriétaire » ; `?candidature=1` ; caution sans promesse de délai |
+| `app/pages/locataire/candidatures.vue` | **Nouveau** — En cours / Non retenues, message, date souhaitée ; « Voir mon bail » vers le bail né de la candidature, texte selon son avancement ; conversation ; retrait expliqué ; `?request=` |
+| `app/pages/pro/candidatures.vue` | **Nouveau**. Candidats **par logement** : identité vérifiée, badge et note de confiance, contact, date souhaitée, visite du logement, message. « Retenir ce candidat » : conséquences détaillées (brouillon, logement loué, autres candidats refusés, définitif, prépayé non repris, date passée), puis **redirection vers le brouillon**. Retenue bloquée si un bail existe sur le logement. « Refuser » envoie d'abord un message au candidat (pré-rempli). Onglet Traitées → bail. |
+| `app/pages/locataire/visites.vue` | Visite réalisée → « Déposer ma candidature » |
+| `app/pages/connexion.vue`, `app/utils/onboarding.ts` | `safeRedirect` : retour à la page d'origine après connexion, chemins internes seulement |
+| `app/layouts/pro.vue`, `useProSpace.ts`, `useTenantSpace.ts`, `layouts/locataire.vue` | Menus « Candidatures » / « Mes candidatures », compteur des candidatures en attente côté pro |
+| `app/utils/housingRequest.ts` | Notifications `requestId` → la candidature |
+| `app/utils/kycStatus.ts` | Candidater fait partie des actions bloquées sans vérification |
+| `app/pages/locataire/wallet.vue`, `locataire/guide.vue` | Caution : plus de délai de restitution promis |
+
+### Tests automatisés
+
+```
+Test Files  25 passed (25)
+     Tests  213 passed (213)   [+14 : tests/rentalRequests.test.ts, safeRedirect, notification de candidature]
+```
+
+Les montants testés sont ceux du brouillon réellement créé à l'acceptation (50 000 / 100 000 / 50 000, prépayé ignoré). `vue-tsc` : aucune erreur dans les fichiers de ce lot (30 erreurs antérieures, inchangées).
+
+### Vérification de bout en bout (Playwright, build de production local → API de production)
+
+| Id | Scénario | Résultat |
+|---|---|---|
+| A1-A2 | Visite réalisée → « Déposer ma candidature » → l'annonce s'ouvre sur la candidature : 50 000, caution 2 mois 100 000, avance 50 000, 150 000 à l'entrée | PASS |
+| A3-A6 | Date passée refusée ; candidature envoyée ; l'annonce affiche « Candidature envoyée le… » ; « Mes candidatures » : en attente, message, date, retrait expliqué | PASS |
+| C1-C4 | Pro : compteur au menu ; candidat « Identité vérifiée », « A visité le… », message ; second candidat « Pas de visite » ; logement déjà engagé : alerte et « Retenir » bloqué | PASS |
+| C5-C6 | Refus : message pré-rempli ; candidature refusée **et** message reçu dans la conversation | PASS |
+| C7-C8 | Retenir : conséquences expliquées ; redirection vers le brouillon (caution 100 000, avance 50 000) | PASS |
+| D1-D3 | Candidat : « Retenue », « Voir mon bail » ouvre ce bail (En préparation) ; notification reçue | PASS |
+| E1-E2 | Non connecté : « Déposer ma candidature » → connexion (code OTP) → **retour sur l'annonce** | PASS |
+| Z | Zéro erreur JS | PASS |
