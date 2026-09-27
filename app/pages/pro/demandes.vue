@@ -167,7 +167,7 @@ function criteriaLine(r: HousingRequestOpenItem) {
             <span class="flex-none text-[11.5px] text-[var(--text-faint)]">{{ daysAgoLabel(r.created_at) }}</span>
           </div>
           <p v-if="criteriaLine(r)" class="mb-0 mt-2.5 text-[12.5px] font-semibold text-[var(--text-secondary)]">{{ criteriaLine(r) }}</p>
-          <p class="mb-0 mt-2 line-clamp-3 flex-1 text-[13.5px] leading-[1.55] text-[var(--text-secondary)]">« {{ r.description }} »</p>
+          <p class="mb-0 mt-2 line-clamp-3 flex-1 text-[13.5px] leading-[1.55] text-[var(--text-secondary)] [overflow-wrap:anywhere]">« {{ r.description }} »</p>
           <div class="mt-3.5 flex items-center justify-between border-t border-sand-200 pt-3">
             <CoreBadge v-if="answered[r.id]" tone="ok">✓ Déjà proposé</CoreBadge>
             <CoreBadge v-else tone="neutral">Recherche ouverte</CoreBadge>

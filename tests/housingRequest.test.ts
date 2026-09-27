@@ -49,6 +49,10 @@ describe('notificationTarget', () => {
     expect(notificationTarget({ metadata: null })).toBeNull()
     expect(notificationTarget({})).toBeNull()
   })
+  it('visite : vers la page visites de l\'espace courant', () => {
+    expect(notificationTarget({ metadata: { visitId: 'v-1' } }, 'pro')).toBe('/pro/visites?visit=v-1')
+    expect(notificationTarget({ metadata: { visitId: 'v-1' } })).toBe('/locataire/visites?visit=v-1')
+  })
 })
 
 describe('daysAgoLabel', () => {

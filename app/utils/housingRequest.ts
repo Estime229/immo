@@ -65,10 +65,17 @@ export function budgetFit(price: number, r: Pick<HousingRequestCriteria, 'budget
   return 'in'
 }
 
-/** Destination d'une notification d'après ses métadonnées — seules les clés vérifiées en live sont reconnues. */
-export function notificationTarget(n: { metadata?: Record<string, unknown> | null }): string | null {
+/**
+ * Destination d'une notification d'après ses métadonnées — seules les clés
+ * vérifiées en live sont reconnues : `housing_request_id` (réponse à une
+ * demande, Lot 47) et `visitId` (toutes les étapes d'une visite, Lot 48 —
+ * notée en camelCase par l'API, contrairement au reste). Une visite concerne
+ * les deux espaces : la destination dépend de l'espace où l'on se trouve.
+ */
+export function notificationTarget(n: { metadata?: Record<string, unknown> | null }, space: 'locataire' | 'pro' = 'locataire'): string | null {
   const m = n.metadata ?? {}
   if (typeof m.housing_request_id === 'string') return `/locataire/demandes?request=${m.housing_request_id}`
+  if (typeof m.visitId === 'string') return `/${space}/visites?visit=${m.visitId}`
   return null
 }
 

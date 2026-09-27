@@ -75,9 +75,26 @@ export const FIELD_RULE_MESSAGES: Record<string, string> = {
 
 const BUSINESS_CODE_MESSAGES: Record<string, string> = {
   IFU_ALREADY_EXISTS: 'Cet IFU est déjà utilisé par un autre compte. Vérifiez le numéro ou contactez le support.',
-  'error.KYC_REQUIRED': "Votre identité doit être vérifiée par Immo avant de publier un bien. Déposez vos pièces depuis « Vérifier mon compte » : la validation prend généralement moins de 24 h.",
+  'error.KYC_REQUIRED': "Votre identité doit être vérifiée par Immo pour cette action (publier un bien, demander une visite…). Déposez vos pièces depuis « Vérifier mon compte » : la validation prend généralement moins de 24 h.",
   RCCM_ALREADY_EXISTS: 'Ce RCCM est déjà utilisé par un autre compte. Vérifiez le numéro ou contactez le support.',
   CPI_ALREADY_EXISTS: 'Cette carte professionnelle (CPI) est déjà utilisée par un autre compte.'
+}
+
+/**
+ * Messages du backend rédigés sans accents (module visites) ou peu
+ * explicites — remplacés à l'identique, jamais par motif, pour ne pas toucher
+ * aux autres messages. Vérifiés en live (Lot 48).
+ */
+const BACKEND_MESSAGE_FIXES: Record<string, string> = {
+  'La date de visite doit etre dans le futur.': 'La date de visite doit être dans le futur.',
+  'Vous avez deja une visite en attente pour ce logement.': 'Vous avez déjà une demande de visite en attente pour ce logement : attendez la réponse du propriétaire, ou annulez-la depuis « Mes visites ».',
+  'Seule une visite en attente peut etre confirmee.': 'Cette visite n\'est plus en attente : elle a sans doute déjà été traitée. Rechargez la page.',
+  'Seule une visite en attente peut etre refusee.': 'Cette visite n\'est plus en attente : elle a sans doute déjà été traitée. Rechargez la page.',
+  'Cette visite ne peut plus etre annulee.': 'Cette visite ne peut plus être annulée.',
+  'Seule une visite confirmee peut etre marquee comme effectuee.': 'Seule une visite confirmée peut être marquée comme réalisée.',
+  'Seule une visite en attente ou confirmee peut etre replanifiee.': 'Seule une visite en attente ou confirmée peut être replanifiée.',
+  'La date doit etre valide et dans le futur.': 'La nouvelle date doit être dans le futur.',
+  'Acces interdit.': 'Accès interdit.'
 }
 
 /**
@@ -150,7 +167,8 @@ export function mapApiError(
     }
   }
 
-  const message = typeof payload?.message === 'string' ? payload.message : undefined
+  const rawMessage = typeof payload?.message === 'string' ? payload.message : undefined
+  const message = rawMessage !== undefined ? (BACKEND_MESSAGE_FIXES[rawMessage] ?? rawMessage) : undefined
 
   if (status === 400 && payload && isValidationPayload(payload)) {
     const fieldErrors: Record<string, string> = {}

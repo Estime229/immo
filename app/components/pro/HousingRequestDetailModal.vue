@@ -102,7 +102,7 @@ async function submit() {
         </div>
 
         <div class="overflow-y-auto p-6">
-          <p class="m-0 text-[15px] leading-[1.6] text-[var(--text-primary)]">« {{ request.description }} »</p>
+          <p class="m-0 text-[15px] leading-[1.6] text-[var(--text-primary)] [overflow-wrap:anywhere]">« {{ request.description }} »</p>
 
           <div class="mt-4.5 grid grid-cols-2 gap-2.5">
             <div v-for="c in criteria" :key="c.label" class="rounded-md border border-[var(--border-subtle)] bg-white p-3">

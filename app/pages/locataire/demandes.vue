@@ -76,7 +76,7 @@ function onClosed() {
           <span class="text-[12.5px] text-[var(--text-muted)]" :class="{ 'font-mono': r.budget_min || r.budget_max }">{{ formatBudget(r) }}</span>
         </div>
         <p v-if="criteriaLine(r)" class="mb-0 mt-2.5 text-[12.5px] font-semibold text-[var(--text-secondary)]">{{ criteriaLine(r) }}</p>
-        <p class="mb-0 mt-2 line-clamp-3 flex-1 text-[14px] leading-[1.55] text-[var(--text-primary)]">« {{ r.description }} »</p>
+        <p class="mb-0 mt-2 line-clamp-3 flex-1 text-[14px] leading-[1.55] text-[var(--text-primary)] [overflow-wrap:anywhere]">« {{ r.description }} »</p>
         <div class="mt-3.5 flex items-center justify-between border-t border-sand-200 pt-3">
           <span class="text-[12.5px] text-[var(--text-faint)]">{{ r.status === 'closed' && r.closed_at ? `Fermée le ${formatDate(r.closed_at)}` : formatDate(r.created_at) }}</span>
           <span class="text-[12.5px] font-bold" :class="r.response_count ? 'text-green-700' : 'text-[var(--text-muted)]'">

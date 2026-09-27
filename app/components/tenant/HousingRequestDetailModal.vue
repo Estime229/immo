@@ -99,7 +99,7 @@ async function closeRequest() {
         </div>
 
         <div class="overflow-y-auto p-6">
-          <p class="m-0 text-[15px] leading-[1.6] text-[var(--text-primary)]">« {{ request.description }} »</p>
+          <p class="m-0 text-[15px] leading-[1.6] text-[var(--text-primary)] [overflow-wrap:anywhere]">« {{ request.description }} »</p>
 
           <div class="mt-4.5 grid grid-cols-2 gap-2.5">
             <div v-for="c in criteria" :key="c.label" class="rounded-md border border-[var(--border-subtle)] bg-white p-3">
@@ -128,7 +128,7 @@ async function closeRequest() {
                 <CoreBadge v-if="fitLabel(resp)" :tone="fitLabel(resp) === 'Dans votre budget' ? 'ok' : 'neutral'">{{ fitLabel(resp) }}</CoreBadge>
                 <CoreBadge v-if="resp.unit?.unit_status === 'occupied'" tone="warn">Actuellement occupé</CoreBadge>
               </div>
-              <p v-if="resp.message" class="mb-0 mt-2 text-[12.5px] italic text-[var(--text-secondary)]">« {{ resp.message }} »</p>
+              <p v-if="resp.message" class="mb-0 mt-2 text-[12.5px] italic text-[var(--text-secondary)] [overflow-wrap:anywhere]">« {{ resp.message }} »</p>
               <div class="mt-3 flex flex-wrap gap-2">
                 <NuxtLink v-if="resp.unit?.property_id" :to="`/biens/${resp.unit.property_id}`" target="_blank" class="rounded-pill border border-[var(--border-default)] bg-white px-3.5 py-2 text-[12px] font-bold">Voir le logement</NuxtLink>
                 <NuxtLink :to="`/locataire/messages?conversation=${resp.conversation_id}`" class="rounded-pill bg-[image:var(--action-primary)] px-3.5 py-2 text-[12px] font-bold text-white">Répondre au propriétaire</NuxtLink>

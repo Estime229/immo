@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { visitBucket } from '~/utils/visits'
 const route = useRoute()
 const currentUser = useAuthUser()
 const displayName = computed(() => {
@@ -29,14 +30,13 @@ const pageTitle = computed(() => PAGE_TITLES[currentKey.value] ?? '')
  * restent vides tant qu'ils ne sont pas branchés sur une vraie donnée.
  */
 const housingRequestsApi = useHousingRequestsApi()
+const visitsApi = useVisitsApi()
 const liveCounts = ref<Record<string, number>>({})
 onMounted(async () => {
-  try {
-    const res = await housingRequestsApi.fetchOpen({ limit: 1 })
-    liveCounts.value = { ...liveCounts.value, demandes: res.total }
-  } catch {
-    // pas de compteur plutôt qu'un faux
-  }
+  const [open, visits] = await Promise.allSettled([housingRequestsApi.fetchOpen({ limit: 1 }), visitsApi.fetchMine('landlord')])
+  // pas de compteur plutôt qu'un faux en cas d'échec
+  if (open.status === 'fulfilled') liveCounts.value = { ...liveCounts.value, demandes: open.value.total }
+  if (visits.status === 'fulfilled') liveCounts.value = { ...liveCounts.value, visites: visits.value.filter(v => visitBucket(v) === 'todo').length }
 })
 function liveCount(key: string) {
   const n = liveCounts.value[key]

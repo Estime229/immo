@@ -2,6 +2,7 @@
 import { localizeNotification } from '~/composables/useNotificationsApi'
 import { notificationTarget } from '~/utils/housingRequest'
 
+const route = useRoute()
 const notificationsApi = useNotificationsApi()
 const block = useFetchBlock(() => notificationsApi.list())
 onMounted(block.load)
@@ -27,7 +28,7 @@ async function markOne(id: string) {
 /** Une notification liée à un objet précis (ex. réponse à une demande) y mène directement — avant, un clic ne faisait que la marquer lue. */
 async function openNotification(n: { id: string; metadata?: Record<string, unknown> | null }) {
   markOne(n.id)
-  const target = notificationTarget(n)
+  const target = notificationTarget(n, route.path.startsWith('/pro') ? 'pro' : 'locataire')
   if (target) {
     open.value = false
     await navigateTo(target)
