@@ -94,8 +94,9 @@ function closeMenu() {
 
 <template>
   <header class="sticky top-0 z-40 border-b border-sand-300 bg-[rgba(250,248,244,.88)] backdrop-blur-[14px]">
-    <div class="mx-auto flex h-[72px] max-w-[1240px] items-center justify-between gap-[22px] px-4 sm:px-[26px]">
-      <NuxtLink to="/" class="flex items-center gap-2.5">
+    <!-- Sous lg, la marque et la navigation vivent ailleurs (bannière d'app, barre d'onglets du bas) : l'en-tête ne garde que le menu, centré. -->
+    <div class="mx-auto flex h-[72px] max-w-[1240px] items-center justify-center gap-[22px] px-4 sm:px-[26px] lg:justify-between">
+      <NuxtLink to="/" class="hidden items-center gap-2.5 lg:flex">
         <img src="/images/logo.png" alt="Immo" class="h-8 w-8 rounded-[9px]" width="32" height="32">
         <span class="font-display text-[22px] font-extrabold tracking-[-.025em] text-green-900">Immo</span>
       </NuxtLink>
@@ -116,28 +117,33 @@ function closeMenu() {
         </NuxtLink>
         <button
           type="button"
-          class="hidden h-[42px] w-[42px] place-items-center rounded-pill border border-[var(--border-default)] bg-white text-[17px] transition-colors hover:border-green-600 sm:grid"
+          class="hidden h-[42px] w-[42px] place-items-center rounded-pill border border-[var(--border-default)] bg-white text-[17px] transition-colors hover:border-green-600 lg:grid"
           @click="langOpen = true"
         >✦</button>
-        <div
-          class="relative flex cursor-pointer items-center gap-[9px] rounded-pill border bg-white py-[5px] pl-[13px] pr-[6px] shadow-card transition-shadow hover:shadow-raised"
-          :class="menuOpen ? 'border-green-600' : 'border-[var(--border-default)]'"
+        <button
+          type="button"
+          class="relative flex items-center gap-3.5 rounded-pill border bg-white py-1.5 pl-[22px] pr-1.5 shadow-card transition-[box-shadow,border-color,transform] duration-[var(--duration-base)] ease-[var(--ease-standard)] hover:shadow-raised active:scale-[.96] lg:gap-[9px] lg:py-[5px] lg:pl-[13px] lg:pr-[6px] lg:active:scale-100"
+          :class="menuOpen ? 'border-green-600 shadow-raised' : 'border-[var(--border-default)]'"
+          :aria-expanded="menuOpen"
+          aria-label="Menu"
           @click="menuOpen = !menuOpen; if (menuOpen) ensureRoles()"
         >
-          <span class="flex flex-col gap-[3px]">
-            <span class="h-0.5 w-4 rounded-sm bg-sand-900" />
-            <span class="h-0.5 w-4 rounded-sm bg-sand-900" />
-            <span class="h-0.5 w-4 rounded-sm bg-sand-900" />
+          <!-- Les trois traits se croisent en ✕ quand le menu est ouvert. -->
+          <span class="flex flex-col gap-1 lg:gap-[3px]">
+            <span class="h-0.5 w-5 rounded-sm bg-sand-900 transition-transform duration-[var(--duration-base)] ease-[var(--ease-standard)] lg:w-4" :class="menuOpen ? 'translate-y-1.5 rotate-45 lg:translate-y-[5px]' : ''" />
+            <span class="h-0.5 w-5 rounded-sm bg-sand-900 transition-[opacity,transform] duration-[var(--duration-base)] lg:w-4" :class="menuOpen ? 'scale-x-0 opacity-0' : ''" />
+            <span class="h-0.5 w-5 rounded-sm bg-sand-900 transition-transform duration-[var(--duration-base)] ease-[var(--ease-standard)] lg:w-4" :class="menuOpen ? '-translate-y-1.5 -rotate-45 lg:-translate-y-[5px]' : ''" />
           </span>
-          <CoreAvatar :name="displayName" :size="32" color="var(--color-green-700)" />
-        </div>
+          <span class="lg:hidden"><CoreAvatar :name="displayName" :size="42" color="var(--color-green-700)" /></span>
+          <span class="hidden lg:block"><CoreAvatar :name="displayName" :size="32" color="var(--color-green-700)" /></span>
+        </button>
       </div>
     </div>
 
     <!-- Menu utilisateur -->
     <template v-if="menuOpen">
       <div class="fixed inset-0 z-[44]" @click="closeMenu" />
-      <div class="absolute right-4 top-[66px] z-[45] w-80 max-w-[calc(100vw-2rem)] animate-[im-rise_.2s_ease_both] rounded-xl border border-[var(--border-subtle)] bg-white p-2 shadow-panel sm:right-[26px]">
+      <div class="absolute inset-x-4 top-[70px] z-[45] mx-auto max-w-[22rem] animate-[im-rise_.2s_ease_both] rounded-xl border border-[var(--border-subtle)] bg-white p-2 shadow-panel lg:left-auto lg:right-[26px] lg:top-[66px] lg:mx-0 lg:w-80 lg:max-w-none">
         <NuxtLink
           v-for="link in MOBILE_NAV_LINKS"
           :key="link.to"
