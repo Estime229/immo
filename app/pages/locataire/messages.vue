@@ -117,7 +117,7 @@ const STATUS_NOTE: Record<string, string> = {
 
 <template>
   <div class="animate-[im-fade_.3s_ease_both]">
-    <div class="grid h-[calc(100dvh-120px-4rem-env(safe-area-inset-bottom))] min-h-[420px] grid-cols-1 overflow-hidden rounded-2xl border border-[var(--border-subtle)] bg-white lg:h-[calc(100vh-200px)] lg:min-h-[520px] lg:grid-cols-[320px_1fr]">
+    <div class="grid h-[calc(100dvh-120px-var(--mobile-tabbar-space))] min-h-[420px] grid-cols-1 overflow-hidden rounded-2xl border border-[var(--border-subtle)] bg-white lg:h-[calc(100vh-200px)] lg:min-h-[520px] lg:grid-cols-[320px_1fr]">
       <div class="flex-col border-r border-[var(--border-subtle)] lg:flex" :class="mobileView === 'chat' ? 'hidden' : 'flex'">
         <div class="p-4.5 pb-3">
           <input v-model="query" placeholder="Rechercher" class="h-10 w-full rounded-pill border border-[var(--border-default)] bg-[var(--surface-input)] px-4 text-[13.5px] outline-none">
