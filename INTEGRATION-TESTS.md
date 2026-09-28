@@ -4125,3 +4125,5 @@ Demande : « le calendrier n'est pas intuitif, on ne voit pas le mois », avec u
 | C7-C8 | Fermé : dates dans les champs, total affiché, « Réserver » actif ; « Effacer les dates » puis Échap | PASS |
 | C9 | Mobile 390 px : feuille en bas d'écran, un mois, pas de débordement | PASS |
 | Z | Zéro erreur JS | PASS |
+
+En **production** (im-hazel.vercel.app) : C1 à C9 et zéro erreur JS, **10/10 PASS**.
