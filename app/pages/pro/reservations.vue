@@ -14,10 +14,12 @@ const landlordPropertiesApi = useLandlordPropertiesApi()
 
 const tab = ref<'liste' | 'promo'>('liste')
 
+const reservationsBadge = useLandlordReservationsBadge()
 const bookingsBlock = useFetchBlock(() => bookingsApi.fetchMine())
 onMounted(() => {
   bookingsBlock.load()
   promoList.ensureLoaded()
+  reservationsBadge.markAllSeen()
 })
 
 /**
