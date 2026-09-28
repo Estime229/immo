@@ -53,6 +53,12 @@ describe('notificationTarget', () => {
     expect(notificationTarget({ metadata: { bookingId: 'b-1', amount: '30000.00' } }, 'pro')).toBe('/pro/reservations?booking=b-1')
     expect(notificationTarget({ metadata: { bookingId: 'b-1' } })).toBe('/locataire/reservations?booking=b-1')
   })
+  it('intervention et partenariat d\'artisan (métadonnées live : artisan_request_id, partnership_id)', () => {
+    expect(notificationTarget({ metadata: { msgKey: 'artisan_request_created', artisan_request_id: 'ar-1' } }, 'artisan')).toBe('/artisan/missions?request=ar-1')
+    expect(notificationTarget({ metadata: { artisan_request_id: 'ar-1', public_posting_id: 'pp-1' } }, 'pro')).toBe('/pro/artisans?request=ar-1')
+    expect(notificationTarget({ metadata: { partnership_id: 'p-1' } }, 'artisan')).toBe('/artisan/partenaires')
+    expect(notificationTarget({ metadata: { partnership_id: 'p-1' } }, 'pro')).toBe('/pro/artisans?tab=partenariats')
+  })
   it('mandat et équipe (métadonnées : mandate_id, memberId/teamId)', () => {
     expect(notificationTarget({ metadata: { msgKey: 'mandate_invitation', mandate_id: 'md-1' } })).toBe('/pro/mandats?mandate=md-1')
     expect(notificationTarget({ metadata: { memberId: 'm-1', teamId: 't-1' } })).toBe('/pro/equipe')

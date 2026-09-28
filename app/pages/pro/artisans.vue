@@ -2,6 +2,8 @@
 import type { ArtisanOffer, ArtisanPartnership, ArtisanProfile, ArtisanRequestSummary } from '~/types/artisan'
 import type { RefEntry } from '~/types/reference'
 import { ApiRequestError } from '~/utils/authenticatedFetcher'
+import { errorText } from '~/utils/apiErrors'
+import { canCancel, canReview, interventionPhase, paymentSplit, PHASE_LABEL_REQUESTER, PHASE_TONE } from '~/utils/artisanRequests'
 
 definePageMeta({ layout: 'pro' })
 
@@ -11,7 +13,7 @@ const modal = useProModal()
 const modalTarget = useProModalTarget()
 const refresh = useArtisanRequestsRefresh()
 
-const tab = ref<'interventions' | 'annuaire' | 'partenariats'>('interventions')
+const tab = ref<'interventions' | 'annuaire' | 'partenariats'>(useRoute().query.tab === 'partenariats' ? 'partenariats' : 'interventions')
 const TABS = [
   { key: 'interventions' as const, label: 'Interventions' },
   { key: 'annuaire' as const, label: 'Annuaire' },
@@ -36,14 +38,24 @@ const block = useFetchBlock(() => artisanApi.listMine())
 onMounted(block.load)
 watch(refresh, block.load)
 
-const STATUS_LABEL: Record<string, string> = { open: 'Ouverte', agreed: 'Offre acceptée', in_progress: 'Payée, en cours', completed: 'Terminée', cancelled: 'Annulée' }
-const STATUS_TONE: Record<string, 'ok' | 'warn' | 'info' | 'neutral' | 'danger'> = { open: 'warn', agreed: 'info', in_progress: 'info', completed: 'ok', cancelled: 'neutral' }
-function statusLabel(s: string) {
-  return STATUS_LABEL[s] ?? s
+function statusLabel(r: ArtisanRequestSummary) {
+  return PHASE_LABEL_REQUESTER[interventionPhase(r)]
 }
-function statusTone(s: string) {
-  return STATUS_TONE[s] ?? 'neutral'
+function statusTone(r: ArtisanRequestSummary) {
+  return PHASE_TONE[interventionPhase(r)]
 }
+/** Poste public (`target_artisan_id` nul) et candidatures qui s'y rattachent. */
+function postingCandidates(r: ArtisanRequestSummary) {
+  return block.items.value.filter(x => x.public_posting_id === r.id)
+}
+const route = useRoute()
+const highlight = typeof route.query.request === 'string' ? route.query.request : null
+watch(() => block.items.value, items => {
+  if (highlight && items.some(i => i.id === highlight) && expandedId.value !== highlight) {
+    expandedId.value = highlight
+    nextTick(() => document.getElementById(`request-${highlight}`)?.scrollIntoView({ block: 'center' }))
+  }
+})
 /** `first_name`/`last_name` peuvent être `null` — l'inscription ne les persiste pas encore côté API (voir I1). */
 function targetArtisanName(r: ArtisanRequestSummary) {
   const name = [r.target_artisan?.first_name, r.target_artisan?.last_name].filter(Boolean).join(' ')
@@ -57,42 +69,10 @@ const busyId = ref<string | null>(null)
 const actionError = ref('')
 
 const expandedId = ref<string | null>(null)
-const offersByRequest = ref<Record<string, ArtisanOffer[]>>({})
-const offersLoading = ref<string | null>(null)
-
-async function toggleExpand(r: ArtisanRequestSummary) {
-  if (expandedId.value === r.id) {
-    expandedId.value = null
-    return
-  }
-  expandedId.value = r.id
+function toggleExpand(r: ArtisanRequestSummary) {
+  expandedId.value = expandedId.value === r.id ? null : r.id
   actionError.value = ''
-  if (!offersByRequest.value[r.id]) {
-    offersLoading.value = r.id
-    try {
-      offersByRequest.value[r.id] = await artisanApi.listOffers(r.id)
-    } catch {
-      offersByRequest.value[r.id] = []
-    } finally {
-      offersLoading.value = null
-    }
-  }
 }
-
-async function respond(offerId: string, requestId: string, action: 'accept' | 'reject') {
-  busyId.value = offerId
-  actionError.value = ''
-  try {
-    await artisanApi.respondOffer(offerId, action)
-    offersByRequest.value[requestId] = await artisanApi.listOffers(requestId)
-    await block.load()
-  } catch (e) {
-    actionError.value = e instanceof ApiRequestError ? (e.mapped.bannerMessage ?? "La réponse à l'offre a échoué.") : "La réponse à l'offre a échoué."
-  } finally {
-    busyId.value = null
-  }
-}
-
 async function doCancel(r: ArtisanRequestSummary) {
   busyId.value = r.id
   actionError.value = ''
@@ -100,7 +80,7 @@ async function doCancel(r: ArtisanRequestSummary) {
     await artisanApi.cancel(r.id)
     await block.load()
   } catch (e) {
-    actionError.value = e instanceof ApiRequestError ? (e.mapped.bannerMessage ?? "L'annulation a échoué.") : "L'annulation a échoué."
+    actionError.value = e instanceof ApiRequestError ? errorText(e.mapped, "L'annulation a échoué.") : "L'annulation a échoué."
   } finally {
     busyId.value = null
   }
@@ -113,6 +93,8 @@ function openPayModal(r: ArtisanRequestSummary) {
 
 /* ---- Avis (une fois l'intervention terminée) ---- */
 const reviewingId = ref<string | null>(null)
+/** Avis déjà laissés pendant la session (l'API ne dit pas lesquels existent ; un doublon renvoie 400). */
+const reviewed = ref<Record<string, boolean>>({})
 const reviewRating = ref(5)
 const reviewComment = ref('')
 async function submitReview(r: ArtisanRequestSummary) {
@@ -120,11 +102,16 @@ async function submitReview(r: ArtisanRequestSummary) {
   actionError.value = ''
   try {
     await artisanApi.review(r.id, reviewRating.value, reviewComment.value.trim() || undefined)
+    reviewed.value = { ...reviewed.value, [r.id]: true }
     reviewingId.value = null
     reviewComment.value = ''
     reviewRating.value = 5
   } catch (e) {
-    actionError.value = e instanceof ApiRequestError ? (e.mapped.bannerMessage ?? "L'avis a échoué.") : "L'avis a échoué."
+    if (e instanceof ApiRequestError && /déjà laissé un avis/.test(e.mapped.bannerMessage ?? '')) {
+      reviewed.value = { ...reviewed.value, [r.id]: true }
+      reviewingId.value = null
+    }
+    actionError.value = e instanceof ApiRequestError ? errorText(e.mapped, "L'avis a échoué.") : "L'avis a échoué."
   } finally {
     busyId.value = null
   }
@@ -157,7 +144,7 @@ async function endPartnership(p: ArtisanPartnership) {
     await artisanApi.endPartnership(p.id)
     await partBlock.load()
   } catch (e) {
-    actionError.value = e instanceof ApiRequestError ? (e.mapped.bannerMessage ?? "L'arrêt du partenariat a échoué.") : "L'arrêt du partenariat a échoué."
+    actionError.value = e instanceof ApiRequestError ? errorText(e.mapped, "L'arrêt du partenariat a échoué.") : "L'arrêt du partenariat a échoué."
   } finally {
     busyId.value = null
   }
@@ -184,7 +171,7 @@ async function invite(artisanId: string) {
     inviting.value = false
     await partBlock.load()
   } catch (e) {
-    inviteError.value = e instanceof ApiRequestError ? (e.mapped.bannerMessage ?? "L'invitation a échoué.") : "L'invitation a échoué."
+    inviteError.value = e instanceof ApiRequestError ? errorText(e.mapped, "L'invitation a échoué.") : "L'invitation a échoué."
   } finally {
     inviteLoading.value = false
   }
@@ -223,25 +210,35 @@ async function invite(artisanId: string) {
         Aucune demande d'intervention pour l'instant.
       </p>
       <template v-else>
-        <div v-for="r in block.items.value" :key="r.id" class="mb-3.5 rounded-2xl border border-[var(--border-subtle)] bg-white p-5">
+        <div
+          v-for="r in block.items.value.filter(x => !x.public_posting_id)"
+          :id="`request-${r.id}`"
+          :key="r.id"
+          class="mb-3.5 rounded-2xl border bg-white p-5"
+          :class="r.id === highlight ? 'border-green-600' : 'border-[var(--border-subtle)]'"
+        >
           <div class="flex cursor-pointer items-start gap-4" @click="toggleExpand(r)">
             <div class="grid h-11 w-11 flex-none place-items-center rounded-md bg-info-bg text-[17px]">⚒</div>
-            <div class="flex-1">
+            <div class="min-w-0 flex-1">
               <p class="m-0 text-[15.5px] font-bold">{{ tradeLabel(r.trade_reference_id) }}</p>
               <p class="mb-0 mt-0.5 text-[13px] text-[var(--text-muted)]">{{ r.unit?.name ?? 'Logement' }} · demandée le {{ formatDate(r.created_at) }}</p>
               <p v-if="r.target_artisan" class="mb-0 mt-1 text-[12.5px] text-[var(--text-faint)]">Envoyée à {{ targetArtisanName(r) }}</p>
+              <p v-else class="mb-0 mt-1 text-[12.5px] text-[var(--text-faint)]">Poste ouvert{{ r.restricted_to_partners ? ' à vos partenaires' : '' }} · {{ postingCandidates(r).length }} candidature{{ postingCandidates(r).length > 1 ? 's' : '' }}</p>
             </div>
-            <CoreBadge :tone="statusTone(r.status)">{{ statusLabel(r.status) }}</CoreBadge>
+            <CoreBadge :tone="statusTone(r)">{{ statusLabel(r) }}</CoreBadge>
           </div>
-
-          <p class="mb-0 mt-3.5 text-sm leading-[1.6] text-[var(--text-secondary)]">{{ r.description }}</p>
+          <p class="mb-0 mt-3.5 text-sm leading-[1.6] text-[var(--text-secondary)] [overflow-wrap:anywhere]">{{ r.description }}</p>
+          <p v-if="r.status === 'in_progress' && r.retained_amount !== null && r.retained_amount !== undefined" class="mb-0 mt-2 text-[12.5px] text-[var(--text-muted)]">
+            Payée : la part retenue ({{ formatFcfa(Number(r.retained_amount)) }}) est conservée par Immo jusqu'à la fin de la garantie. L'artisan marque l'intervention terminée une fois le travail fait.
+          </p>
 
           <div class="mt-4 flex flex-wrap gap-2 border-t border-sand-200 pt-4">
-            <button v-if="r.status === 'open' || r.status === 'agreed'" type="button" class="rounded-sm border border-[var(--border-default)] bg-white px-4 py-2.5 text-[12.5px] font-bold" :disabled="busyId === r.id" @click.stop="doCancel(r)">Annuler la demande</button>
+            <button v-if="canCancel(r)" type="button" class="rounded-sm border border-[var(--border-default)] bg-white px-4 py-2.5 text-[12.5px] font-bold" :disabled="busyId === r.id" @click.stop="doCancel(r)">{{ r.target_artisan_id ? 'Annuler la demande' : 'Annuler le poste' }}</button>
             <button v-if="r.status === 'agreed'" type="button" class="rounded-sm bg-[image:var(--action-primary)] px-4 py-2.5 text-[12.5px] font-bold text-white" @click.stop="openPayModal(r)">Payer l'intervention</button>
-            <CoreBadge v-if="r.status === 'in_progress'" tone="ok" class="self-center">Payée, en attente de l'artisan</CoreBadge>
-            <button v-if="r.status === 'completed'" type="button" class="rounded-sm border border-[var(--border-default)] bg-white px-4 py-2.5 text-[12.5px] font-bold" @click.stop="reviewingId = reviewingId === r.id ? null : r.id">Laisser un avis</button>
-            <button type="button" class="rounded-sm border border-[var(--border-default)] bg-white px-4 py-2.5 text-[12.5px] font-bold" @click.stop="toggleExpand(r)">{{ expandedId === r.id ? 'Masquer les offres' : 'Voir les offres' }}</button>
+            <button v-if="canReview(r) && !reviewed[r.id]" type="button" class="rounded-sm border border-[var(--border-default)] bg-white px-4 py-2.5 text-[12.5px] font-bold" @click.stop="reviewingId = reviewingId === r.id ? null : r.id">Laisser un avis</button>
+            <span v-else-if="reviewed[r.id]" class="self-center text-[12.5px] font-semibold text-ok-fg">Avis envoyé ✓</span>
+            <NuxtLink v-if="r.conversation_id" :to="`/pro/messages?conversation=${r.conversation_id}`" class="rounded-sm border border-[var(--border-default)] bg-white px-4 py-2.5 text-[12.5px] font-bold" @click.stop>Conversation</NuxtLink>
+            <button v-if="r.target_artisan_id && (r.status === 'open' || r.status === 'agreed')" type="button" class="rounded-sm border border-[var(--border-default)] bg-white px-4 py-2.5 text-[12.5px] font-bold" @click.stop="toggleExpand(r)">{{ expandedId === r.id ? 'Masquer les offres' : 'Voir les offres' }}</button>
           </div>
 
           <div v-if="reviewingId === r.id" class="mt-3.5 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-page)] p-4">
@@ -249,26 +246,37 @@ async function invite(artisanId: string) {
             <div class="mb-3 flex gap-1.5">
               <button v-for="n in 5" :key="n" type="button" class="text-[22px]" :class="n <= reviewRating ? 'text-warn-fg' : 'text-sand-300'" @click="reviewRating = n">★</button>
             </div>
-            <textarea v-model="reviewComment" placeholder="Votre commentaire (optionnel)" class="min-h-[60px] w-full resize-y rounded-md border border-[var(--border-default)] bg-white p-3 text-sm outline-none" />
+            <textarea v-model="reviewComment" maxlength="1000" placeholder="Votre commentaire (facultatif), visible sur le profil de l'artisan" class="min-h-[60px] w-full resize-y rounded-md border border-[var(--border-default)] bg-white p-3 text-sm outline-none" />
             <button type="button" class="mt-3 rounded-sm bg-[image:var(--action-primary)] px-4 py-2.5 text-[12.5px] font-bold text-white" :disabled="busyId === r.id" @click="submitReview(r)">{{ busyId === r.id ? 'Envoi…' : "Envoyer l'avis" }}</button>
           </div>
 
-          <div v-if="expandedId === r.id" class="mt-3.5 border-t border-sand-200 pt-4">
-            <p v-if="offersLoading === r.id" class="m-0 text-[13px] text-[var(--text-muted)]">Chargement des offres…</p>
-            <p v-else-if="!offersByRequest[r.id]?.length" class="m-0 text-[13px] text-[var(--text-muted)]">Aucune offre reçue pour l'instant.</p>
-            <div v-else class="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <div v-for="o in offersByRequest[r.id]" :key="o.id" class="rounded-xl border-[1.5px] bg-white p-4" :class="o.status === 'accepted' ? 'border-green-600' : 'border-[var(--border-subtle)]'">
-                <div class="flex justify-between text-[13px]"><span class="text-[var(--text-muted)]">Prix</span><span class="font-mono font-bold">{{ formatFcfa(Number(o.price)) }}</span></div>
-                <div class="mt-1.5 flex justify-between text-[13px]"><span class="text-[var(--text-muted)]">Garantie</span><span class="font-semibold">{{ o.warranty_days }} jours</span></div>
-                <div class="mt-1.5 flex justify-between text-[13px]"><span class="text-[var(--text-muted)]">Retenue</span><span class="font-semibold text-clay-700">{{ o.retention_percentage }} %</span></div>
-                <CoreBadge v-if="o.status !== 'pending'" :tone="o.status === 'accepted' ? 'ok' : 'neutral'" class="mt-2.5">{{ o.status === 'accepted' ? 'Acceptée' : 'Refusée' }}</CoreBadge>
-                <div v-else class="mt-2.5 flex gap-1.5">
-                  <button type="button" class="flex-1 rounded-md bg-[image:var(--action-primary)] py-2 text-[12px] font-bold text-white" :disabled="busyId === o.id" @click="respond(o.id, r.id, 'accept')">Accepter</button>
-                  <button type="button" class="flex-1 rounded-md border border-[var(--border-default)] bg-white py-2 text-[12px] font-bold" :disabled="busyId === o.id" @click="respond(o.id, r.id, 'reject')">Refuser</button>
-                </div>
+          <!-- Candidatures d'un poste ouvert : chacune a sa propre négociation -->
+          <div v-if="!r.target_artisan_id && postingCandidates(r).length" class="mt-3.5">
+            <div v-for="c in postingCandidates(r)" :key="c.id" class="mb-2.5 rounded-md border border-[var(--border-subtle)] p-3.5">
+              <div class="flex flex-wrap items-center gap-2">
+                <p class="m-0 flex-1 text-[13.5px] font-bold">Candidature de {{ targetArtisanName(c) }}</p>
+                <CoreBadge :tone="statusTone(c)">{{ statusLabel(c) }}</CoreBadge>
               </div>
+              <ArtisanOfferPanel v-if="c.status === 'open' || c.status === 'agreed'" :request="c" side="requester" @changed="block.load" />
+              <button v-if="c.status === 'agreed'" type="button" class="mt-2 rounded-sm bg-[image:var(--action-primary)] px-4 py-2 text-[12.5px] font-bold text-white" @click="openPayModal(c)">Payer l'intervention</button>
             </div>
           </div>
+
+          <ArtisanOfferPanel v-if="expandedId === r.id && r.target_artisan_id && (r.status === 'open' || r.status === 'agreed')" :request="r" side="requester" @changed="block.load" />
+          <ArtisanDisputePanel v-if="r.status === 'completed' || r.status === 'closed'" :request="r" side="requester" @changed="block.load" />
+        </div>
+
+        <!-- Candidatures retenues sur un poste : leur suite (paiement, garantie, litige) -->
+        <div v-for="c in block.items.value.filter(x => x.public_posting_id && x.status !== 'open' && x.status !== 'agreed' && x.status !== 'cancelled')" :id="`request-${c.id}`" :key="c.id" class="mb-3.5 rounded-2xl border border-[var(--border-subtle)] bg-white p-5">
+          <div class="flex items-start gap-4">
+            <div class="grid h-11 w-11 flex-none place-items-center rounded-md bg-info-bg text-[17px]">⚒</div>
+            <div class="min-w-0 flex-1">
+              <p class="m-0 text-[15.5px] font-bold">{{ tradeLabel(c.trade_reference_id) }}</p>
+              <p class="mb-0 mt-0.5 text-[13px] text-[var(--text-muted)]">{{ c.unit?.name ?? 'Logement' }} · candidat retenu : {{ targetArtisanName(c) }}</p>
+            </div>
+            <CoreBadge :tone="statusTone(c)">{{ statusLabel(c) }}</CoreBadge>
+          </div>
+          <ArtisanDisputePanel v-if="c.status === 'completed' || c.status === 'closed'" :request="c" side="requester" @changed="block.load" />
         </div>
       </template>
     </template>

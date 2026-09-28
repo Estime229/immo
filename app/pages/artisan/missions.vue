@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import type { ArtisanOffer, ArtisanProfile, ArtisanRequestSummary } from '~/types/artisan'
+import type { ArtisanProfile, ArtisanRequestSummary } from '~/types/artisan'
 import type { RefEntry } from '~/types/reference'
 import { ApiRequestError } from '~/utils/authenticatedFetcher'
+import { errorText } from '~/utils/apiErrors'
+import { interventionPhase, PHASE_LABEL_ARTISAN, PHASE_TONE } from '~/utils/artisanRequests'
 
 definePageMeta({ layout: 'artisan' })
 
@@ -50,8 +52,9 @@ const TABS = [
 /** Un poste déjà candidaté (ou une demande directe déjà ciblée) apparaît dans « En cours », pas dans « Postes ouverts ». */
 const myPostingIds = computed(() => new Set(mineBlock.items.value.map(r => r.public_posting_id).filter(Boolean)))
 const openItems = computed(() => openBlock.items.value.filter(o => !myPostingIds.value.has(o.id)))
-const encoursItems = computed(() => mineBlock.items.value.filter(r => r.status === 'open' || r.status === 'agreed' || r.status === 'in_progress'))
-const termineesItems = computed(() => mineBlock.items.value.filter(r => r.status === 'completed' || r.status === 'cancelled'))
+// « En cours » : tout ce qui attend une action (dont un litige) ; « Terminées » : garantie, clôturées (avant : `closed` n'apparaissait nulle part), annulées.
+const encoursItems = computed(() => mineBlock.items.value.filter(r => ['open', 'agreed', 'in_progress', 'disputed'].includes(interventionPhase(r))))
+const termineesItems = computed(() => mineBlock.items.value.filter(r => ['warranty', 'closed', 'cancelled'].includes(interventionPhase(r))))
 
 const listForTab = computed<ArtisanRequestSummary[]>(() => {
   if (tab.value === 'ouvertes') return openItems.value
@@ -69,22 +72,25 @@ function pickTab(key: typeof tab.value) {
   tab.value = key
 }
 
-/* ---- Mes offres sur la demande sélectionnée (pour savoir si j'ai déjà proposé un prix) ---- */
-const offers = ref<ArtisanOffer[]>([])
-const offersLoading = ref(false)
-watch(selected, async s => {
-  offers.value = []
-  if (!s || tab.value === 'ouvertes') return
-  offersLoading.value = true
-  try {
-    offers.value = await artisanApi.listOffers(s.id)
-  } catch {
-    offers.value = []
-  } finally {
-    offersLoading.value = false
-  }
-}, { immediate: true })
-const myOffer = computed(() => offers.value.find(o => o.proposed_by === currentUser.value?.id))
+/* ---- Lien direct (notification) : ?request= ouvre la mission ---- */
+const route = useRoute()
+const wanted = typeof route.query.request === 'string' ? route.query.request : null
+watch(() => mineBlock.items.value, items => {
+  const r = wanted ? items.find(i => i.id === wanted) : null
+  if (!r) return
+  tab.value = termineesItems.value.some(i => i.id === r.id) ? 'terminees' : 'encours'
+  nextTick(() => { selectedId.value = r.id })
+})
+function reloadMine() {
+  mineBlock.load()
+}
+function requesterName(r: ArtisanRequestSummary) {
+  return r.requester ? [r.requester.first_name, r.requester.last_name].filter(Boolean).join(' ') || 'Le demandeur' : 'Le demandeur'
+}
+function mapsLink(r: ArtisanRequestSummary) {
+  const u = r.unit
+  return u?.gps_latitude && u?.gps_longitude ? `https://www.google.com/maps?q=${u.gps_latitude},${u.gps_longitude}` : null
+}
 
 /* ---- Candidature sur un poste ouvert ---- */
 const applying = ref(false)
@@ -101,7 +107,7 @@ async function submitApply(posting: ArtisanRequestSummary) {
     selectedId.value = candidacy.id
     openOfferModal(candidacy.id)
   } catch (e) {
-    applyError.value = e instanceof ApiRequestError ? (e.mapped.bannerMessage ?? 'La candidature a échoué.') : 'La candidature a échoué.'
+    applyError.value = e instanceof ApiRequestError ? errorText(e.mapped, 'La candidature a échoué.') : 'La candidature a échoué.'
   } finally {
     applying.value = false
   }
@@ -161,9 +167,7 @@ function openTerminerModal(requestId: string) {
           </div>
           <div class="mt-3 flex items-center justify-between">
             <span class="text-xs text-[var(--text-faint)]">{{ new Date(m.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }) }}</span>
-            <CoreBadge v-if="tab !== 'ouvertes'" :tone="m.status === 'completed' ? 'ok' : m.status === 'cancelled' ? 'neutral' : (m.status === 'agreed' || m.status === 'in_progress') ? 'info' : 'warn'">
-              {{ m.status === 'completed' ? 'Terminée' : m.status === 'cancelled' ? 'Annulée' : m.status === 'in_progress' ? 'Payée, en cours' : m.status === 'agreed' ? 'Offre acceptée' : 'Ouverte' }}
-            </CoreBadge>
+            <CoreBadge v-if="tab !== 'ouvertes'" :tone="PHASE_TONE[interventionPhase(m)]">{{ PHASE_LABEL_ARTISAN[interventionPhase(m)] }}</CoreBadge>
           </div>
         </div>
       </div>
@@ -180,38 +184,28 @@ function openTerminerModal(requestId: string) {
           <CoreButton size="lg" full-width class="mt-4" :disabled="applying" @click="submitApply(selected)">{{ applying ? 'Envoi…' : 'Candidater et proposer un prix' }}</CoreButton>
         </template>
 
-        <template v-else-if="tab === 'encours'">
-          <div v-if="offersLoading" class="mt-4 text-[13px] text-[var(--text-muted)]">Chargement…</div>
-          <template v-else-if="selected.status === 'open'">
-            <div v-if="myOffer" class="mt-4 rounded-md border border-[var(--border-escrow)] bg-[var(--surface-escrow)] p-4">
-              <p class="m-0 text-[13.5px] font-bold text-clay-900">Votre offre : {{ formatFcfa(Number(myOffer.price)) }}, garantie {{ myOffer.warranty_days }} j</p>
-              <p class="mb-0 mt-1.5 text-xs text-clay-900">{{ myOffer.status === 'pending' ? 'En attente de réponse du demandeur.' : myOffer.status === 'accepted' ? 'Acceptée — en attente du paiement.' : 'Refusée par le demandeur.' }}</p>
-            </div>
-            <CoreButton v-else size="lg" full-width class="mt-4" @click="openOfferModal(selected.id)">Faire une offre</CoreButton>
-          </template>
-          <template v-else-if="selected.status === 'agreed'">
-            <div class="mt-4 rounded-md border border-info-border bg-info-bg p-4 text-[13.5px] text-info-fg-deep">Offre acceptée — en attente du paiement par le demandeur.</div>
-          </template>
-          <template v-else-if="selected.status === 'in_progress'">
-            <CoreButton size="lg" full-width class="mt-4" @click="openTerminerModal(selected.id)">Marquer terminée</CoreButton>
-          </template>
-        </template>
-
         <template v-else>
-          <div class="mt-4 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-page)] p-4 text-[13.5px] text-[var(--text-secondary)]">
-            <template v-if="selected.status === 'completed'">
-              Terminée le {{ selected.completed_at ? new Date(selected.completed_at).toLocaleDateString('fr-FR') : '—' }}.
-              <template v-if="selected.warranty_expires_at"> Garantie jusqu'au {{ new Date(selected.warranty_expires_at).toLocaleDateString('fr-FR') }}.</template>
-            </template>
-            <template v-else>Demande annulée.</template>
-          </div>
+          <p v-if="selected.unit?.address" class="mb-0 mt-3 text-[13px] text-[var(--text-secondary)]">
+            📍 {{ selected.unit.address }}
+            <a v-if="mapsLink(selected)" :href="mapsLink(selected) ?? undefined" target="_blank" rel="noopener" class="ml-1 font-bold text-green-700 underline">Itinéraire</a>
+          </p>
+          <ArtisanOfferPanel v-if="selected.status === 'open'" :key="`o-${selected.id}`" :request="selected" side="artisan" @changed="reloadMine" />
+          <div v-else-if="selected.status === 'agreed'" class="mt-4 rounded-md border border-info-border bg-info-bg p-4 text-[13.5px] text-info-fg-deep">Offre acceptée — en attente du paiement par le demandeur. Ne commencez pas avant le paiement : il vous est confirmé par notification.</div>
+          <template v-else-if="selected.status === 'in_progress'">
+            <div class="mt-4 rounded-md border border-ok-border bg-ok-bg p-4 text-[13px] text-green-900">
+              Payée : la part immédiate est sur votre wallet<template v-if="Number(selected.retained_amount ?? 0) > 0">, {{ formatFcfa(Number(selected.retained_amount)) }} sont retenus jusqu'à la fin de la garantie</template>. Convenez du passage dans la conversation, puis marquez l'intervention terminée.
+            </div>
+            <CoreButton size="lg" full-width class="mt-3" @click="openTerminerModal(selected.id)">Marquer terminée</CoreButton>
+          </template>
+          <ArtisanDisputePanel v-else-if="selected.status === 'completed' || selected.status === 'closed'" :key="`d-${selected.id}`" :request="selected" side="artisan" @changed="reloadMine" />
+          <div v-else class="mt-4 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-page)] p-4 text-[13.5px] text-[var(--text-secondary)]">Demande annulée par le demandeur.</div>
         </template>
-
         <div class="mt-3.5 flex items-center gap-3 rounded-md bg-[var(--surface-page)] px-3.5 py-3">
           <CoreAvatar :name="selected.requester ? [selected.requester.first_name, selected.requester.last_name].filter(Boolean).join(' ') || 'Demandeur' : 'Demandeur'" :size="34" color="var(--color-green-700)" />
           <div class="flex-1">
             <p class="m-0 text-[13px] font-bold">{{ selected.requester ? [selected.requester.first_name, selected.requester.last_name].filter(Boolean).join(' ') || 'Demandeur' : 'Demandeur' }}</p>
-            <p class="mb-0 mt-0.5 text-xs text-[var(--text-faint)]">Contact via la messagerie</p>
+            <NuxtLink v-if="selected.conversation_id" :to="`/artisan/messages?conversation=${selected.conversation_id}`" class="mb-0 mt-0.5 block text-xs font-bold text-green-700 underline">Ouvrir la conversation</NuxtLink>
+            <p v-else class="mb-0 mt-0.5 text-xs text-[var(--text-faint)]">Pas encore de conversation</p>
           </div>
         </div>
       </div>

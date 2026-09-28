@@ -35,10 +35,14 @@ const paidMissions = computed(() => missionsBlock.items.value
   .filter((r): r is ArtisanRequestSummary & { paid_at: string } => !!r.paid_at)
   .sort((a, b) => new Date(b.paid_at).getTime() - new Date(a.paid_at).getTime()))
 
-/** Somme des retenues de garantie encore ouvertes — API sans endpoint dédié, calculé côté client depuis `retained_amount`. */
-const retainedTotal = computed(() => paidMissions.value.reduce((sum, r) => sum + (Number(r.retained_amount) || 0), 0))
-const nextRelease = computed(() => paidMissions.value
-  .filter((r): r is ArtisanRequestSummary & { warranty_expires_at: string } => !!r.warranty_expires_at && Number(r.retained_amount) > 0)
+/**
+ * Retenues encore bloquées. `retained_amount` n'est jamais remis à zéro par l'API une fois la part versée
+ * ou partagée après litige (constaté en live, Lot 54) : seules les missions pas encore clôturées comptent.
+ */
+const stillHeld = computed(() => paidMissions.value.filter(r => r.status === 'in_progress' || r.status === 'completed'))
+const retainedTotal = computed(() => stillHeld.value.reduce((sum, r) => sum + (Number(r.retained_amount) || 0), 0))
+const nextRelease = computed(() => stillHeld.value
+  .filter((r): r is typeof r & { warranty_expires_at: string } => !!r.warranty_expires_at && Number(r.retained_amount) > 0 && !r.disputed_at)
   .sort((a, b) => new Date(a.warranty_expires_at).getTime() - new Date(b.warranty_expires_at).getTime())[0])
 const nextReleaseLabel = computed(() => nextRelease.value
   ? `${tradeLabel(nextRelease.value.trade_reference_id)} · libéré le ${new Date(nextRelease.value.warranty_expires_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })}.`

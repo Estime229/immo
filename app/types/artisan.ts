@@ -9,7 +9,7 @@
  * 'completed' (marqué terminé par l'artisan), 'cancelled'. `string` en repli
  * pour ne jamais planter sur une valeur non encore vue.
  */
-export type ArtisanRequestStatus = 'open' | 'agreed' | 'in_progress' | 'completed' | 'cancelled' | (string & {})
+export type ArtisanRequestStatus = 'open' | 'agreed' | 'in_progress' | 'completed' | 'closed' | 'cancelled' | (string & {})
 
 export interface ArtisanRequestParty {
   id: string
@@ -20,6 +20,10 @@ export interface ArtisanRequestParty {
 export interface ArtisanRequestUnit {
   id: string
   name: string
+  /** Joints par `GET /artisan-requests/my` (vérifié en live, Lot 54) : où se rendre. */
+  address?: string | null
+  gps_latitude?: number | string | null
+  gps_longitude?: number | string | null
 }
 
 export interface ArtisanRequestSummary {
@@ -67,7 +71,8 @@ export interface ArtisanOffer {
   price: string
   warranty_days: number
   retention_percentage: number
-  status: 'pending' | 'accepted' | 'rejected' | (string & {})
+  /** `superseded` : remplacée par une offre plus récente (constaté en live, Lot 54). */
+  status: 'pending' | 'accepted' | 'rejected' | 'superseded' | (string & {})
   created_at: string
   updated_at?: string
 }
@@ -149,3 +154,19 @@ export interface ArtisanPartnership {
   created_at: string
   updated_at?: string
 }
+
+/**
+ * Proposition de sortie de litige (Lot 54) : `requester_refund_amount` est la
+ * part de la retenue rendue au demandeur, le reste va à l'artisan. Une nouvelle
+ * proposition remplace la précédente (`superseded`) ; seule l'autre partie accepte.
+ */
+export interface DisputeResolution {
+  id: string
+  artisan_request_id: string
+  proposed_by: string
+  requester_refund_amount: string
+  status: 'pending' | 'accepted' | 'superseded' | (string & {})
+  is_admin_decision?: boolean
+  created_at: string
+}
+

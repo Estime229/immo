@@ -72,8 +72,11 @@ export function budgetFit(price: number, r: Pick<HousingRequestCriteria, 'budget
  * notée en camelCase par l'API, contrairement au reste). Une visite concerne
  * les deux espaces : la destination dépend de l'espace où l'on se trouve.
  */
-export function notificationTarget(n: { metadata?: Record<string, unknown> | null }, space: 'locataire' | 'pro' = 'locataire'): string | null {
+export function notificationTarget(n: { metadata?: Record<string, unknown> | null }, space: 'locataire' | 'pro' | 'artisan' = 'locataire'): string | null {
   const m = n.metadata ?? {}
+  // Interventions et partenariats d'artisans (Lot 54, snake_case) — avant les clés génériques ci-dessous.
+  if (typeof m.artisan_request_id === 'string') return space === 'artisan' ? `/artisan/missions?request=${m.artisan_request_id}` : `/pro/artisans?request=${m.artisan_request_id}`
+  if (typeof m.partnership_id === 'string') return space === 'artisan' ? '/artisan/partenaires' : '/pro/artisans?tab=partenariats'
   if (typeof m.housing_request_id === 'string') return `/locataire/demandes?request=${m.housing_request_id}`
   if (typeof m.visitId === 'string') return `/${space}/visites?visit=${m.visitId}`
   // Réservation payée, récompense de parrainage… (Lot 49, `bookingId` en camelCase lui aussi).

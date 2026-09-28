@@ -3,6 +3,7 @@ import type { PropertySearchResult } from '~/types/property'
 import type { ArtisanProfile } from '~/types/artisan'
 import type { RefEntry } from '~/types/reference'
 import { ApiRequestError } from '~/utils/authenticatedFetcher'
+import { errorText } from '~/utils/apiErrors'
 
 const modal = useProModal()
 const open = computed(() => modal.value === 'artisanReq')
@@ -11,6 +12,9 @@ const landlordPropertiesApi = useLandlordPropertiesApi()
 const refData = useReferenceData()
 const artisanApi = useArtisanRequestsApi()
 const refresh = useArtisanRequestsRefresh()
+const prefill = useArtisanReqPrefill()
+const signalsApi = useSignalsApi()
+const signalUpdated = ref(false)
 
 const step = ref<'form' | 'done'>('form')
 const loading = ref(false)
@@ -38,12 +42,14 @@ async function reset() {
   mode.value = 'direct'
   targetArtisanId.value = ''
   restrictedToPartners.value = false
-  description.value = ''
+  description.value = prefill.value?.description ?? ''
+  signalUpdated.value = false
   artisans.value = []
   try {
     const page = await landlordPropertiesApi.fetchMine({ limit: 100 })
     properties.value = page.data as PropertySearchResult[]
-    unitId.value = units.value[0]?.id ?? ''
+    const wanted = prefill.value?.unitId
+    unitId.value = wanted && units.value.some(u => u.id === wanted) ? wanted : units.value[0]?.id ?? ''
   } catch {
     properties.value = []
   }
@@ -87,9 +93,19 @@ async function submit() {
       restricted_to_partners: mode.value === 'open' ? restrictedToPartners.value : undefined
     })
     refresh.value++
+    // Venue d'un signalement : il passe « En examen », l'artisan en assigné (sans bloquer si ça échoue).
+    const origin = prefill.value
+    if (origin?.signalId) {
+      const chosen = artisans.value.find(a => a.user_id === targetArtisanId.value)
+      await signalsApi.update(origin.signalId, {
+        assigned_to: mode.value === 'direct' && chosen ? artisanName(chosen) : 'Artisan (poste ouvert)',
+        ...(origin.signalStatus === 'open' ? { status: 'in_review' as const } : {})
+      }).then(() => { signalUpdated.value = true }).catch(() => undefined)
+    }
+    prefill.value = null
     step.value = 'done'
   } catch (e) {
-    errorMessage.value = e instanceof ApiRequestError ? (e.mapped.bannerMessage ?? 'La demande a échoué.') : 'La demande a échoué.'
+    errorMessage.value = e instanceof ApiRequestError ? errorText(e.mapped, 'La demande a échoué.') : 'La demande a échoué.'
   } finally {
     loading.value = false
   }
@@ -97,6 +113,7 @@ async function submit() {
 
 function close() {
   modal.value = ''
+  prefill.value = null
 }
 
 function artisanName(a: ArtisanProfile) {
@@ -177,6 +194,7 @@ function artisanName(a: ArtisanProfile) {
               <p class="mx-auto mb-0 mt-2.5 max-w-[340px] text-sm leading-[1.6] text-[var(--text-muted)]">
                 {{ mode === 'direct' ? "L'artisan a été notifié et peut répondre par une offre." : 'Les artisans du métier peuvent maintenant faire une offre. Vous les comparerez dans l\'onglet Interventions.' }}
               </p>
+              <p v-if="signalUpdated" class="mx-auto mb-0 mt-2 max-w-[340px] text-[12.5px] font-semibold text-ok-fg">Le signalement est passé « En examen », avec l'artisan en assigné.</p>
               <CoreButton size="lg" full-width class="mt-5.5" @click="close">Terminé</CoreButton>
             </div>
           </template>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ApiRequestError } from '~/utils/authenticatedFetcher'
+import { errorText } from '~/utils/apiErrors'
 
 const modal = useArtisanModal()
 const targetId = useArtisanModalTarget()
@@ -33,7 +34,7 @@ async function submit() {
     refresh.value++
     step.value = 'done'
   } catch (e) {
-    errorMessage.value = e instanceof ApiRequestError ? (e.mapped.bannerMessage ?? "L'action a échoué.") : "L'action a échoué."
+    errorMessage.value = e instanceof ApiRequestError ? errorText(e.mapped, "L'action a échoué.") : "L'action a échoué."
   } finally {
     loading.value = false
   }
@@ -52,7 +53,7 @@ async function submit() {
         <div class="p-6">
           <template v-if="step === 'confirm'">
             <p class="m-0 text-[13.5px] leading-[1.55] text-[var(--text-muted)]">
-              Le demandeur sera notifié et pourra laisser un avis. La part de garantie retenue sur cette intervention sera libérée à la date convenue avec l'offre acceptée.
+              Le demandeur est prévenu et la garantie convenue démarre maintenant. La part retenue vous sera versée à son terme, sauf si le demandeur signale un problème d'ici là ; il pourra laisser un avis une fois la demande clôturée.
             </p>
             <p v-if="errorMessage" class="mb-0 mt-3.5 text-[13px] font-semibold text-danger-fg">{{ errorMessage }}</p>
             <CoreButton size="lg" full-width class="mt-5" :disabled="loading" @click="submit">{{ loading ? 'Enregistrement…' : 'Marquer terminée' }}</CoreButton>

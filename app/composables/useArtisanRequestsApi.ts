@@ -5,7 +5,8 @@ import type {
   ArtisanRequestSummary,
   ArtisanReview,
   ArtisanSearchPage,
-  CreateArtisanRequestPayload
+  CreateArtisanRequestPayload,
+  DisputeResolution
 } from '~/types/artisan'
 
 /**
@@ -67,6 +68,20 @@ export function useArtisanRequestsApi() {
   }
 
   /** `trade` (UUID de référence ARTISAN_TRADE) est requis par l'API — pas de recherche sans métier choisi. */
+  /* Litiges (Lot 54) : le demandeur signale un problème pendant la garantie ; chaque partie propose un partage de la retenue ; l'autre accepte. */
+  async function openDispute(id: string, reason: string) {
+    return api.post<ArtisanRequestSummary>(`/artisan-requests/${id}/dispute`, { reason })
+  }
+  async function listResolutions(id: string) {
+    return api.get<DisputeResolution[]>(`/artisan-requests/${id}/dispute/resolutions`)
+  }
+  async function proposeResolution(id: string, requesterRefundAmount: number) {
+    return api.post<DisputeResolution>(`/artisan-requests/${id}/dispute/resolutions`, { requester_refund_amount: requesterRefundAmount })
+  }
+  async function acceptResolution(resolutionId: string) {
+    return api.patch<{ success: boolean }>(`/artisan-requests/dispute/resolutions/${resolutionId}/accept`)
+  }
+
   async function searchArtisans(tradeReferenceId: string, page = 1, limit = 20) {
     return api.get<ArtisanSearchPage>('/artisans', { trade: tradeReferenceId, page, limit })
   }
@@ -88,7 +103,7 @@ export function useArtisanRequestsApi() {
     return api.patch<ArtisanPartnership>(`/artisan-partnerships/${id}/respond`, { action })
   }
 
-  return { create, listMine, listOpen, applyToOpen, cancel, pay, complete, review, listOffers, submitOffer, respondOffer, searchArtisans, createPartnership, myPartnerships, endPartnership, respondPartnership }
+  return { create, listMine, listOpen, applyToOpen, cancel, pay, complete, review, listOffers, submitOffer, respondOffer, openDispute, listResolutions, proposeResolution, acceptResolution, searchArtisans, createPartnership, myPartnerships, endPartnership, respondPartnership }
 }
 
 /** Bump après une création réussie pour que les pages qui listent les demandes se rechargent — même motif que useProModal. */

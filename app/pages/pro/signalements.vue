@@ -88,6 +88,18 @@ async function changeStatus(signal: SignalSummary, status: SignalStatus) {
   }
 }
 
+const proModal = useProModal()
+const artisanPrefill = useArtisanReqPrefill()
+function callArtisan(signal: SignalSummary) {
+  artisanPrefill.value = {
+    unitId: signal.unit_id,
+    description: `Signalement « ${signal.title} » : ${signal.description}`.slice(0, 2000),
+    signalId: signal.id,
+    signalStatus: signal.status
+  }
+  proModal.value = 'artisanReq'
+}
+
 function openAssign(signal: SignalSummary) {
   assigningId.value = signal.id
   assignName.value = signal.assigned_to ?? ''
@@ -194,6 +206,8 @@ const NEXT_STATUSES: Record<SignalStatus, SignalStatus[]> = {
             @click="changeStatus(r, s)"
           >Passer à « {{ STATUS_LABEL[s] }} »</button>
           <button type="button" class="rounded-sm border border-[var(--border-default)] bg-white px-4 py-2.5 text-[12.5px] font-bold" @click="openAssign(r)">{{ r.assigned_to ? 'Réassigner' : 'Assigner' }}</button>
+          <!-- Lot 54 : du signalement à l'intervention, sans ressaisir le logement ni le problème. -->
+          <button v-if="r.status === 'open' || r.status === 'in_review'" type="button" class="rounded-sm bg-[image:var(--action-primary)] px-4 py-2.5 text-[12.5px] font-bold text-white" @click="callArtisan(r)">Faire intervenir un artisan</button>
         </div>
 
         <div v-if="assigningId === r.id" class="mt-3 flex items-center gap-2">

@@ -225,7 +225,14 @@ async function createAccount() {
       role: SIGNUP_ROLE_TO_API[role.value]
     })
     await onboardingApi.finalize()
-    await auth.fetchMe()
+    // La session ouverte par le code garde le rôle de départ (« tenant ») même après finalize et
+    // même après un rafraîchissement : un artisan ou un propriétaire tout neuf recevait des 403 sur
+    // son propre espace (constaté en live, Lot 54). Basculer sur le rôle choisi émet un jeton juste.
+    try {
+      await auth.switchRole(SIGNUP_ROLE_TO_API[role.value])
+    } catch {
+      await auth.fetchMe()
+    }
     navigateTo('/kyc')
   } catch (e) {
     signupError.value = e instanceof ApiRequestError ? errorText(e.mapped, "La création du compte a échoué. Réessayez.") : "La création du compte a échoué. Réessayez."

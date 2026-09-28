@@ -107,7 +107,6 @@ const identitySubtitle = computed(() => {
     <ArtisanOffreModal />
     <ArtisanTerminerModal />
     <ArtisanRetraitModal />
-    <ArtisanBloquerModal />
     <ArtisanFlashModal />
   </div>
 </template>

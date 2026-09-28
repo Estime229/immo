@@ -35,7 +35,7 @@ Mis à jour le 27/09/2026. Statut : **ouvert** sauf mention contraire.
 | 21 | 🟡 | Pas d'état « brouillon » pour un bien | `POST /property` | 45 |
 | 22 | 🟡 | Devise « EUR » dans une notification | notifications de paiement | 40 |
 | 23 | 🟡 | `instructions.fr` du mode `redirect` rédigé pour un développeur | `POST /payment/checkout` | 8 |
-| 24 | 🟡 | Aucun endpoint de blocage de disponibilité pour un artisan | — | 38 |
+| 24 | 🟡 | Ni disponibilités d'artisan, ni date d'intervention | — | 38, 54 |
 | 25 | 🟡 | Annulation d'une réservation courte durée confirmée non gérée | bookings | 40 |
 | 26 | 🟡 | Contexte d'équipe : `switch-context` ne renvoie pas une paire de jetons exploitable | `POST /auth/switch-context` | socle, I2 |
 | 27 | 🟠 | Liste d'attente : les inscrits ne sont jamais prévenus | `UnitWaitlistService.notifyWaitlist` | 46 |
@@ -89,6 +89,10 @@ Mis à jour le 27/09/2026. Statut : **ouvert** sauf mention contraire.
 | 75 | 🟠 | Invitations et membres : ni annulation, ni relance, ni départ volontaire | `/team` | 53 |
 | 76 | 🟠 | Un mandat ne donne aucun accès ; sa fin laisse l'agent désigné sur les biens | `/agent-mandates`, `PATCH /property/:id` | 53 |
 | 77 | 🟡 | Équipe et mandats : permissions non appliquées, identités manquantes, refus indiscernable | `/team`, `/agent-mandates` | 53 |
+| 78 | 🔴 | Après l'inscription, la session garde le rôle « tenant » (même rafraîchie) : 403 sur son propre espace | `POST /onboarding/finalize`, `POST /auth/refresh` | 54 |
+| 79 | 🟠 | `retained_amount` jamais remis à zéro une fois la retenue versée ou partagée | `artisan-requests` | 54 |
+| 80 | 🟡 | Offres d'artisan : prix 0 et retenue sans garantie acceptés ; « Données invalides » sans détail | `POST /artisan-requests/:id/offers`, `…/dispute` | 54 |
+| 81 | 🟡 | Interventions : ni lien avec le signalement d'origine, ni contact du demandeur pour l'artisan | `artisan-requests` | 54 |
 
 ---
 
@@ -241,9 +245,12 @@ Une notification de paiement affiche « 120000 EUR » au lieu de FCFA : chaîne 
 
 `POST /payment/checkout` en mode `redirect` renvoie un texte destiné à un développeur (« Redirigez l'utilisateur vers `url`… »), alors que les autres modes renvoient un texte affichable à l'utilisateur.
 
-### 24. Disponibilités d'un artisan
+### 24. Disponibilités d'un artisan (revérifié Lot 54)
 
-Aucun endpoint ne permet à un artisan de bloquer des jours dans son planning. L'écran correspondant est désactivé en attendant.
+- Aucun endpoint ne permet à un artisan de bloquer des jours dans son planning.
+- Une demande d'intervention n'a **aucune date** : ni souhaitée, ni convenue, ni réalisée avant `completed_at`.
+- **Écran Planning** : il affichait encore une semaine fictive, et un bouton « Bloquer une plage » qui n'enregistrait rien. Il liste désormais les interventions à réaliser par ordre d'urgence et dit que les dates se conviennent dans la conversation.
+- **Attendu** : un champ `scheduled_at` sur la demande (proposé par l'artisan, accepté par le demandeur) et des indisponibilités d'artisan.
 
 ### 25. Annulation d'une réservation courte durée confirmée
 
@@ -715,3 +722,40 @@ La place de marché repose entièrement sur des propriétaires qui viennent cons
 - **Identité du mandant** : `GET /agent-mandates/mine` ne renvoie ni l'e-mail ni le téléphone du propriétaire. S'il n'a pas renseigné son nom, l'agent ne sait pas qui l'invite.
 - **Devenir agent** : l'application n'avait aucun moyen de s'inscrire comme agent. Le frontend ajoute « Je suis agent » (`POST /user/roles`).
 - **Route `GET /property/my`** : l'identifiant non UUID est interprété comme `:id` → 500 (même famille que #38).
+
+---
+
+## Ajouts du Lot 54 — Artisans
+
+### 78. 🔴 Après l'inscription, la session garde le rôle « tenant »
+
+- **Rejoué** avec deux comptes artisans créés par code OTP puis `POST /onboarding/draft` et `POST /onboarding/finalize`.
+  - `GET /auth/me` : `role: artisan`.
+  - `GET /auth/roles` : `roles: ['tenant'], active_role: 'tenant'`.
+  - `GET /artisans/me` : **403 « Accès réservé »**.
+- **Après `POST /auth/refresh`** : c'est inchangé, toujours `tenant` et 403.
+- **Seul `POST /auth/switch-role`** vers le rôle choisi émet un jeton correct. Il reste correct après les rafraîchissements suivants.
+- **Cause probable** : la session créée à la vérification du code (compte neuf = `tenant`) conserve son rôle actif. `finalize` met à jour l'utilisateur en base, mais pas la session.
+- **Impact** : tout artisan (et, par le même chemin, tout propriétaire) qui s'inscrit sur le site reçoit des 403 sur son espace jusqu'à ce qu'il se reconnecte.
+- **Attendu** : que `finalize` renvoie une paire de jetons à jour, ou mette à jour le rôle actif de la session.
+- Le frontend appelle désormais `switch-role` juste après `finalize`.
+
+### 79. 🟠 `retained_amount` jamais remis à zéro
+
+- Une fois la part retenue versée à l'artisan (fin de garantie) ou partagée après un litige, la demande reste avec `retained_amount` à sa valeur d'origine.
+- **Rejoué** : litige réglé à 3 000 / 1 000 sur 4 000 retenus → demande `closed`, `retained_amount: "4000.00"`.
+- **Effet** : la facturation de l'artisan additionnait ces montants comme « retenues en cours ». Le frontend ne compte désormais que les demandes pas encore clôturées.
+- **Attendu** : remettre le champ à 0, ou ajouter `retention_released_at` / `retention_split` pour garder l'historique.
+
+### 80. 🟡 Offres d'artisan : validations manquantes
+
+- **Prix** : un prix de 0 est accepté (201).
+- **Retenue sans garantie** : une retenue avec 0 jour de garantie est acceptée. À la fin des travaux, la garantie expire aussitôt, et le demandeur n'a aucune fenêtre pour signaler un problème.
+- **Messages** : une retenue de 120 %, une description vide ou un motif de litige vide renvoient « Données invalides », sans le champ concerné.
+- **Accepté comme prévu** : le demandeur peut contre-proposer (l'offre précédente passe `superseded`). Mais jusqu'ici l'écran ne le permettait pas, et affichait les offres remplacées comme « Refusée ».
+
+### 81. 🟡 Interventions : liens et contacts manquants
+
+- **Lien avec le signalement** : une demande d'intervention ne garde pas le signalement d'origine (pas de `signal_id`). Le frontend pré-remplit la demande depuis le signalement, puis passe celui-ci « En examen » avec l'artisan assigné. Mais le lien n'est pas conservé côté serveur.
+- **Contact du demandeur** : l'artisan ne reçoit que son nom, souvent vide (`first_name`/`last_name` nuls sur le compte de test), sans téléphone ni e-mail. Il doit passer par la conversation de la demande, et l'espace artisan n'avait **aucune page de messagerie** (ajoutée côté front).
+- **Demande par un locataire** : un locataire qui a un bail actif peut créer une demande d'intervention sur son logement (règle de l'API), mais aucun écran ne le propose. C'est une décision produit : qui paie, qui choisit l'artisan ?

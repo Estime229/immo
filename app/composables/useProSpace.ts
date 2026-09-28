@@ -68,6 +68,16 @@ export function useProModalTarget() {
   return useState<string | null>('proModalTargetId', () => null)
 }
 
+/**
+ * Signalement d'origine d'une demande d'intervention (Lot 54) : la modale
+ * « Demander une intervention » arrive pré-remplie (logement, description) et,
+ * une fois la demande créée, fait passer le signalement « En examen » avec
+ * l'artisan en assigné. L'API ne relie pas les deux objets : c'est le front qui le fait.
+ */
+export function useArtisanReqPrefill() {
+  return useState<{ unitId: string; description: string; signalId: string; signalStatus: string } | null>('artisanReqPrefill', () => null)
+}
+
 /* ---- Modale flash (confirmation générique) ---- */
 export function useFlashModal() {
   const open = useState('proFlashOpen', () => false)

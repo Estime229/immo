@@ -50,7 +50,8 @@ async function loadMine() {
 onMounted(loadMine)
 
 const inProgress = computed(() => mine.value.filter(r => r.status === 'open' || r.status === 'agreed' || r.status === 'in_progress'))
-const completed = computed(() => mine.value.filter(r => r.status === 'completed'))
+// `closed` (garantie écoulée, litige réglé, ou sans retenue) compte aussi comme terminée.
+const completed = computed(() => mine.value.filter(r => r.status === 'completed' || r.status === 'closed'))
 const currentMission = computed(() => inProgress.value.find(r => r.status === 'in_progress') ?? inProgress.value[0] ?? null)
 
 const KPIS = computed(() => [

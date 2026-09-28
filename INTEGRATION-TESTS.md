@@ -3728,3 +3728,97 @@ Données de test :
 - **Équipe** « Agence QA Lot53 » du propriétaire `qa-landlord-1790282977@example.com` : quatre invitations « pending » vers des adresses neuves, impossibles à annuler (#75). Elles expirent au bout de 7 jours.
 - **Agent** `qa-agent-1790550087@example.com` (rôles propriétaire + agent) : plusieurs mandats terminés, aucun actif.
 - **Compte orphelin** : `qa-agent-…` créé lors d'une première tentative interrompue, sans nom ni rôle agent.
+
+## Lot 54 — Artisans : négociation dans les deux sens, garantie et litige, messagerie artisan, planning honnête
+
+Demande : « parcourir et tester le flow Artisans avec les espaces et tout ce qui va avec, en consultant l'API : divergences, manques, écrans à ajouter, incohérences, messages d'erreur ». Le sous-système avait été câblé aux Lots 25, 27, 29, 31 et 38. Restaient les litiges (jamais branchés), les avis (bloqués par la garantie) et la clôture.
+
+Backend relu :
+- les contrôleurs `artisans`, `artisan-requests`, `artisan-offers`, `artisan-partnerships`, `artisan-disputes`, `artisan-request-pdf` ;
+- les handlers de création, annulation, fin des travaux, avis, litige (ouverture, proposition, acceptation, arbitrage) ;
+- `pay-artisan-request.handler` (module wallet), `artisan-warranty-cron` ;
+- `finalize-onboarding.handler`.
+
+Rejoué en live :
+- **demandeur** : `qa-landlord-1790282977@example.com` ;
+- **artisan** : `qa-artisan-1790551743@example.com`, compte neuf créé par OTP puis onboarding « artisan » ;
+- **signalements** : ceux du propriétaire de test `pro-landlord-test-…` ;
+- **locataire** : le locataire de test.
+
+### Comportement réel de l'API (vérifié en live)
+
+| Cas | Réponse |
+|---|---|
+| Artisan tout juste inscrit : `/artisans/me` · après `/auth/refresh` · après `switch-role` | **403** · **403** · 200 (#78) |
+| Création : métier invalide · cible non artisan · « partenaires seulement » avec une cible · description vide · locataire sans bail actif | 400 (message clair) · 403 · 400 · 400 « Données invalides » · 403 « bail actif » |
+| Demande directe | 201 + conversation ; l'artisan est notifié (`artisan_request_id`) |
+| Offres : retenue 120 % · prix 0 · contre-offre du demandeur · répondre à sa propre offre | 400 « Données invalides » · **201** · 201 (la précédente passe `superseded`) · 403 |
+| Acceptation · annuler après accord · terminer avant paiement | `agreed`, les autres offres `superseded` · 400 « Seule une demande encore ouverte… » · 400 |
+| Paiement 20 000 à 20 % | demandeur −20 000 (`balance_total`) ; artisan +16 000 immédiat ; 4 000 retenus ; `in_progress` |
+| Fin des travaux | `completed`, garantie jusqu'à J+7 ; sans retenue : `closed` aussitôt |
+| Avis pendant la garantie · après clôture · doublon | 400 « doit être clôturée » · 201 · 400 |
+| Litige : par l'artisan · motif vide · ouverture · doublon | 403 · 400 · 201 (`disputed_at`, statut `completed`) · 400 |
+| Propositions : au-delà de la retenue · artisan 1 000 · contre-proposition 3 000 · accepter la sienne · une proposition remplacée | 400 (montant cité) · 201 · 201 (la précédente `superseded`) · 403 · 400 |
+| Acceptation de 3 000 par l'artisan | demandeur +3 000, artisan +1 000, `closed` ; **`retained_amount` resté à 4 000** (#79) |
+| Facture PDF (deux côtés) · avis publics · note | 202 · l'avis apparaît · `reputation_score` 4, `review_count` 1 |
+| Poste réservé aux partenaires : visible hors partenariat · candidature | non · 403 ; après partenariat accepté : visible, candidature 201, doublon 400 |
+| Annulation du poste | la candidature passe `cancelled` |
+
+### Constats côté écrans
+
+| # | Espace | Constat |
+|---|---|---|
+| R1 | Inscription | Un artisan ou un propriétaire tout neuf recevait des 403 sur son espace (#78). |
+| R2 | Pro | Pas de contre-offre ; une offre remplacée affichée « Refusée » ; « Annuler » proposé après accord (400) ; statut `closed` affiché brut ; « Laisser un avis » dès la fin des travaux (400 pendant la garantie). |
+| R3 | Pro et artisan | **Aucun écran pour la garantie ni pour le litige**, alors que tout existe côté API. |
+| R4 | Artisan | Seule sa propre offre était visible : une contre-offre du demandeur ne pouvait être ni vue ni acceptée. Missions `closed` absentes de tous les onglets. Ni adresse ni itinéraire. « Contact via la messagerie » alors que l'espace artisan **n'avait pas de messagerie**. |
+| R5 | Artisan | Planning **factice** (semaine inventée) ; « Bloquer une plage » affichait un succès sans rien enregistrer. |
+| R6 | Artisan | Facturation : les retenues déjà versées ou partagées étaient encore comptées « en cours » (#79). Tableau de bord : les missions clôturées absentes du compteur « terminées ». La fenêtre « Marquer terminée » promettait un avis immédiat. |
+| R7 | Pro | Signalement et intervention n'étaient pas reliés : l'« assignation » n'était qu'un nom tapé à la main. |
+
+### Ce qui a été livré
+
+| Fichier | Rôle |
+|---|---|
+| `app/utils/artisanRequests.ts` | **Nouveau**. Phases réelles (garantie, litige, clôturée), libellés des deux côtés, `canCancel`, `canReview`, `canDispute`, statuts d'offre (« Remplacée »), `validateOffer`, `paymentSplit` (même calcul que l'API), `disputeSplit`, `validateRefund`, `warrantyLine`. |
+| `app/components/artisan/OfferPanel.vue` | **Nouveau** — négociation commune : qui a proposé quoi ; accepter ou refuser l'offre de l'autre ; contre-proposer, avec le partage au paiement affiché |
+| `app/components/artisan/DisputePanel.vue` | **Nouveau**. Garantie : échéance, retenue, « Signaler un problème ». Litige : motif, propositions, partage prévisualisé, accepter celui de l'autre partie, arbitrage mentionné. Clôture. |
+| `app/pages/pro/artisans.vue` | Phases réelles ; annulation seulement si ouverte ; paiement et retenue expliqués ; avis seulement après clôture (doublon géré) ; conversation ; candidatures d'un poste avec leur propre négociation ; `?request=` et `?tab=partenariats` |
+| `app/pages/artisan/missions.vue` | « En cours » (litiges compris) / « Terminées » (garantie, clôturées) ; adresse et itinéraire ; négociation et litige ; retenue affichée ; lien vers la conversation ; `?request=` |
+| `app/pages/artisan/planning.vue` | **Réécrite** — interventions à réaliser par ordre d'urgence, prochaine étape de chacune, limites de l'API dites ; « Bloquer une plage » et sa fenêtre factice supprimés |
+| `app/components/messaging/Inbox.vue`, `app/pages/artisan/messages.vue` | **Messagerie de l'espace artisan** (nouvelle), partagée avec l'espace pro |
+| `app/pages/pro/signalements.vue`, `ArtisanReqModal.vue`, `useProSpace.ts` | « Faire intervenir un artisan » : demande pré-remplie depuis le signalement, qui passe ensuite « En examen » avec l'artisan assigné |
+| `app/pages/connexion.vue` | Après l'inscription, bascule sur le rôle choisi (#78) |
+| `app/pages/artisan/facturation.vue`, `artisan/index.vue`, `TerminerModal.vue` | Retenues en cours justes ; missions clôturées comptées ; texte de fin des travaux exact |
+| `app/utils/housingRequest.ts`, `NotificationBell.vue` | Notifications `artisan_request_id` → la mission ou la demande ; `partnership_id` → les partenariats ; espace artisan reconnu |
+| `app/types/artisan.ts`, `useArtisanRequestsApi.ts` | Statut `closed`, offre `superseded`, adresse du logement ; routes de litige |
+
+### Tests automatisés
+
+```
+Test Files  27 passed (27)
+     Tests  239 passed (239)   [+9 : tests/artisanRequests.test.ts, notifications artisan — hors tests/geo.test.ts d'une autre session]
+```
+
+Les montants testés sont ceux du cycle réel :
+- paiement de 20 000 à 20 % → 16 000 versés + 4 000 retenus ;
+- litige réglé à 3 000 / 1 000 ;
+- retenue de 120 % refusée ; proposition de 5 000 sur 4 000 refusée.
+
+`vue-tsc` : 26 erreurs, toutes antérieures et hors de ce lot. Les 4 erreurs de `artisan/facturation.vue` ont disparu au passage.
+
+### Vérification de bout en bout (Playwright, build de production local → API de production)
+
+| Id | Scénario | Résultat |
+|---|---|---|
+| A1-A3 | Lien direct `?request=` ; offre de l'artisan et son auteur. Contre-offre 18 000 (partage 14 400 / 3 600 annoncé) ; l'offre précédente « Remplacée ». | PASS |
+| B1-B2 | Artisan : contre-offre du demandeur visible, conversation accessible ; acceptée → « Acceptée, en attente du paiement » | PASS |
+| C0-C1 | Plus d'« Annuler » après accord ; paiement → « Payée, intervention en cours », retenue annoncée | PASS |
+| D0-D1 | Artisan : retenue annoncée ; « Marquer terminée » → sous garantie | PASS |
+| E0-E3 | Garantie expliquée ; problème signalé → « Litige en cours ». L'artisan voit le motif et propose 1 000 (partage prévisualisé). Le demandeur accepte → clôturée, 1 000 rendus (14 000 → 15 000). | PASS |
+| F1-F2 | Avis après clôture ; mission de l'artisan dans « Terminées », « après accord sur le litige » | PASS |
+| G1-G2 | Planning sans données factices ; messagerie artisan disponible | PASS |
+| H1-H2 | Signalement → « Faire intervenir un artisan » : description pré-remplie, demande envoyée, signalement « En examen » avec « Arsène Artisan » assigné | PASS |
+| Z | Zéro erreur JS | PASS |
+
+Le passage de C1 à D a été rejoué en deux fois, sur la même demande et sans nouveau paiement. Le test cliquait sur « Marquer terminée » avant que la page soit interactive.

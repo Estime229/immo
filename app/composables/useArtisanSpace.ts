@@ -3,6 +3,7 @@ export const ARTISAN_NAV_ITEMS = [
   { key: 'missions', to: '/artisan/missions', icon: '⚒', label: 'Mes missions', count: '' },
   { key: 'planning', to: '/artisan/planning', icon: '◷', label: 'Planning', count: '' },
   { key: 'facturation', to: '/artisan/facturation', icon: '⎈', label: 'Facturation', count: '' },
+  { key: 'messages', to: '/artisan/messages', icon: '✉', label: 'Messages', count: '' },
   { key: 'partenaires', to: '/artisan/partenaires', icon: '⚇', label: 'Agences partenaires', count: '' },
   { key: 'historique', to: '/artisan/historique', icon: '★', label: 'Historique', count: '' },
   { key: 'profil', to: '/artisan/profil', icon: '☺', label: 'Profil', count: '' },
@@ -11,7 +12,7 @@ export const ARTISAN_NAV_ITEMS = [
 
 export const ARTISAN_PAGE_TITLES: Record<string, string> = {
   apercu: 'Aperçu', missions: 'Mes missions', planning: 'Planning', facturation: 'Facturation',
-  partenaires: 'Agences partenaires', historique: 'Historique et avis', profil: 'Profil', guide: 'Guide'
+  partenaires: 'Agences partenaires', historique: 'Historique et avis', profil: 'Profil', guide: 'Guide', messages: 'Messages'
 }
 
 /* ---- Disponibilité (local uniquement — aucun endpoint ne le persiste) ---- */
@@ -21,7 +22,7 @@ export function useArtisanDispo() {
 
 /* ---- Modales ---- */
 export function useArtisanModal() {
-  return useState<'' | 'offre' | 'terminer' | 'retrait' | 'bloquer'>('artisanModal', () => '')
+  return useState<'' | 'offre' | 'terminer' | 'retrait'>('artisanModal', () => '')
 }
 
 /** Demande d'intervention (`ArtisanRequestSummary.id`) ciblée par la modale offre/terminer ouverte. */
