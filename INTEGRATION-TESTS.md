@@ -4099,4 +4099,6 @@ Travail réalisé par une autre session, resté non commité dans le répertoire
 | M6 | Pro : sélecteur de position à la création d'un bien | PASS |
 | Z | Zéro erreur JS ; non-régression T1-T4 du Lot 56 | PASS |
 
+En **production** (im-hazel.vercel.app, déploiement `im-intrr7ql4`) : M1 à M6 et zéro erreur JS, **7/7 PASS**. La fiche de « Résidence Poutine » affiche la carte d'Abomey-Calavi avec la zone approximative.
+
 **Limite** : seuls 9 biens sur 38 ont un GPS, et l'un d'eux (« Studio LAPERTA ») pointe en mer. Tous les autres, dont « Résidence Poutine », n'affichent qu'une zone approximative tant que leur propriétaire n'a pas placé le bien avec le nouveau sélecteur. Les tuiles viennent directement d'OpenStreetMap (gratuites, attribution affichée) : à fort trafic, il faudra un fournisseur dédié.
