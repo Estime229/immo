@@ -2,7 +2,7 @@
 
 Relevés par l'équipe frontend en testant la plateforme contre l'API de production (`https://immo-b89b.onrender.com/v1/api`). Chaque point a été reproduit en direct (curl ou navigateur) et, quand c'était possible, confirmé dans le code de `back-end-api-immo-app`. Le détail de chaque constat se trouve dans `INTEGRATION-TESTS.md` (numéro de lot indiqué).
 
-Mis à jour le 28/09/2026. Statut : **ouvert** sauf mention contraire.
+Mis à jour le 28/09/2026 (Lot 56). Statut : **ouvert** sauf mention contraire.
 
 **Légende de gravité** — 🔴 bloquant ou faille · 🟠 données incohérentes ou fonction manquante importante · 🟡 contrat d'API ou confort.
 
@@ -104,6 +104,14 @@ Mis à jour le 28/09/2026. Statut : **ouvert** sauf mention contraire.
 | 90 | 🟡 | Pièces jointes de signalement : multipart ignoré (201 sans effet), corps non documenté, URL libres acceptées | `POST /signals/:id/attachments`, `POST /signals` | 55 |
 | 91 | 🟡 | Messagerie : message `system` envoyable par un utilisateur, pagination documentée à l'envers, messages en anglais, « Message de Quelqu'un » | `/messaging` | 55 |
 | 92 | 🟠 | Une nouvelle conversation à chaque appel pour le même logement et le même destinataire | `POST /messaging/conversations` | 55 |
+| 93 | 🔴 | Formulaire de contact inutilisable : 500 à chaque envoi (après ~6 s) | `POST /contact` | 56 |
+| 94 | 🟠 | Vitrine vide alors que la recherche montre les annonces du même propriétaire ; vitrine publique ouverte aux comptes locataires | `GET /public/owners/:userId`, `GET /property/search` | 56 |
+| 95 | 🟠 | Un logement loué (bail actif) reste « disponible » dans la recherche et la fiche publique | `unit_status`, `GET /property/search`, `GET /public/units/:id` | 56 |
+| 96 | 🟡 | Identifiant mal formé → 500 au lieu de 400/404 | `GET /property/:id`, `GET /reviews/property/:id(/stats)` | 56 |
+| 97 | 🟡 | `ai-search` et `semantic-search` renvoient exactement la recherche textuelle | `GET /property/ai-search`, `/semantic-search` | 56 |
+| 98 | 🟡 | Statistiques avancées du propriétaire en 500, y compris pour un propriétaire avec des biens | `GET /property/landlord/stats/advanced` | 56 |
+| 99 | 🟡 | Rôles incomplets et appels refusés : un propriétaire qui loue n'a pas le rôle `tenant` ; `agent-mandates/mine` en 403 pour tout non-agent | `GET /auth/roles`, `GET /agent-mandates/mine` | 56 |
+| 100 | 🟡 | Adresse exacte et GPS publics, alors que l'offre propriétaire promet l'adresse masquée jusqu'à la visite | `GET /property/:id`, `GET /public/properties/:id` | 56 |
 
 ---
 
@@ -899,4 +907,60 @@ La place de marché repose entièrement sur des propriétaires qui viennent cons
 - Chaque bouton « Écrire au propriétaire / au locataire » (visite, réservation, bail, file d'attente, signalement) en créait donc une de plus.
 - **Attendu** : dédupliquer sur (logement, participants) quand la conversation est active.
 - Le frontend réutilise maintenant la conversation active existante avant d'en créer une.
+
+## Ajouts du Lot 56 — Espace public et liens avec les espaces
+
+### 93. 🔴 Formulaire de contact inutilisable : 500 à chaque envoi
+
+- **Rejoué** : `POST /contact` avec un corps valide (`name`, `email`, `subject`, `message`), anonyme ou connecté, avec ou sans sujet → **500** « Une erreur inattendue » après 5 à 7 s, à chaque essai (4 essais, marqués « [Test QA Lot 56] »).
+- Les validations fonctionnent : corps vide ou e-mail invalide → 400 avec violations.
+- La lenteur fait penser à un envoi d'e-mail qui échoue après l'enregistrement, comme #11. Sans accès administrateur, impossible de vérifier si les messages sont enregistrés (`GET /contact`).
+- **Avant ce lot**, le frontend affichait « Message envoyé » (avec une référence inventée) sans appeler l'API. Il envoie maintenant pour de vrai : l'échec est affiché et le texte saisi est gardé.
+- **Attendu** : 201, e-mail d'accusé de réception en tâche de fond (ou pas du tout), et `GET /contact` à vérifier côté administration.
+
+### 94. 🟠 Vitrine vide alors que la recherche montre les annonces
+
+- `GET /property/search` liste les logements quel que soit `is_publicly_listed` (#6) : 51 des 66 logements renvoyés ne sont pas « publiés ».
+- `GET /public/owners/:userId`, lui, ne garde que les logements publiés. Sur les propriétaires présents dans la recherche, **seuls 2 ont une vitrine non vide**. La fiche d'un logement renvoie pourtant vers « Voir sa vitrine », qui affiche alors « Aucune annonce disponible ».
+- **Vitrine d'un locataire** : `GET /public/owners/:id` répond aussi pour un compte locataire (nom, « vérifié », date d'inscription), qui n'a rien à montrer au public.
+- **Attendu** : une seule règle de visibilité pour la recherche, la fiche et la vitrine ; 404 sur la vitrine d'un compte qui n'est ni propriétaire ni agence.
+
+### 95. 🟠 Un logement loué reste « disponible »
+
+- Le logement « Appart 4 » a un bail **actif** (entrée payée) depuis le Lot 55. Pourtant :
+  - `unit_status` vaut toujours `available` dans `GET /property/search` et `GET /public/units/:id` ;
+  - seules les disponibilités le bloquent, et à partir de la date de début seulement (`blocked_by: "lease"`).
+- Le logement reste proposé comme libre dans la recherche publique, et sa fiche propose toujours de candidater : le bouton dépend de `unit_status`. L'acceptation d'une candidature par l'API sur ce logement n'a pas été rejouée.
+- **Attendu** : `unit_status: occupied` à l'activation du bail (ou dès la signature), et retour à `available` à la fin du bail.
+
+### 96. 🟡 Identifiant mal formé → 500
+
+- `GET /property/pas-un-uuid`, `GET /reviews/property/pas-un-uuid` et `…/stats` → **500**.
+- `GET /property/<uuid inexistant>` → 404 « Property not found », correct.
+- **Attendu** : `ParseUUIDPipe` (400) ou 404, comme sur les autres modules.
+
+### 97. 🟡 `ai-search` et `semantic-search` = recherche textuelle
+
+- Pour « Cotonou », « appartement », « studio » ou un nom de bien, les trois routes renvoient exactement les mêmes totaux.
+- Une phrase en langage naturel (« studio meublé Cotonou moins de 50000 », « studio calme proche université ») renvoie 0 résultat, alors que des studios meublés à Cotonou existent.
+- Le frontend ne les utilise pas. **Attendu** : les brancher réellement, ou les retirer du Swagger.
+
+### 98. 🟡 Statistiques avancées du propriétaire en 500
+
+- `GET /property/landlord/stats/advanced` → 500, y compris pour un propriétaire qui a plusieurs biens et des baux actifs. Le Lot IP1 ne l'avait vu que sur un compte sans bien.
+- Le tableau de bord pro se replie sur `/property/landlord/stats` : pas de comparaison, pas de top des biens, pas de note moyenne.
+
+### 99. 🟡 Rôles incomplets, appels refusés
+
+- **Rôle `tenant` absent** : un compte propriétaire qui loue un logement (baux signés en tant que locataire) a `roles: ["landlord"]` dans `GET /auth/roles`. Le rôle `tenant` n'est jamais ajouté.
+  - Le frontend garde donc l'espace locataire ouvert à tous les comptes. Il réserve les espaces pro et artisan aux rôles concernés, avec bascule automatique quand le rôle existe sans être actif (#78).
+- **Compteur de mandats** : `GET /agent-mandates/mine` répond 403 à tout compte qui n'est pas agent. L'espace pro l'appelle pour afficher le compteur de mandats. Attendu : `[]`.
+
+### 100. 🟡 Adresse exacte publique, contrairement à la promesse faite aux propriétaires
+
+- La page « Louer votre bien » promet : « l'adresse exacte reste masquée jusqu'à l'acceptation d'une visite ».
+- Or `GET /property/:id` et `GET /public/properties/:id` renvoient, sans authentification, `address`, `gps_latitude` et `gps_longitude`.
+- **Attendu** (décision produit) :
+  - soit une adresse et un GPS approximatifs (quartier, point décalé) tant qu'aucune visite n'est acceptée ;
+  - soit retirer la promesse de la page.
 

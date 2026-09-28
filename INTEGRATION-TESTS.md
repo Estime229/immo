@@ -3950,3 +3950,118 @@ Données de test :
 - **Locataire `qa-tenant55-…`** (créé pour la prod) : recharge de 5 000 F ; un retrait de 1 000 F en attente.
 - **Artisan** : un retrait de 1 000 F en attente vers « abc », créé pour reproduire #84. Il ne peut pas être annulé sans administrateur.
 - **Propriétaire `qa-landlord-…`** : solde toujours à −9 000 F (#82) ; deux signalements tiers reçus pendant les tests de droits (#87).
+
+## Lot 56 — Espace public et liens avec les espaces : titres et aperçus de partage, contact réel, vitrine, garde des espaces, déconnexion propre
+
+Demande : « parcourir et tester le flow de l'espace public et les relations avec les autres espaces, en consultant l'API : divergences, manques, écrans à ajouter, incohérences, messages d'erreur ».
+
+**Périmètre et contrainte** :
+- `index.vue`, `recherche.vue` et `biens/[id].vue` portent des modifications non commitées d'une autre session (carte), dans le répertoire partagé. Ils n'ont **pas** été modifiés : ce qui les concerne est corrigé ailleurs (composables, garde de route, `app.vue`) ou listé plus bas.
+- Le lot a été développé dans un worktree séparé (`im-lot56`, basé sur `origin/main` après la fusion responsive d'im-ed, 665417c). Seul conflit : `SiteHeader.vue`, résolu en gardant la nouvelle mise en page.
+
+**Méthode** :
+- Swagger en direct comparé à celui du dépôt : aucun écart (299 opérations), 47 routes publiques.
+- Routes publiques rejouées une à une.
+- Parcours exploratoire Playwright sur la prod : 21 URL publiques ou limites, en visiteur (bureau et mobile 390 px) et en locataire, soit 63 pages. Relevés : titre, langue, erreurs JS, requêtes en échec, débordements.
+
+### Comportement réel de l'API (vérifié en live)
+
+| Cas | Réponse |
+|---|---|
+| `POST /contact` vide · e-mail invalide · **corps valide** (anonyme ou connecté) | 400 violations · 400 `email.isEmail` · **500 après 5 à 7 s, à chaque fois** (#93) |
+| `GET /property/<uuid inconnu>` · `GET /property/pas-un-uuid` | 404 « Property not found » · **500**, idem avis et stats (#96) |
+| `GET /public/owners/:id` : propriétaire à 5 biens dans la recherche · inconnu · **compte locataire** | `total: 0` (#94) · 404 · 200 avec nom, « vérifié », date (#94) |
+| Recherche : logements renvoyés / dont non publiés · logement loué (bail actif) | 66 / 51 · présent et `unit_status: available` (#95) |
+| `ai-search`, `semantic-search` vs `search` | mêmes totaux ; phrase en langage naturel → 0 (#97) |
+| `GET /units/:id/availability` d'un logement loué | bloqué seulement à partir du début du bail |
+| `GET /public/qr/property/:id`, `/public/qr/unit/:id` | PNG ; non utilisés par l'espace public |
+| `GET /currencies/active` · `GET /settings/public` | EUR 655,957 · USD 600 · `maintenance_mode`, `tax_rate_percent`, `bailiff_dossier_fee` |
+| `GET /auth/roles` d'un propriétaire qui loue | `["landlord"]`, sans `tenant` (#99) |
+| `GET /property/landlord/stats/advanced` (propriétaire avec biens) | 500 (#98) |
+| Code de connexion (`request-otp`) | 6,7 s avant l'écran du code |
+
+### Constats côté écrans
+
+| # | Où | Constat |
+|---|---|---|
+| R1 | Tout le site | **Aucune page n'avait de `<title>`** (onglet vide), ni de `lang`, ni de description, ni d'aperçu de partage. Les espaces connectés non plus. `robots.txt` autorisait tout, y compris les espaces privés. |
+| R2 | Contact | **Formulaire factice** : « Message envoyé », « une copie vient de partir sur votre e-mail », « Référence · MSG-7734 », sans aucun appel à l'API. |
+| R3 | Vitrine | « Partager cette vitrine » plantait : `location` n'existe pas dans un template Vue. « Contacter » menait au formulaire d'Immo, pas au propriétaire. « Introuvable » s'affichait aussi en cas de panne. Aucun rendu serveur, donc un lien partagé n'avait pas d'aperçu. |
+| R4 | Favoris | Un visiteur voyait « Impossible de charger vos favoris » (401), au lieu d'une invitation à se connecter. |
+| R5 | Connexion | Un compte déjà connecté revoyait le formulaire. La page demandée était perdue : la garde de route renvoyait vers `/connexion` sans `redirect`, et l'inscription menait toujours à la vérification puis à l'espace. |
+| R6 | En-tête | « Langue et devise » **factice** : choisir English, Yorùbá, EUR ou USD ne changeait rien. |
+| R7 | Espaces | **Aucune garde de rôle** : un locataire ouvrait `/pro` (tableau de bord vide, 403 et 500), un artisan `/pro` et `/locataire`. Le lien « Poser une question au propriétaire » menait un propriétaire dans l'espace locataire. |
+| R8 | Session | **Données du compte précédent** : après une déconnexion, puis la connexion d'un autre compte dans le même onglet sans rechargement, le nouveau compte voyait le solde du précédent. Rejoué sur la prod avant correction : « Bonjour Awa » avec 10 000 F au lieu de 5 000 F. Même chose pour les baux, favoris, retraits et non-lus. |
+| R9 | Mobile | La barre d'onglets publique disait que l'artisan n'a pas de messagerie (vrai avant le Lot 54). Pas de pastille de non-lus sur mobile, ni côté public, ni côté locataire. |
+| R10 | Fiche | « Poser une question » créait une conversation de plus et renvoyait « Bonjour, je suis intéressé(e) » à chaque clic (#92). |
+
+### Ce qui a été livré
+
+| Fichier | Rôle |
+|---|---|
+| `app/app.vue`, `app/utils/seo.ts` | `lang="fr"`, modèle de titre « … · Immo », titre par défaut par route (y compris pour les trois pages non modifiées), description, Open Graph, `theme-color`. `noindex` sur les espaces connectés, la connexion, le paiement, les invitations et `/design-system`. |
+| `public/robots.txt` | Espaces privés et flux techniques exclus |
+| `app/layouts/{locataire,pro,artisan}.vue` | Titre d'onglet = intitulé de la page ; pastille de non-lus sur l'onglet mobile « Messages » ; l'artisan a « Messages » dans sa barre mobile (à la place de Planning, resté dans le menu) |
+| `app/pages/contact.vue`, `app/utils/contact.ts` | **Vrai envoi** `POST /contact`. Validation aux limites de l'API, nom et e-mail pré-remplis pour un compte connecté, `?sujet=`. Succès sans référence inventée ; échec dit tel quel, texte gardé. |
+| `app/pages/vitrine/[id].vue` | Rendu serveur (`useAsyncData`) : `<title>` et `og:title` du propriétaire dans le HTML. Partage réparé. « Écrire à ce propriétaire » (conversation réutilisée, messagerie du bon espace, connexion avec retour sinon). Vitrine inexistante et panne distinguées. « C'est votre vitrine » pour son propriétaire. |
+| `app/pages/favoris.vue` | Visiteur : invitation à se connecter, retour à `/favoris` |
+| `app/pages/connexion.vue`, `app/pages/kyc.vue`, `app/pages/louer.vue` | Déjà connecté → page demandée ou espace. `?role=bailleur` depuis « Louer votre bien ». La page d'origine suit l'inscription puis la vérification d'identité (« Revenir à ma recherche »). |
+| `app/middleware/auth.global.ts`, `app/utils/roleRoutes.ts` | `?redirect=` conservé. Garde des espaces : pro et artisan réservés aux rôles concernés (bascule automatique si le rôle existe sans être actif, sinon retour dans son espace, conversation gardée). Espace locataire ouvert à tous (#99). Liens vers `/locataire/messages` → messagerie du rôle actif. |
+| `app/composables/useUserStateReset.ts`, `useAuthApi.ts` | Caches du compte (wallet, baux, favoris, retraits, non-lus, rôles, codes promo…) remis à zéro à la déconnexion et à chaque nouvelle connexion |
+| `app/components/layout/SiteHeader.vue`, `PublicTabBar.vue` | « Langue et devise » honnête : français seul pour l'instant, prix en FCFA, équivalents EUR/USD de l'API. Connexion avec retour à la page courante. Messagerie artisan et pastille de non-lus dans la barre mobile publique. |
+| `app/composables/useMessagingApi.ts` | `createConversation` réutilise aussi la conversation existante, sans renvoyer le message d'ouverture. La fiche d'un logement en profite sans être modifiée. |
+
+### À faire dans les trois pages non modifiées (travail carte en cours)
+
+| Page | Correction prête à appliquer |
+|---|---|
+| `biens/[id].vue` | Rendu serveur de la fiche et `useSeoMeta` (titre, prix, photo en `og:image`) pour les aperçus WhatsApp ; statut 404 pour un logement inexistant (aujourd'hui 200) ; `redirect` sur les deux renvois vers `/connexion` sans retour (favori, logements similaires) ; lien partagé avec `?unit=` ; masquer « Réserver / Candidater » au propriétaire du bien (#48) ; galerie pour voir toutes les photos (« N photos » sans moyen de les ouvrir). |
+| `index.vue`, `recherche.vue` | `redirect` sur le renvoi vers `/connexion` après un favori ; la fenêtre « Offre de lancement » (voir plus bas). |
+
+### Promesses affichées à valider (décision produit, non modifiées)
+
+| Où | Affiché | Réalité constatée |
+|---|---|---|
+| `/louer` | « Un agent Immo visite le bien avant mise en ligne » | aucun parcours de ce type dans l'API |
+| `/louer` | « l'adresse exacte reste masquée jusqu'à l'acceptation d'une visite » | adresse et GPS publics (#100) |
+| `/louer`, `/connexion` | caution « restituée sous 7 jours » après l'état des lieux de sortie | restitution non gérée (Lot 50) |
+| `/louer` | « 94 % des loyers encaissés… », « 12 min pour publier », témoignages nominatifs | chiffres et personnes non sourcés |
+| Accueil | « Offre de lancement : frais de service offerts sur votre 1ère location, automatiquement, avant la fin du mois » | rien de tel dans l'API ; « fin du mois » sans date, reconduit indéfiniment |
+| `/contact`, pied de page | WhatsApp +229 97 00 12 12, +229 21 30 45 90, bonjour@immo.bj, « Lot 1247, Fidjrossè Kpota » (contact) vs « Boulevard de la Marina » (pied de page) | coordonnées à confirmer : les deux adresses se contredisent |
+
+### Tests automatisés
+
+```
+Test Files  33 passed (33)
+     Tests  298 passed (298)   [+10 : tests/publicSpace.test.ts — titres, pages privées, contact, accès aux espaces ; base : origin/main après la fusion responsive]
+```
+
+`vue-tsc` : 24 erreurs, toutes antérieures. Celle de `vitrine/[id].vue` a disparu avec la réécriture.
+
+### Vérification de bout en bout (Playwright, build de production local → API de production)
+
+| Id | Scénario | Résultat |
+|---|---|---|
+| G1 | « Immo — Louer en toute confiance au Bénin », `lang="fr"`, description ; « Questions fréquentes · Immo » ; `/design-system` en `noindex` | PASS |
+| G2-G3 | `/favoris` visiteur : invitation, aucune requête 401 ; lien protégé → `/connexion?redirect=/locataire/messages?conversation=…` | PASS |
+| G4-G7 | Vitrine : `<title>` et `og:title` dans le HTML serveur ; partage WhatsApp sans erreur ; « Se connecter pour écrire » avec retour ; vitrine inexistante expliquée | PASS |
+| G8 | Contact : erreurs avant envoi, puis vrai `POST /contact` → 500 (#93), échec affiché, texte gardé, plus de faux succès | PASS |
+| G9-G10 | « Langue et devise » : « 1 € ≈ 655,96 FCFA » ; « Créer mon compte propriétaire » → `?role=bailleur` | PASS |
+| T1-T3 | Locataire connecté : `/connexion?redirect=/favoris` → `/favoris`. `/pro` et `/artisan/missions` → `/locataire`. `/pro/messages?conversation=` → `/locataire/messages?conversation=`. Onglet « Tableau de bord · Immo ». | PASS |
+| T4 | Fiche → « Poser une question » deux fois : même conversation (8 → 8), pas de « Bonjour… » renvoyé | PASS |
+| L1-L3 | Propriétaire : `/locataire/messages?conversation=` → `/pro/messages?conversation=`. `/locataire` reste ouvert. Rôle actif « tenant » + `/pro/wallet` → bascule sur « landlord », aucun 403 (hors compteur de mandats, #99). | PASS |
+| A1 | Artisan : `/pro` → `/artisan`, onglet « Messages » en mobile | PASS |
+| X1 | Même onglet, sans aucun rechargement : wallet du locataire de test (10 000 F), déconnexion, connexion par code d'un autre locataire, puis son wallet → **5 000 F**, son propre solde. Sur la prod avant correction, le même parcours affichait 10 000 F. | PASS |
+| Z | Zéro erreur JS | PASS |
+
+Trois échecs de premier passage venaient du test, pas du code :
+- la mise en page publique n'a pas de `<main>` ;
+- la fenêtre « Offre de lancement » de l'accueil recouvrait le bouton visé ;
+- l'écran du code met 6,7 s à venir.
+
+X1 a d'abord été écrit avec un rechargement de page, qui vidait les caches et masquait le défaut. Il a été réécrit en navigation côté client uniquement, puis rejoué sur la prod pour montrer le défaut d'avant.
+
+Données de test :
+- **Contact** : quatre essais `POST /contact` marqués « [Test QA Lot 56] » / « QA Lot 56 », tous en 500.
+- **Compte `qa-landlord-…`** : rôle actif basculé sur « tenant » puis revenu à « landlord » par la garde.
+- **Conversation du locataire de test** avec ce propriétaire : réutilisée, sans nouveau message.

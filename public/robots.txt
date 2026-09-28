@@ -1,2 +1,10 @@
 User-Agent: *
-Disallow:
+Disallow: /locataire
+Disallow: /pro
+Disallow: /artisan
+Disallow: /kyc
+Disallow: /connexion
+Disallow: /invite
+Disallow: /payment
+Disallow: /design-system
+Disallow: /api/

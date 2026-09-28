@@ -5,7 +5,7 @@ import { KYC_DOCUMENT_TYPE_LABELS } from '~/types/kyc'
 import type { ProfileMe } from '~/types/profile'
 import { ApiRequestError } from '~/utils/authenticatedFetcher'
 import { errorText } from '~/utils/apiErrors'
-import { apiRoleToSignupRole, validateIfu, validateRccm } from '~/utils/onboarding'
+import { apiRoleToSignupRole, safeRedirect, validateIfu, validateRccm } from '~/utils/onboarding'
 import { UPLOAD_ACCEPT_ATTR, UPLOAD_HINT, prepareUpload } from '~/utils/uploadFile'
 
 const localRole = useAuthRole()
@@ -276,9 +276,16 @@ const NEXT_STEPS: Record<UserRole, string[]> = {
   bailleur: ['Validation de vos titres de propriété', 'Publiez votre premier bien et ses unités', 'Recevez et acceptez des demandes de location'],
   artisan: ['Validation de votre assurance et certifications', 'Complétez votre vitrine et vos zones d\'intervention', 'Répondez aux demandes et faites vos premières offres']
 }
+/** Retour à la page d'origine de l'inscription s'il y en a une (Lot 56), sinon l'espace du rôle. */
+const kycRoute = useRoute()
+const backTo = safeRedirect(kycRoute.query.redirect)
 function goSpace() {
   doneOpen.value = false
-  navigateTo(SPACE_ROUTE[role.value])
+  navigateTo(backTo ?? SPACE_ROUTE[role.value])
+}
+function exploreFirst() {
+  doneOpen.value = false
+  navigateTo(backTo ?? '/recherche')
 }
 </script>
 
@@ -433,7 +440,7 @@ function goSpace() {
             </div>
           </div>
           <CoreButton size="lg" full-width @click="goSpace">{{ DONE_CTA[role] }}</CoreButton>
-          <button type="button" class="mt-2.5 w-full text-[13.5px] font-bold text-[var(--text-muted)]" @click="doneOpen = false">Explorer d'abord les annonces</button>
+          <button type="button" class="mt-2.5 w-full text-[13.5px] font-bold text-[var(--text-muted)]" @click="exploreFirst">{{ backTo ? 'Revenir à ma recherche' : 'Explorer d\'abord les annonces' }}</button>
         </div>
       </div>
     </Teleport>

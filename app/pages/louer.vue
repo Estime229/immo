@@ -55,7 +55,7 @@ const AMOUNT_TONE: Record<'locked' | 'danger' | 'ok', string> = {
             <p class="mb-0 mt-1.5 max-w-[180px] text-[13px] text-white/70">{{ s.label }}</p>
           </div>
         </div>
-        <NuxtLink to="/connexion" class="mt-[30px] inline-block rounded-md bg-clay-500 px-[30px] py-4 text-[15.5px] font-bold text-white shadow-accent">Créer mon compte propriétaire</NuxtLink>
+        <NuxtLink :to="{ path: '/connexion', query: { role: 'bailleur' } }" class="mt-[30px] inline-block rounded-md bg-clay-500 px-[30px] py-4 text-[15.5px] font-bold text-white shadow-accent">Créer mon compte propriétaire</NuxtLink>
       </div>
     </section>
 
@@ -128,7 +128,7 @@ const AMOUNT_TONE: Record<'locked' | 'danger' | 'ok', string> = {
           <h3 class="m-0 font-display text-2xl font-bold tracking-[-.025em] text-white">Publier votre premier bien prend 12 minutes</h3>
           <p class="mb-0 mt-2 text-[15px] text-white/[.78]">Aucun frais tant que le bien n'est pas loué.</p>
         </div>
-        <NuxtLink to="/connexion" class="whitespace-nowrap rounded-md bg-white px-7 py-[15px] text-[15px] font-bold text-green-900">Commencer</NuxtLink>
+        <NuxtLink :to="{ path: '/connexion', query: { role: 'bailleur' } }" class="whitespace-nowrap rounded-md bg-white px-7 py-[15px] text-[15px] font-bold text-green-900">Commencer</NuxtLink>
       </div>
     </section>
   </div>

@@ -1,3 +1,6 @@
+import type { UserRole } from '~/types/auth'
+import { roleHomePath, spaceAccess, spaceOf, SPACE_ROLES } from '~/utils/roleRoutes'
+
 const PROTECTED_PREFIXES = ['/locataire', '/pro', '/artisan', '/kyc']
 
 /**
@@ -17,17 +20,45 @@ const PROTECTED_PREFIXES = ['/locataire', '/pro', '/artisan', '/kyc']
 export default defineNuxtRouteMiddleware(async to => {
   if (!PROTECTED_PREFIXES.some(p => to.path === p || to.path.startsWith(`${p}/`))) return
 
+  // Lot 56 : la page demandée est gardée (`?redirect=`), sinon un lien de notification,
+  // d'e-mail ou de conversation ramenait à l'accueil de l'espace après la connexion.
+  const toLogin = () => navigateTo({ path: '/connexion', query: { redirect: to.fullPath } })
+
   const { accessToken } = useApiAuth()
   if (!accessToken.value) {
-    return navigateTo('/connexion')
+    return toLogin()
   }
 
-  const { user, fetchMe } = useAuthApi()
+  const { user, fetchMe, fetchRoles, switchRole } = useAuthApi()
   if (!user.value) {
     try {
       await fetchMe()
     } catch {
-      return navigateTo('/connexion')
+      return toLogin()
     }
   }
+
+  // Lot 56 : espace pro ou artisan sans le rôle actif correspondant → bascule ou retour dans son espace.
+  const u = user.value
+  const space = spaceOf(to.path)
+  if (!u || !space || u.role === 'admin') return
+  if (space !== 'locataire' && SPACE_ROLES[space].includes(u.role)) return
+  const roles = useState<UserRole[] | null>('authRoles', () => null)
+  if (!roles.value && space !== 'locataire') {
+    try {
+      roles.value = (await fetchRoles()).roles
+    } catch {
+      roles.value = [u.role]
+    }
+  }
+  const access = spaceAccess(to.path, u.role, roles.value ?? [u.role])
+  if (access.action === 'switch') {
+    try {
+      await switchRole(access.role)
+    } catch {
+      return navigateTo(roleHomePath(u.role), { replace: true })
+    }
+    return
+  }
+  if (access.action === 'redirect') return navigateTo({ path: access.path, query: access.keepQuery ? to.query : undefined }, { replace: true })
 })

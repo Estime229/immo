@@ -41,6 +41,8 @@ function navCount(n: { key: string; count: string }) {
 }
 const currentKey = computed(() => NAV_ITEMS.find(n => n.to === route.path)?.key ?? 'dash')
 const pageTitle = computed(() => currentKey.value === 'dash' ? (firstName.value ? `Bonjour ${firstName.value}` : 'Bonjour') : PAGE_TITLES[currentKey.value] ?? '')
+/** Titre d'onglet (Lot 56) : l'intitulé de la page, sinon celui de l'espace. */
+useHead({ title: computed(() => (currentKey.value === 'dash' ? 'Tableau de bord' : pageTitle.value) || 'Espace locataire') })
 const showLeaseSwitcher = computed(() => (currentKey.value === 'bail' || currentKey.value === 'edl') && leases.value.length > 1)
 
 const leaseMenuOpen = ref(false)
@@ -70,7 +72,7 @@ const MOBILE_SHORTCUTS = [
   { key: 'messages', label: 'Messages', icon: 'message' }
 ] as const
 const mobileTabs = computed<MobileTab[]>(() => {
-  const tabs: MobileTab[] = MOBILE_SHORTCUTS.map(t => ({ ...t, to: NAV_ITEMS.find(n => n.key === t.key)!.to, active: !drawerOpen.value && currentKey.value === t.key }))
+  const tabs: MobileTab[] = MOBILE_SHORTCUTS.map(t => ({ ...t, to: NAV_ITEMS.find(n => n.key === t.key)!.to, active: !drawerOpen.value && currentKey.value === t.key, badge: t.key === 'messages' ? unread.label.value : undefined }))
   tabs.push({ key: 'menu', label: 'Menu', icon: 'menu', active: drawerOpen.value || !tabs.some(t => t.active) })
   return tabs
 })

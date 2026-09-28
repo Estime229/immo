@@ -57,8 +57,31 @@ async function handleLogout() {
 
 const menuOpen = ref(false)
 const langOpen = ref(false)
-const lang = ref('fr')
-const currency = ref('fcfa')
+
+/**
+ * « Langue et devise » (Lot 56) : le choix d'une langue ou d'une devise ne
+ * changeait rien, aucune page n'étant traduite ni convertie. La fenêtre dit
+ * maintenant ce qui existe (français, prix en FCFA) et donne les équivalents
+ * indicatifs publiés par l'API (GET /currencies/active).
+ */
+const pub = usePublicApi()
+const rates = ref<{ currency_code: string; rate_to_cfa: string }[]>([])
+async function openLang() {
+  langOpen.value = true
+  closeMenu()
+  if (rates.value.length) return
+  try {
+    rates.value = (await pub.get<{ currency_code: string; rate_to_cfa: string }[]>('/currencies/active')).filter(r => r.currency_code !== 'XOF')
+  } catch {
+    rates.value = []
+  }
+}
+function rateLine(r: { currency_code: string; rate_to_cfa: string }) {
+  const symbol = r.currency_code === 'EUR' ? '€' : r.currency_code === 'USD' ? '$' : r.currency_code
+  return `1 ${symbol} ≈ ${Number(r.rate_to_cfa).toLocaleString('fr-FR', { maximumFractionDigits: 2 })} FCFA`
+}
+/** Retour à la page courante après la connexion (la fiche d'un logement, par exemple). */
+const loginLink = computed(() => (route.path === '/' || route.path === '/connexion' ? '/connexion' : { path: '/connexion', query: { redirect: route.fullPath } }))
 
 const NAV_LINKS = [
   { to: '/', label: 'Accueil' },
@@ -88,19 +111,6 @@ watch(() => route.fullPath, () => {
   searchOpen.value = false
   accountOpen.value = false
 })
-
-const LANG_OPTIONS = [
-  { key: 'fr', label: 'Français', region: 'France, Bénin' },
-  { key: 'en', label: 'English', region: 'United States' },
-  { key: 'yo', label: 'Yorùbá', region: 'Bénin, Nigeria' },
-  { key: 'fon', label: 'Fɔngbè', region: 'Bénin' }
-]
-
-const CURRENCY_OPTIONS = [
-  { key: 'fcfa', code: 'XOF', label: 'Franc CFA' },
-  { key: 'eur', code: 'EUR', label: 'Euro' },
-  { key: 'usd', code: 'USD', label: 'Dollar' }
-]
 
 function isActive(to: string) {
   return to === '/' ? route.path === '/' : route.path.startsWith(to)
@@ -164,7 +174,8 @@ function closeMenu() {
         <button
           type="button"
           class="hidden h-[42px] w-[42px] place-items-center rounded-pill border border-[var(--border-default)] bg-white text-[17px] transition-colors hover:border-green-600 lg:grid"
-          @click="langOpen = true"
+          aria-label="Langue et devise"
+          @click="openLang"
         >✦</button>
         <button
           type="button"
@@ -189,7 +200,7 @@ function closeMenu() {
     <template v-if="menuOpen">
       <div class="fixed inset-0 z-[44]" @click="closeMenu" />
       <div class="absolute right-[26px] top-[66px] z-[45] w-80 animate-[im-rise_.2s_ease_both] rounded-xl border border-[var(--border-subtle)] bg-white p-2 shadow-panel">
-        <button type="button" class="flex w-full items-center gap-3.5 rounded-md px-3.5 py-3 text-left hover:bg-sand-100" @click="langOpen = true; closeMenu()">
+        <button type="button" class="flex w-full items-center gap-3.5 rounded-md px-3.5 py-3 text-left hover:bg-sand-100" @click="openLang">
           <span class="w-[22px] text-center text-lg">✦</span><span class="text-[14.5px] font-semibold">Langue et devise</span>
         </button>
         <NuxtLink to="/faq" class="flex items-center gap-3.5 rounded-md px-3.5 py-3 hover:bg-sand-100" @click="closeMenu">
@@ -239,7 +250,7 @@ function closeMenu() {
             Se déconnecter
           </button>
         </template>
-        <NuxtLink v-else to="/connexion" class="block rounded-md px-3.5 py-3 text-[14.5px] font-bold hover:bg-sand-100" @click="closeMenu">
+        <NuxtLink v-else :to="loginLink" class="block rounded-md px-3.5 py-3 text-[14.5px] font-bold hover:bg-sand-100" @click="closeMenu">
           Se connecter ou s'inscrire
         </NuxtLink>
       </div>
@@ -282,12 +293,12 @@ function closeMenu() {
         </div>
       </template>
     </template>
-    <NuxtLink v-else to="/connexion" class="flex items-center justify-center rounded-pill bg-[image:var(--action-primary)] py-3.5 text-[15.5px] font-bold text-white shadow-action transition-transform active:scale-[.98]">
+    <NuxtLink v-else :to="loginLink" class="flex items-center justify-center rounded-pill bg-[image:var(--action-primary)] py-3.5 text-[15.5px] font-bold text-white shadow-action transition-transform active:scale-[.98]">
       Se connecter ou s'inscrire
     </NuxtLink>
 
     <div class="mt-4 overflow-hidden rounded-2xl bg-white shadow-hairline">
-      <button type="button" class="flex w-full items-center gap-3.5 border-b border-[var(--border-subtle)] px-4 py-3.5 text-left" @click="accountOpen = false; langOpen = true">
+      <button type="button" class="flex w-full items-center gap-3.5 border-b border-[var(--border-subtle)] px-4 py-3.5 text-left" @click="accountOpen = false; openLang()">
         <span class="w-[22px] text-center text-lg">✦</span><span class="flex-1 text-[15px] font-semibold">Langue et devise</span><span aria-hidden="true" class="text-[var(--text-faint)]">›</span>
       </button>
       <NuxtLink to="/faq" class="flex items-center gap-3.5 border-b border-[var(--border-subtle)] px-4 py-3.5">
@@ -317,32 +328,18 @@ function closeMenu() {
         </div>
         <div class="overflow-y-auto p-6">
           <p class="mb-3 mt-0 text-xs font-black uppercase tracking-[.05em] text-[var(--text-faint)]">Langue</p>
-          <div class="grid grid-cols-2 gap-2.5">
-            <button
-              v-for="l in LANG_OPTIONS"
-              :key="l.key"
-              type="button"
-              class="rounded-md border-[1.5px] px-4 py-3.5 text-left"
-              :class="lang === l.key ? 'border-green-600 bg-green-50' : 'border-[var(--border-default)] bg-white'"
-              @click="lang = l.key"
-            >
-              <p class="m-0 text-sm font-bold">{{ l.label }}</p>
-              <p class="mb-0 mt-[3px] text-[12.5px] text-[var(--text-muted)]">{{ l.region }}</p>
-            </button>
+          <div class="rounded-md border-[1.5px] border-green-600 bg-green-50 px-4 py-3.5">
+            <p class="m-0 text-sm font-bold">Français</p>
+            <p class="mb-0 mt-[3px] text-[12.5px] text-[var(--text-muted)]">Seule langue disponible pour l'instant. L'anglais, le fɔngbè et le yorùbá sont prévus.</p>
           </div>
           <p class="mb-3 mt-6 text-xs font-black uppercase tracking-[.05em] text-[var(--text-faint)]">Devise</p>
-          <div class="grid grid-cols-3 gap-2.5">
-            <button
-              v-for="c in CURRENCY_OPTIONS"
-              :key="c.key"
-              type="button"
-              class="rounded-md border-[1.5px] px-4 py-3.5 text-left"
-              :class="currency === c.key ? 'border-green-600 bg-green-50' : 'border-[var(--border-default)] bg-white'"
-              @click="currency = c.key"
-            >
-              <p class="m-0 text-sm font-bold">{{ c.code }}</p>
-              <p class="mb-0 mt-[3px] text-[12.5px] text-[var(--text-muted)]">{{ c.label }}</p>
-            </button>
+          <div class="rounded-md border border-[var(--border-default)] bg-white px-4 py-3.5">
+            <p class="m-0 text-sm font-bold">Franc CFA (XOF)</p>
+            <p class="mb-0 mt-[3px] text-[12.5px] text-[var(--text-muted)]">Tous les prix, loyers et paiements sont en FCFA.</p>
+            <ul v-if="rates.length" class="mb-0 mt-2.5 list-none p-0 text-[12.5px] text-[var(--text-secondary)]">
+              <li v-for="r in rates" :key="r.currency_code" class="font-mono">{{ rateLine(r) }}</li>
+            </ul>
+            <p v-if="rates.length" class="mb-0 mt-1.5 text-[11.5px] text-[var(--text-faint)]">Équivalents indicatifs, pour se repérer depuis l'étranger.</p>
           </div>
         </div>
       </div>

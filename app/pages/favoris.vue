@@ -4,11 +4,17 @@ import { flattenSearchResults, type ListingCard } from '~/utils/propertyListing'
 
 const favoritesApi = useFavoritesApi()
 const favorites = usePropertyFavorites()
+const { isAuthenticated } = useApiAuth()
 
 const entries = ref<FavoriteEntry[]>([])
-const state = ref<'loading' | 'success' | 'error'>('loading')
+/** `guest` (Lot 56) : un visiteur voyait « Impossible de charger vos favoris » (401) au lieu d'une invitation à se connecter. */
+const state = ref<'loading' | 'success' | 'error' | 'guest'>('loading')
 
 async function load() {
+  if (!isAuthenticated()) {
+    state.value = 'guest'
+    return
+  }
   state.value = 'loading'
   try {
     entries.value = await favoritesApi.fetchMine()
@@ -60,6 +66,15 @@ async function removeFavorite(l: ListingCard) {
 
     <div v-if="state === 'loading'" class="grid grid-cols-1 gap-[22px] sm:grid-cols-2 lg:grid-cols-3">
       <DataSkeletonCard v-for="i in 3" :key="i" :height="260" :lines="1" />
+    </div>
+
+    <div v-else-if="state === 'guest'" class="rounded-2xl border border-dashed border-[var(--border-default)] bg-white px-10 py-[60px] text-center">
+      <div class="mx-auto grid h-14 w-14 place-items-center rounded-pill bg-green-50 text-2xl text-fav">♥</div>
+      <p class="mb-0 mt-5 text-lg font-bold">Connectez-vous pour retrouver vos favoris</p>
+      <p class="mx-auto mb-[22px] mt-2.5 max-w-[420px] text-[14.5px] leading-[1.6] text-[var(--text-muted)]">
+        Vos favoris sont enregistrés sur votre compte : vous les retrouvez sur votre téléphone comme sur ordinateur.
+      </p>
+      <NuxtLink :to="{ path: '/connexion', query: { redirect: '/favoris' } }" class="inline-block rounded-md bg-[image:var(--action-primary)] px-7 py-3.5 text-[15px] font-bold text-white shadow-action">Se connecter ou créer un compte</NuxtLink>
     </div>
 
     <FeedbackAlertBanner v-else-if="state === 'error'" tone="danger">

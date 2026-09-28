@@ -29,6 +29,22 @@ function setHero(i: number) {
   startHeroTimer()
 }
 onMounted(startHeroTimer)
+
+/**
+ * Lot 56 : un compte déjà connecté qui ouvrait /connexion revoyait le
+ * formulaire (lien « Se connecter » d'une page publique, bouton précédent) —
+ * il part vers la page demandée ou son espace. Une inscription inachevée
+ * reste ici pour être reprise.
+ */
+onMounted(async () => {
+  if (!useApiAuth().isAuthenticated()) return
+  try {
+    const me = auth.user.value ?? await auth.fetchMe()
+    if (me && !needsOnboarding(me)) navigateTo(safeRedirect(route.query.redirect) ?? roleHomePath(me.role), { replace: true })
+  } catch {
+    // Jeton expiré : le formulaire reste affiché.
+  }
+})
 onUnmounted(() => { if (heroTimer) clearInterval(heroTimer) })
 
 const step = ref<AuthStep>('email')
@@ -208,6 +224,9 @@ const ROLES = [
 ] as const
 
 const role = useAuthRole()
+/** `?role=bailleur` (bouton de /louer) ou `?role=artisan` : le parcours d'inscription démarre sur le bon profil. */
+const wantedRole = String(route.query.role ?? '')
+if (wantedRole === 'bailleur' || wantedRole === 'locataire' || wantedRole === 'artisan') role.value = wantedRole
 
 /**
  * Nom + rôle enregistrés pour de vrai via /onboarding/draft puis /finalize
@@ -233,7 +252,9 @@ async function createAccount() {
     } catch {
       await auth.fetchMe()
     }
-    navigateTo('/kyc')
+    // La page d'origine (fiche d'un logement, invitation…) suit jusqu'au bout de la vérification d'identité.
+    const back = safeRedirect(route.query.redirect)
+    navigateTo(back ? { path: '/kyc', query: { redirect: back } } : '/kyc')
   } catch (e) {
     signupError.value = e instanceof ApiRequestError ? errorText(e.mapped, "La création du compte a échoué. Réessayez.") : "La création du compte a échoué. Réessayez."
   } finally {

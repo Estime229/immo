@@ -23,6 +23,8 @@ const currentKey = computed(() => {
   return parent?.key ?? 'apercu'
 })
 const pageTitle = computed(() => PAGE_TITLES[currentKey.value] ?? '')
+/** Titre d'onglet (Lot 56) : l'intitulé de la page, sinon celui de l'espace. */
+useHead({ title: computed(() => pageTitle.value || 'Espace pro') })
 
 /**
  * Compteurs du menu : jusqu'au Lot 47 ils étaient écrits en dur (« 1 » sur

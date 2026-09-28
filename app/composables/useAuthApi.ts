@@ -77,6 +77,8 @@ export function useAuthApi() {
     } finally {
       clearTokens()
       user.value = null
+      // Lot 56 : sans cela, le compte suivant sur le même onglet héritait des caches du précédent.
+      resetUserState()
     }
   }
 
@@ -101,11 +103,14 @@ export function useAuthApi() {
 
   /** Ajoute un rôle au compte (idempotent) sans changer le rôle actif — ex. devenir agent pour recevoir des mandats (Lot 53). */
   async function addRole(role: UserRole) {
+    // Liste des rôles relue à la prochaine garde d'espace (middleware).
+    clearNuxtState(['authRoles'])
     return api.post<RolesResult>('/user/roles', { role })
   }
 
   async function switchRole(role: UserRole) {
     const res = await api.post<SwitchRoleResult>('/auth/switch-role', { role })
+    clearNuxtState(['authRoles'])
     setTokens({ accessToken: res.token, refreshToken: res.refresh_token })
     await fetchMe()
     return res
@@ -113,6 +118,8 @@ export function useAuthApi() {
 
   /** Pose les jetons puis résout le statut réel du compte via GET /auth/me. */
   async function afterAuth(session: AuthSession): Promise<SessionOutcome> {
+    // Une nouvelle connexion part de caches vides (session expirée puis autre compte sur le même onglet).
+    resetUserState()
     setTokens({ accessToken: session.token, refreshToken: session.refresh_token })
     const me = await fetchMe()
     const outcome = decideSessionOutcome(me, session.is_new_user ?? false)

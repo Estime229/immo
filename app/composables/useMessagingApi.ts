@@ -15,20 +15,22 @@ export function useMessagingApi() {
     return api.get<ConversationSummary[]>('/messaging/conversations')
   }
 
-  /** Le serveur ne déduplique que pour une même demande de logement : pour un logement seul, chaque appel crée une conversation (#92) — passer par openConversation(). */
-  async function createConversation(unitId: string, recipientId: string, initialMessage?: string) {
+  /** Création brute : le serveur ne déduplique que pour une même demande de logement (#92). Passer par openConversation(). */
+  async function createNewConversation(unitId: string, recipientId: string, initialMessage?: string) {
     return api.post<ConversationSummary>('/messaging/conversations', { unit_id: unitId, recipient_id: recipientId, initial_message: initialMessage })
   }
 
-  /** Réutilise la conversation active sur ce logement avec ce destinataire, sinon en crée une (Lot 55). */
+  /**
+   * Réutilise la conversation active sur ce logement avec ce destinataire, sinon
+   * en crée une (Lot 55). Lot 56 : le message d'ouverture n'est plus renvoyé
+   * dans une conversation existante (« Bonjour, je suis intéressé(e)… » à chaque clic).
+   */
   async function openConversation(unitId: string, recipientId: string, initialMessage?: string) {
     const existing = findConversation(await fetchConversations(), unitId, recipientId)
-    if (existing) {
-      if (initialMessage) await sendMessage(existing.id, initialMessage)
-      return existing
-    }
-    return createConversation(unitId, recipientId, initialMessage)
+    return existing ?? createNewConversation(unitId, recipientId, initialMessage)
   }
+  /** Ancien nom, gardé pour les écrans qui l'appellent encore (fiche d'un logement) : même comportement sans doublon. */
+  const createConversation = openConversation
 
   /** Paginé du plus ancien au plus récent — voir la description de la route. */
   async function fetchMessages(conversationId: string, page = 1, limit = 50) {

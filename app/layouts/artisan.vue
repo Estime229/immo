@@ -20,6 +20,8 @@ function navCount(n: { key: string; count: string }) {
 }
 const currentKey = computed(() => ARTISAN_NAV_ITEMS.find(n => n.to === route.path)?.key ?? 'apercu')
 const pageTitle = computed(() => ARTISAN_PAGE_TITLES[currentKey.value] ?? '')
+/** Titre d'onglet (Lot 56) : l'intitulé de la page, sinon celui de l'espace. */
+useHead({ title: computed(() => pageTitle.value || 'Espace artisan') })
 
 watch(() => route.path, () => { drawerOpen.value = false })
 
@@ -27,11 +29,12 @@ watch(() => route.path, () => { drawerOpen.value = false })
 const MOBILE_SHORTCUTS = [
   { key: 'apercu', label: 'Aperçu', icon: 'grid' },
   { key: 'missions', label: 'Missions', icon: 'wrench' },
-  { key: 'planning', label: 'Planning', icon: 'calendar' },
+  // Lot 56 : la messagerie (négociation des offres) plutôt que le planning, qui reste dans le menu.
+  { key: 'messages', label: 'Messages', icon: 'message' },
   { key: 'facturation', label: 'Factures', icon: 'receipt' }
 ] as const
 const mobileTabs = computed<MobileTab[]>(() => {
-  const tabs: MobileTab[] = MOBILE_SHORTCUTS.map(t => ({ ...t, to: ARTISAN_NAV_ITEMS.find(n => n.key === t.key)!.to, active: !drawerOpen.value && currentKey.value === t.key }))
+  const tabs: MobileTab[] = MOBILE_SHORTCUTS.map(t => ({ ...t, to: ARTISAN_NAV_ITEMS.find(n => n.key === t.key)!.to, active: !drawerOpen.value && currentKey.value === t.key, badge: t.key === 'messages' ? unread.label.value : undefined }))
   tabs.push({ key: 'menu', label: 'Menu', icon: 'menu', active: drawerOpen.value || !tabs.some(t => t.active) })
   return tabs
 })
