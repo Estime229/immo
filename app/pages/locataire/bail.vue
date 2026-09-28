@@ -47,7 +47,7 @@ function landlordName() {
 
 /* ---- Paiement d'entrée ---- */
 const entry = computed(() => (activeLease.value ? entryBreakdown(activeLease.value) : null))
-const entryShortfall = computed(() => entry.value && wallet.state.value === 'success' ? Math.max(0, entry.value.total - wallet.balanceSavings.value) : 0)
+const entryShortfall = computed(() => entry.value && wallet.state.value === 'success' ? Math.max(0, entry.value.total - wallet.spendable.value) : 0)
 const graceEnd = computed(() => {
   const s = activeLease.value?.signed_at_tenant
   return s ? new Date(new Date(s).getTime() + 72 * 3600000).toISOString() : null
@@ -211,8 +211,9 @@ async function cancelNotice() {
             <DataMoneyLine v-if="entry.advance" label="Avance sur loyer" :value="formatFcfa(entry.advance)" />
             <DataMoneyLine v-if="entry.prepaid" label="Loyers prépayés" :value="formatFcfa(entry.prepaid)" />
             <DataMoneyLine label="Total" :value="formatFcfa(entry.total)" total />
-            <p v-if="wallet.state.value === 'success'" class="mb-0 mt-2 text-[12px] text-[var(--text-muted)]">Tirelire : {{ formatFcfa(wallet.balanceSavings.value) }} disponibles.</p>
+            <p v-if="wallet.state.value === 'success'" class="mb-0 mt-2 text-[12px] text-[var(--text-muted)]">Tirelire : {{ formatFcfa(wallet.spendable.value) }} disponibles.</p>
           </div>
+          <WalletInconsistencyNote compact />
           <div v-if="entryShortfall > 0" class="mt-3 rounded-md border border-warn-border bg-warn-bg px-3.5 py-3 text-[13px] text-warn-fg">
             <p class="m-0 font-bold">Il vous manque {{ formatFcfa(entryShortfall) }} dans votre tirelire.</p>
             <button type="button" class="mt-1 font-bold underline" @click="openPay('recharge')">Recharger ma tirelire</button>

@@ -100,13 +100,18 @@ export interface ReportCategory {
   iconBg: string
 }
 
-export const REPORT_CATALOG: ReportCategory[] = [
-  { id: 'plomberie', label: 'Plomberie', icon: '⚑', iconBg: 'bg-info-bg' },
-  { id: 'electricite', label: 'Électricité', icon: '⚡', iconBg: 'bg-warn-bg' },
-  { id: 'serrurerie', label: 'Serrurerie', icon: '⚿', iconBg: 'bg-green-50' },
-  { id: 'peinture', label: 'Peinture / murs', icon: '✎', iconBg: 'bg-clay-100' },
-  { id: 'electromenager', label: 'Électroménager', icon: '❄', iconBg: 'bg-info-bg' },
-  { id: 'autre', label: 'Autre', icon: '⋯', iconBg: 'bg-sand-200' }
+/** `maintenance` : propose la pièce concernée. Lot 55 : l'API a 13 types, l'écran n'en couvrait que les pannes. */
+export const REPORT_CATALOG: (ReportCategory & { maintenance: boolean })[] = [
+  { id: 'plomberie', label: 'Plomberie', icon: '⚑', iconBg: 'bg-info-bg', maintenance: true },
+  { id: 'electricite', label: 'Électricité', icon: '⚡', iconBg: 'bg-warn-bg', maintenance: true },
+  { id: 'serrurerie', label: 'Serrurerie', icon: '⚿', iconBg: 'bg-green-50', maintenance: true },
+  { id: 'peinture', label: 'Peinture / murs', icon: '✎', iconBg: 'bg-clay-100', maintenance: true },
+  { id: 'electromenager', label: 'Équipement', icon: '❄', iconBg: 'bg-info-bg', maintenance: true },
+  { id: 'parties_communes', label: 'Parties communes', icon: '⌂', iconBg: 'bg-green-50', maintenance: false },
+  { id: 'nuisance', label: 'Nuisance sonore', icon: '♪', iconBg: 'bg-warn-bg', maintenance: false },
+  { id: 'voisinage', label: 'Voisinage', icon: '⚇', iconBg: 'bg-clay-100', maintenance: false },
+  { id: 'insalubrite', label: 'Insalubrité', icon: '⚠', iconBg: 'bg-danger-bg', maintenance: false },
+  { id: 'autre', label: 'Autre', icon: '⋯', iconBg: 'bg-sand-200', maintenance: false }
 ]
 
 export function useReportModal() {

@@ -44,7 +44,14 @@ onMounted(async () => {
   if (open.status === 'fulfilled') liveCounts.value = { ...liveCounts.value, demandes: open.value.total }
   if (visits.status === 'fulfilled') liveCounts.value = { ...liveCounts.value, visites: visits.value.filter(v => visitBucket(v) === 'todo').length }
 })
+/* Messages non lus (Lot 55) : sondé toutes les 60 s, remis à jour dès qu'une conversation est lue. */
+const unread = useUnreadMessages()
+let stopUnread: (() => void) | null = null
+onMounted(() => { stopUnread = unread.startPolling() })
+onBeforeUnmount(() => stopUnread?.())
+
 function liveCount(key: string) {
+  if (key === 'messages') return unread.label.value
   const n = liveCounts.value[key]
   return n ? (n > 99 ? '99+' : String(n)) : ''
 }

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { CheckoutResult, PaymentGateway } from '~/types/wallet'
-import { pollTransactionStatus } from '~/utils/paymentPolling'
+import { pollVerifyReturn } from '~/utils/paymentPolling'
+import { gatewayNeedsPhone, gatewaySupported, normalizeBeninPhone, validateRecharge } from '~/utils/wallet'
 import { ApiRequestError } from '~/utils/authenticatedFetcher'
 import { errorText } from '~/utils/apiErrors'
 import { nextPayableInvoice } from '~/utils/leases'
@@ -10,6 +11,7 @@ const { activeLease, reload: reloadLeases } = useTenantLeases()
 const wallet = useTenantWallet()
 const walletApi = useWalletApi()
 const paymentApi = usePaymentApi()
+const currentUser = useAuthUser()
 
 type Step = 'amount' | 'gateway' | 'processing' | 'done' | 'error'
 const step = ref<Step>('amount')
@@ -25,17 +27,22 @@ const invoiceToPay = computed(() => {
   return picked ?? nextPayableInvoice(invoices)
 })
 const rentShortfall = computed(() => invoiceToPay.value && wallet.state.value === 'success'
-  ? Math.max(0, Number(invoiceToPay.value.amount) - wallet.balanceSavings.value)
+  ? Math.max(0, Number(invoiceToPay.value.amount) - wallet.spendable.value)
   : 0)
 
 /* ---- Recharge : passerelles ---- */
 const gateways = ref<PaymentGateway[]>([])
 const gatewaysLoading = ref(false)
 const selectedGatewayId = ref('')
+const selectedGateway = computed(() => gateways.value.find(g => g.id === selectedGatewayId.value) ?? null)
+/** Mobile Money direct : la demande de paiement part sur ce numéro (accepté par checkout depuis la correction de #49). */
+const phone = ref('')
+const needsPhone = computed(() => !!selectedGateway.value && gatewayNeedsPhone(selectedGateway.value))
 async function loadGateways() {
   gatewaysLoading.value = true
   try {
-    gateways.value = await paymentApi.fetchGateways()
+    // Kkiapay (widget JS tiers non chargé) retiré de la liste : le choisir menait à une erreur après avoir créé la transaction.
+    gateways.value = (await paymentApi.fetchGateways()).filter(gatewaySupported)
     selectedGatewayId.value = gateways.value[0]?.id ?? ''
   } catch {
     gateways.value = []
@@ -48,6 +55,8 @@ watch(open, v => {
   cancelled = false
   if (!v) return
   errorMessage.value = ''
+  redirectPending.value = false
+  checkoutResult.value = null
   if (mode.value === 'loyer') {
     wallet.reload()
     step.value = 'amount'
@@ -55,6 +64,7 @@ watch(open, v => {
   } else {
     step.value = 'amount'
     amount.value = '50000'
+    phone.value = currentUser.value?.phone_number ?? ''
     loadGateways()
   }
 })
@@ -65,8 +75,19 @@ function onAmountInput(e: Event) {
 }
 const amountNum = computed(() => Number(amount.value) || 0)
 const amountFmt = computed(() => formatFcfa(amountNum.value))
+const rechargeError = computed(() => (amount.value ? validateRecharge({ amount: amountNum.value, gateway: selectedGateway.value, phone: phone.value }) : null))
 
 const RECHARGE_PRESETS = [25000, 50000, 100000]
+
+/** Depuis un manque sur le loyer : recharge du montant manquant (500 F minimum, règle de checkout). */
+function switchToRecharge(missing: number) {
+  mode.value = 'recharge'
+  step.value = 'amount'
+  errorMessage.value = ''
+  amount.value = String(Math.max(Math.ceil(missing), 500))
+  phone.value = currentUser.value?.phone_number ?? ''
+  loadGateways()
+}
 
 function close() {
   cancelled = true
@@ -94,46 +115,40 @@ async function submitPayRent() {
 const checkoutResult = ref<CheckoutResult | null>(null)
 
 async function submitRecharge() {
-  if (!amountNum.value || !selectedGatewayId.value) return
+  if (rechargeError.value || !selectedGateway.value) return
   loading.value = true
   errorMessage.value = ''
   step.value = 'processing'
   try {
     const res = await paymentApi.checkout({
-      gatewayId: selectedGatewayId.value,
+      gatewayId: selectedGateway.value.id,
       amount: amountNum.value,
-      description: 'Recharge wallet Immo'
+      description: 'Recharge wallet Immo',
+      ...(needsPhone.value ? { phoneNumber: normalizeBeninPhone(phone.value) ?? undefined } : {})
     })
     checkoutResult.value = res
 
     if (res.mode === 'widget') {
-      // Nécessite le SDK Kkiapay (script tiers) — non chargé dans ce lot, voir INTEGRATION-TESTS.md.
       errorMessage.value = "Ce moyen de paiement n'est pas encore disponible ici. Choisissez une autre passerelle."
       step.value = 'error'
       return
     }
 
     if (res.mode === 'redirect') {
-      // Vérifié en live (FedaPay, sandbox) : le `transactionId` renvoyé ici est l'identifiant
-      // de la passerelle externe (ex. "509458"), pas notre id interne — /payment/transactions/:id/status
-      // répond 404 dessus ("id fourni n'est pas un UUID valide"). Cet endpoint attend l'id interne, que
-      // checkout() ne renvoie pas pour ce mode. On ouvre l'onglet et on laisse l'utilisateur confirmer
-      // manuellement au retour, plutôt que de sonder un id qu'on sait invalide pour cette route.
+      // Le paiement se termine dans l'onglet FedaPay ; au retour, « J'ai terminé » appelle verify-return (confirmRedirectReturn).
       window.open(res.url, '_blank')
       loading.value = false
       return
     }
 
-    // ussd_push et mock : le `transactionId` renvoyé correspond à notre id interne, le sondage fonctionne.
-    const poll = await pollTransactionStatus(res.transactionId, paymentApi.fetchTransactionStatus, { isCancelled: () => cancelled })
+    // ussd_push et mock : /payment/transactions/:id/status répond 404 sur cet id (constaté en live, Lot 55) et c'est
+    // verify-return qui crédite le wallet — c'est donc lui qu'on sonde, comme le demande instructions.fr.
+    const poll = await pollVerifyReturn(() => paymentApi.verifyReturn(res.transactionId, res.gateway), { isCancelled: () => cancelled })
     if (poll.outcome === 'completed') {
       await wallet.reload()
       step.value = 'done'
-    } else if (poll.outcome === 'failed') {
-      errorMessage.value = 'Le paiement a échoué ou a été annulé.'
-      step.value = 'error'
     } else if (poll.outcome === 'timeout') {
-      errorMessage.value = "Nous n'avons pas pu confirmer ce paiement à temps. Si le montant a été débité de votre Mobile Money, ne réessayez pas — contactez le support."
+      errorMessage.value = "Nous n'avons pas pu confirmer ce paiement à temps. Si le montant a été débité de votre Mobile Money, ne réessayez pas : il apparaîtra dans votre historique dès sa confirmation, sinon contactez le support."
       step.value = 'error'
     }
     // 'cancelled' (modale fermée pendant le sondage) : ne touche plus à l'état, le composant est en train de disparaître.
@@ -145,12 +160,26 @@ async function submitRecharge() {
   }
 }
 
-/** Retour manuel de l'onglet FedaPay : on ne peut pas sonder ce paiement (voir submitRecharge), donc on recharge simplement le wallet et on laisse l'utilisateur constater le résultat réel. */
+/** Retour de l'onglet FedaPay : verify-return dit si le paiement est passé (et crédite) — avant, on fermait sans rien vérifier. */
+const redirectPending = ref(false)
 async function confirmRedirectReturn() {
+  const res = checkoutResult.value
+  if (!res) return
   loading.value = true
-  await wallet.reload()
-  loading.value = false
-  close()
+  redirectPending.value = false
+  try {
+    const v = await paymentApi.verifyReturn(res.transactionId, res.gateway)
+    if (v.verified) {
+      await wallet.reload()
+      step.value = 'done'
+    } else {
+      redirectPending.value = true
+    }
+  } catch (e) {
+    errorMessage.value = e instanceof ApiRequestError ? errorText(e.mapped, 'La vérification a échoué.') : 'La vérification a échoué.'
+  } finally {
+    loading.value = false
+  }
 }
 
 onUnmounted(() => { cancelled = true })
@@ -176,10 +205,11 @@ onUnmounted(() => { cancelled = true })
                   <span class="font-mono text-2xl font-bold">{{ formatFcfaShort(Number(invoiceToPay.amount)) }}</span>
                 </div>
                 <p class="mb-0 mt-1.5 text-[12.5px] text-[var(--text-muted)]">Échéance du {{ new Date(invoiceToPay.due_date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }) }}</p>
-                <p class="mb-0 mt-2.5 text-[12.5px] text-[var(--text-muted)]">Prélevé directement sur votre tirelire ({{ formatFcfaShort(wallet.balanceSavings.value) }} disponibles).</p>
+                <p class="mb-0 mt-2.5 text-[12.5px] text-[var(--text-muted)]">Prélevé directement sur votre tirelire ({{ formatFcfaShort(wallet.spendable.value) }} disponibles).</p>
+                <WalletInconsistencyNote compact />
                 <div v-if="rentShortfall > 0" class="mt-3 rounded-md border border-warn-border bg-warn-bg px-3.5 py-3 text-[13px] text-warn-fg">
                   <p class="m-0 font-bold">Il vous manque {{ formatFcfa(rentShortfall) }} dans votre tirelire.</p>
-                  <button type="button" class="mt-1.5 font-bold underline" @click="mode = 'recharge'; step = 'amount'; amount = String(Math.ceil(rentShortfall)); loadGateways()">Recharger ma tirelire</button>
+                  <button type="button" class="mt-1.5 font-bold underline" @click="switchToRecharge(rentShortfall)">Recharger ma tirelire</button>
                 </div>
                 <p v-if="errorMessage" class="mb-0 mt-3 text-[13px] font-semibold text-danger-fg">{{ errorMessage }}</p>
                 <CoreButton size="lg" full-width class="mt-5" :disabled="loading || rentShortfall > 0" @click="submitPayRent">{{ loading ? 'Paiement…' : 'Payer' }}</CoreButton>
@@ -234,8 +264,14 @@ onUnmounted(() => { cancelled = true })
                   </span>
                 </button>
               </div>
+              <template v-if="needsPhone">
+                <p class="mb-2 mt-4.5 text-[13px] font-bold text-[var(--text-muted)]">Numéro Mobile Money à débiter</p>
+                <input v-model="phone" inputmode="tel" placeholder="01 97 00 00 00" class="h-12 w-full rounded-md border border-[var(--border-default)] bg-white px-3.5 text-sm outline-none">
+                <p class="mb-0 mt-1.5 text-[12px] text-[var(--text-muted)]">La demande de paiement arrive sur ce téléphone : validez-la avec votre code secret.</p>
+              </template>
+              <p v-if="rechargeError" class="mb-0 mt-3 text-[12.5px] font-semibold text-danger-fg">{{ rechargeError }}</p>
               <p v-if="errorMessage" class="mb-0 mt-3 text-[13px] font-semibold text-danger-fg">{{ errorMessage }}</p>
-              <CoreButton size="lg" full-width class="mt-5" :disabled="!amountNum || !selectedGatewayId" @click="submitRecharge">Continuer</CoreButton>
+              <CoreButton size="lg" full-width class="mt-5" :disabled="!!rechargeError || !amountNum || !selectedGatewayId" @click="submitRecharge">Continuer</CoreButton>
             </template>
 
             <template v-else-if="step === 'processing'">
@@ -248,6 +284,10 @@ onUnmounted(() => { cancelled = true })
                 <p v-if="checkoutResult?.mode !== 'redirect'" class="mx-auto mb-0 mt-2.5 max-w-[320px] text-[13.5px] leading-[1.6] text-[var(--text-muted)]">{{ checkoutResult?.instructions?.fr }}</p>
                 <template v-if="checkoutResult?.mode === 'redirect'">
                   <p class="mx-auto mb-0 mt-3 max-w-[320px] text-[12.5px] leading-[1.6] text-[var(--text-faint)]">Une fois le paiement terminé dans l'autre onglet, revenez ici.</p>
+                  <p v-if="redirectPending" class="mx-auto mb-0 mt-3 max-w-[340px] rounded-md border border-warn-border bg-warn-bg px-3 py-2.5 text-[12.5px] text-warn-fg">
+                    FedaPay ne confirme pas encore ce paiement. S'il est terminé, réessayez dans quelques secondes ; sinon, finalisez-le dans l'onglet FedaPay.
+                  </p>
+                  <p v-if="errorMessage" class="mx-auto mb-0 mt-3 max-w-[340px] text-[12.5px] font-semibold text-danger-fg">{{ errorMessage }}</p>
                   <CoreButton size="lg" full-width class="mt-5" :disabled="loading" @click="confirmRedirectReturn">{{ loading ? 'Vérification…' : "J'ai terminé le paiement" }}</CoreButton>
                 </template>
               </div>

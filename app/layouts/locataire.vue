@@ -29,6 +29,14 @@ const PAGE_TITLES: Record<string, string> = {
   guide: 'Guide'
 }
 
+/* Messages non lus (Lot 55) : sondé toutes les 60 s, remis à jour dès qu'une conversation est lue. */
+const unread = useUnreadMessages()
+let stopUnread: (() => void) | null = null
+onMounted(() => { stopUnread = unread.startPolling() })
+onBeforeUnmount(() => stopUnread?.())
+function navCount(n: { key: string; count: string }) {
+  return n.key === 'messages' ? unread.label.value : n.count
+}
 const currentKey = computed(() => NAV_ITEMS.find(n => n.to === route.path)?.key ?? 'dash')
 const pageTitle = computed(() => currentKey.value === 'dash' ? (firstName.value ? `Bonjour ${firstName.value}` : 'Bonjour') : PAGE_TITLES[currentKey.value] ?? '')
 const showLeaseSwitcher = computed(() => (currentKey.value === 'bail' || currentKey.value === 'edl') && leases.value.length > 1)
@@ -79,7 +87,7 @@ watch(() => route.path, () => { drawerOpen.value = false })
       >
         <span class="w-[18px] flex-none text-center text-[15px]">{{ n.icon }}</span>
         <span class="flex-1">{{ n.label }}</span>
-        <span v-if="n.count" class="rounded-pill bg-clay-500 px-2 py-0.5 text-[10.5px] font-black text-white">{{ n.count }}</span>
+        <span v-if="navCount(n)" class="rounded-pill bg-clay-500 px-2 py-0.5 text-[10.5px] font-black text-white">{{ navCount(n) }}</span>
       </NuxtLink>
     </aside>
 

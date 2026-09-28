@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import type { SignalPriority, SignalType } from '~/types/tenant'
 import { ApiRequestError } from '~/utils/authenticatedFetcher'
+import { errorText } from '~/utils/apiErrors'
+import { validateAttachment } from '~/utils/messaging'
+import { reportableLeases } from '~/utils/signals'
 
 /** Catalogue de catégories UI → signal_type réel (13 valeurs déclarées côté API, voir GET /signals). */
 const CATEGORY_TO_SIGNAL_TYPE: Record<string, SignalType> = {
@@ -9,11 +12,17 @@ const CATEGORY_TO_SIGNAL_TYPE: Record<string, SignalType> = {
   serrurerie: 'maintenance_serrurerie',
   peinture: 'maintenance_peinture',
   electromenager: 'maintenance_autre',
+  parties_communes: 'infrastructure_commune',
+  nuisance: 'nuisance_sonore',
+  voisinage: 'dispute_neighbor',
+  insalubrite: 'insalubrite',
   autre: 'autre'
 }
 
 const open = useReportModal()
-const { leases } = useTenantLeases()
+const { leases: allLeases } = useTenantLeases()
+/** Bail actif seulement (Lot 55) : l'API accepte un signalement sur n'importe quel logement (#87), l'écran proposait aussi les baux en brouillon ou résiliés. */
+const leases = computed(() => reportableLeases(allLeases.value))
 const signalsApi = useSignalsApi()
 
 type Step = 'type' | 'details' | 'done'
@@ -50,6 +59,7 @@ const titles: Record<Step, string> = { type: 'Signaler un problème', details: '
 const title = computed(() => titles[step.value])
 
 function pickCategory(id: string) {
+  if (categoryId.value !== id) room.value = ''
   categoryId.value = id
   step.value = 'details'
 }
@@ -60,6 +70,13 @@ const canSubmit = computed(() => !!activeLease.value && desc.value.trim().length
 async function addPhoto(e: Event) {
   const file = (e.target as HTMLInputElement).files?.[0]
   if (!file) return
+  const invalid = validateAttachment(file)
+  if (invalid || !file.type.startsWith('image/')) {
+    errorMessage.value = invalid ?? 'Ajoutez une photo (JPG, PNG…).'
+    ;(e.target as HTMLInputElement).value = ''
+    return
+  }
+  errorMessage.value = ''
   uploading.value = true
   try {
     const result = await signalsApi.uploadFile(file)
@@ -76,13 +93,14 @@ function removePhoto(i: number) {
 }
 
 async function submit() {
-  if (!canSubmit.value || !activeLease.value) return
+  const unitId = activeLease.value?.unit?.id
+  if (!canSubmit.value || !activeLease.value || !unitId) return
   loading.value = true
   errorMessage.value = ''
   const titlePrefix = room.value ? `${category.value.label} — ${room.value.toLowerCase()}` : category.value.label
   try {
     await signalsApi.create({
-      unit_id: activeLease.value.unit.id,
+      unit_id: unitId,
       lease_id: activeLease.value.id,
       signal_type: CATEGORY_TO_SIGNAL_TYPE[category.value.id] ?? 'autre',
       title: titlePrefix,
@@ -92,7 +110,7 @@ async function submit() {
     })
     step.value = 'done'
   } catch (e) {
-    errorMessage.value = e instanceof ApiRequestError ? (e.mapped.bannerMessage ?? "L'envoi a échoué.") : "L'envoi a échoué."
+    errorMessage.value = e instanceof ApiRequestError ? errorText(e.mapped, "L'envoi a échoué.") : "L'envoi a échoué."
   } finally {
     loading.value = false
   }
@@ -117,7 +135,9 @@ function close() {
 
         <div class="overflow-y-auto p-6">
           <template v-if="step === 'type'">
-            <p v-if="!leases.length" class="mb-4 mt-0 text-[13.5px] text-[var(--text-muted)]">Vous devez avoir un bail pour signaler un problème sur un logement.</p>
+            <p v-if="!leases.length" class="mb-4 mt-0 rounded-md border border-info-border bg-info-bg px-3.5 py-3 text-[13px] text-info-fg-deep">
+              Un signalement porte sur le logement que vous occupez : il sera possible dès que votre bail sera actif (signé des deux côtés et paiement d'entrée réglé).
+            </p>
             <div class="grid grid-cols-2 gap-2.5">
               <button
                 v-for="c in REPORT_CATALOG"
@@ -148,8 +168,8 @@ function close() {
               </div>
             </template>
 
-            <p class="mb-2 mt-0 text-[12.5px] font-bold uppercase tracking-[.05em] text-[var(--text-faint)]">Pièce (facultatif)</p>
-            <div class="mb-4 flex flex-wrap gap-2">
+            <p v-if="category.maintenance" class="mb-2 mt-0 text-[12.5px] font-bold uppercase tracking-[.05em] text-[var(--text-faint)]">Pièce (facultatif)</p>
+            <div v-if="category.maintenance" class="mb-4 flex flex-wrap gap-2">
               <button
                 v-for="r in ROOMS"
                 :key="r"
@@ -161,7 +181,7 @@ function close() {
             </div>
 
             <p class="mb-2 mt-0 text-[12.5px] font-bold uppercase tracking-[.05em] text-[var(--text-faint)]">Description</p>
-            <textarea v-model="desc" rows="4" placeholder="Décrivez le problème constaté…" class="w-full resize-y rounded-md border border-[var(--border-default)] bg-white p-3.5 text-sm outline-none" />
+            <textarea v-model="desc" rows="4" maxlength="2000" placeholder="Décrivez le problème constaté : depuis quand, ce qui a déjà été tenté…" class="w-full resize-y rounded-md border border-[var(--border-default)] bg-white p-3.5 text-sm outline-none" />
 
             <p class="mb-2 mt-4 text-[12.5px] font-bold uppercase tracking-[.05em] text-[var(--text-faint)]">Photos</p>
             <div class="flex flex-wrap gap-2.5">
@@ -202,9 +222,9 @@ function close() {
               <div class="mx-auto grid h-16 w-16 animate-[im-pop_.5s_ease] place-items-center rounded-pill bg-green-600 text-[30px] text-white">✓</div>
               <p class="mb-0 mt-5 text-lg font-bold">Signalement envoyé</p>
               <p class="mx-auto mb-0 mt-2.5 max-w-[340px] text-sm leading-[1.6] text-[var(--text-muted)]">
-                Le propriétaire est notifié et vous serez tenu informé de l'avancement.
+                Le propriétaire est notifié. Vous suivrez l'avancement dans « Signalements », et pourrez y ajouter des photos tant qu'il n'est pas résolu.
               </p>
-              <CoreButton size="lg" full-width class="mt-6" @click="close">Terminé</CoreButton>
+              <CoreButton size="lg" full-width class="mt-6" @click="close(); navigateTo('/locataire/signalements')">Suivre mon signalement</CoreButton>
             </div>
           </template>
         </div>

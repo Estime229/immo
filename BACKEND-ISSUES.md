@@ -2,7 +2,7 @@
 
 Relevés par l'équipe frontend en testant la plateforme contre l'API de production (`https://immo-b89b.onrender.com/v1/api`). Chaque point a été reproduit en direct (curl ou navigateur) et, quand c'était possible, confirmé dans le code de `back-end-api-immo-app`. Le détail de chaque constat se trouve dans `INTEGRATION-TESTS.md` (numéro de lot indiqué).
 
-Mis à jour le 27/09/2026. Statut : **ouvert** sauf mention contraire.
+Mis à jour le 28/09/2026. Statut : **ouvert** sauf mention contraire.
 
 **Légende de gravité** — 🔴 bloquant ou faille · 🟠 données incohérentes ou fonction manquante importante · 🟡 contrat d'API ou confort.
 
@@ -60,8 +60,8 @@ Mis à jour le 27/09/2026. Statut : **ouvert** sauf mention contraire.
 | 46 | 🟠 | Supprimer un bien laisse ses visites et réservations orphelines (`unit: null`) | `DELETE /property/:id` | 48 |
 | 47 | 🟠 | Réserver un séjour n'exige pas d'identité vérifiée (une visite, si) | `POST /bookings` | 49 |
 | 48 | 🟠 | Un hôte peut réserver et se payer son propre logement | `POST /bookings`, `POST /bookings/:id/pay` | 49 |
-| 49 | 🟠 | Recharge Mobile Money directe impossible pour un compte sans téléphone | `POST /payment/checkout` (GSM_*) | 49 |
-| 50 | 🟠 | Portefeuille incohérent : tirelire supérieure au solde total | `GET /wallet/me` | 49 |
+| 49 | 🟠 | Recharge Mobile Money directe impossible pour un compte sans téléphone (en partie corrigé : `phoneNumber` accepté, Lot 55) | `POST /payment/checkout` (GSM_*) | 49, 55 |
+| 50 | 🟠 | Portefeuille incohérent : tirelire supérieure au solde total (cause trouvée, voir #82) | `GET /wallet/me` | 49, 55 |
 | 51 | 🟡 | Séjour minimum appliqué au seul segment de prolongation | `POST /bookings/:id/extend` | 49 |
 | 52 | 🟡 | Trois statuts seulement : séjour terminé et hold expiré indiscernables | `bookings` | 49 |
 | 53 | 🟡 | Message « Solde insuffisant » brut | `POST /bookings/:id/pay` | 49 |
@@ -93,6 +93,17 @@ Mis à jour le 27/09/2026. Statut : **ouvert** sauf mention contraire.
 | 79 | 🟠 | `retained_amount` jamais remis à zéro une fois la retenue versée ou partagée | `artisan-requests` | 54 |
 | 80 | 🟡 | Offres d'artisan : prix 0 et retenue sans garantie acceptés ; « Données invalides » sans détail | `POST /artisan-requests/:id/offers`, `…/dispute` | 54 |
 | 81 | 🟡 | Interventions : ni lien avec le signalement d'origine, ni contact du demandeur pour l'artisan | `artisan-requests` | 54 |
+| 82 | 🔴 | Solde négatif : un paiement de logement ne vérifie que la tirelire, qui peut dépasser le total | `POST /bookings/:id/pay`, `/wallet/pay-rent`, `/leases/:id/entry-payment`, `PATCH /artisan-requests/:id/pay` | 55 |
+| 83 | 🟠 | Retrait en attente non réservé : le montant reste dépensable, `pending_amount` l'ignore | `POST /wallet/withdraw`, `GET /wallet/stats` | 55 |
+| 84 | 🟠 | Retrait : numéro et montant non validés (« abc » accepté, montant texte → 500), méthode en minuscules, aucune annulation | `POST /wallet/withdraw` | 55 |
+| 85 | 🟠 | Statistiques du wallet fausses : revenus = recharges seulement, dépenses toujours à 0 | `GET /wallet/stats` | 55 |
+| 86 | 🟠 | Mobile Money direct : statut introuvable (404), seul `verify-return` crédite ; `gatewayType` attendu en minuscules | `/payment/transactions/:id/status`, `/payment/verify-return` | 55 |
+| 87 | 🔴 | N'importe quel compte peut signaler un problème sur n'importe quel logement ; l'historique public compte aussi les annulés | `POST /signals`, `GET /signals/units/:unitId/history` | 55 |
+| 88 | 🟠 | Signalements : l'auteur écrit la note de résolution et l'assignation, le propriétaire annule, transitions non documentées | `PATCH /signals/:id` | 55 |
+| 89 | 🟠 | Un compte propriétaire qui loue aussi ne voit pas ses propres signalements | `GET /signals` | 55 |
+| 90 | 🟡 | Pièces jointes de signalement : multipart ignoré (201 sans effet), corps non documenté, URL libres acceptées | `POST /signals/:id/attachments`, `POST /signals` | 55 |
+| 91 | 🟡 | Messagerie : message `system` envoyable par un utilisateur, pagination documentée à l'envers, messages en anglais, « Message de Quelqu'un » | `/messaging` | 55 |
+| 92 | 🟠 | Une nouvelle conversation à chaque appel pour le même logement et le même destinataire | `POST /messaging/conversations` | 55 |
 
 ---
 
@@ -439,12 +450,13 @@ La place de marché repose entièrement sur des propriétaires qui viennent cons
 - Les comptes créés depuis l'inscription par email n'ont pas de téléphone, et aucune route ne permet d'en enregistrer un (#14).
 - **Rejoué** : `checkout` GSM_MTN → `ussd_push` accepté. Puis `GET /payment/transactions/:id/status` → 404 « Transaction non trouvee », `verify-return` → `verified: false`. Rien n'est crédité.
 - **Attendu** : accepter `phone_number` dans `checkout` (avec le numéro saisi à l'écran), et corriger #14.
+- **Mise à jour (Lot 55)** : `checkout` accepte désormais `phoneNumber`. Avec le numéro de test `66000001`, la recharge MTN directe a bien crédité 5 000 F, puis 20 000 F. Le frontend demande le numéro à l'écran. Reste #14, et le suivi du paiement (#86).
 
 ### 50. 🟠 Portefeuille incohérent : tirelire supérieure au solde total
 
 - **Constaté** sur un compte propriétaire de test : `balance_total: 18000`, `balance_savings: 30000`. La tirelire, qui est une partie du solde, dépasse le total.
 - Au paiement d'une réservation, l'hôte est crédité sur `balance_total` seulement. La cause du dépassement reste à identifier dans l'historique des transactions de ce compte.
-- À examiner avec le parcours Wallet.
+- **Cause trouvée (Lot 55)** : le paiement d'une intervention d'artisan débite le total sans toucher la tirelire. Ce compte a payé trois interventions (18 000, 5 000 et 9 000 F) avec des fonds venus de recharges. Conséquence grave, décrite en #82 : le solde peut devenir négatif.
 
 ### 51. 🟡 Séjour minimum appliqué au seul segment de prolongation
 
@@ -759,3 +771,132 @@ La place de marché repose entièrement sur des propriétaires qui viennent cons
 - **Lien avec le signalement** : une demande d'intervention ne garde pas le signalement d'origine (pas de `signal_id`). Le frontend pré-remplit la demande depuis le signalement, puis passe celui-ci « En examen » avec l'artisan assigné. Mais le lien n'est pas conservé côté serveur.
 - **Contact du demandeur** : l'artisan ne reçoit que son nom, souvent vide (`first_name`/`last_name` nuls sur le compte de test), sans téléphone ni e-mail. Il doit passer par la conversation de la demande, et l'espace artisan n'avait **aucune page de messagerie** (ajoutée côté front).
 - **Demande par un locataire** : un locataire qui a un bail actif peut créer une demande d'intervention sur son logement (règle de l'API), mais aucun écran ne le propose. C'est une décision produit : qui paie, qui choisit l'artisan ?
+
+## Ajouts du Lot 55 — Wallet, signalements, messagerie
+
+### 82. 🔴 Solde négatif : un paiement de logement ne vérifie que la tirelire
+
+- **Deux règles qui ne tiennent pas ensemble** :
+  - Loyer, paiement d'entrée et réservation vérifient la tirelire (`balance_savings`) et débitent les deux soldes.
+  - L'intervention d'artisan vérifie et débite le total (`balance_total`) seulement.
+  - La tirelire peut donc dépasser le total (#50).
+- **Rejoué en direct** sur un compte à 7 000 F de total et 30 000 F de tirelire (écart créé par trois paiements d'intervention) :
+  - `POST /bookings/:id/pay` d'une réservation à 16 000 F → 201.
+  - Le payeur passe à **−9 000 F** de total (14 000 F de tirelire), l'hôte est crédité de 16 000 F.
+  - De l'argent a été versé sans exister.
+- **Attendu** :
+  - Chaque débit vérifie le solde qui sera réellement débité : `min(tirelire, total)` pour un paiement de logement.
+  - Toute écriture qui touche le total garde `balance_savings ≤ balance_total`.
+  - Une contrainte `CHECK (balance_total >= 0)` en base.
+  - Corriger les comptes déjà incohérents (celui du test est à −9 000 F).
+- **Côté frontend** :
+  - Les écrans de paiement ne comptent plus que `min(tirelire, total)` comme disponible et bloquent le paiement au-delà.
+  - Un encart explique les soldes incohérents ou négatifs.
+  - Mais un appel direct à l'API passe toujours.
+
+### 83. 🟠 Retrait en attente non réservé
+
+- `POST /wallet/withdraw` crée la demande sans rien bloquer.
+- Le montant reste dans `balance_total` et peut être dépensé avant l'approbation par un administrateur. Celle-ci débite alors un solde qui ne le couvre plus.
+- `GET /wallet/stats` renvoie `pending_amount: 0` alors qu'un retrait de 1 000 F est en attente sur le même compte.
+- **Attendu** : réserver le montant à la demande (solde « bloqué », ou débit immédiat et recrédit au rejet), et le compter dans `pending_amount`.
+- Le frontend affiche « dont X F en cours de retrait » et prévient que le montant ne doit pas être dépensé.
+
+### 84. 🟠 Retrait : validations manquantes, pas d'annulation
+
+- **Numéro** : `phone_number: "abc"` est accepté (201) et la demande reste en attente pour un virement impossible.
+- **Montant** : `amount: "abc"` → 500 « Une erreur inattendue ».
+- **Méthode** : la méthode est enregistrée et renvoyée en minuscules (`mtn_momo`) alors que l'énumération déclarée est en majuscules (`MTN_MOMO`).
+- **Annulation** : aucune route ne permet d'annuler sa demande. Un numéro erroné bloque tout nouveau retrait (une seule demande en attente à la fois) jusqu'à l'intervention d'un administrateur.
+- **Attendu** :
+  - valider le numéro (format béninois) et le type du montant ;
+  - renvoyer l'énumération telle que déclarée ;
+  - ajouter `PATCH /wallet/withdrawals/:id/cancel` tant que la demande est en attente.
+- Le frontend valide désormais le numéro et le normalise (`+229…`).
+
+### 85. 🟠 Statistiques du wallet fausses
+
+- **Propriétaire** : `total_income` 75 000 F (ses deux recharges) et `total_expenses` 0. Or l'historique contient 107 000 F de réservations encaissées et 111 000 F de débits (entrées de bail, réservations, interventions).
+- **Artisan** : 47 000 F reçus, `total_income` 0.
+- Les statistiques semblent ne compter que le type `saving`.
+- **Attendu** : revenus et dépenses calculés sur tous les types, par signe du montant.
+- Non affiché par le frontend tant que ce n'est pas corrigé.
+
+### 86. 🟠 Mobile Money direct : paiement introuvable, seul `verify-return` crédite
+
+- **Constaté** : après `checkout` en `ussd_push`, `GET /payment/transactions/:id/status` répond 404 « Transaction non trouvee » sur le `transactionId` renvoyé, avant comme après le paiement.
+- C'est `POST /payment/verify-return` qui confirme **et crédite** le wallet. Mais `instructions.fr` le dit (« appelez /payment/verify-return ») alors que le Swagger présente la route de statut comme le suivi normal.
+- L'ancien écran interrogeait la route de statut : il finissait toujours en « paiement non confirmé », sans créditer.
+- **Format** : `verify-return` n'accepte `gatewayType` qu'en minuscules (`gsm_mtn`), alors que `GET /payment/gateways` renvoie `type: "GSM_MTN"`.
+- **Attendu** :
+  - une route de statut qui fonctionne avec l'id renvoyé par `checkout` (FedaPay a le même défaut, relevé dès l’IL4) ;
+  - ou documenter `verify-return` comme la route de suivi ;
+  - et accepter les deux casses.
+- Le frontend interroge maintenant `verify-return` (idempotent grâce à `alreadyCredited`), y compris au retour de FedaPay.
+- Le bac à sable vérifie immédiatement n'importe quel numéro : le parcours réel (attente de validation sur le téléphone) reste à tester avec un vrai compte MTN.
+
+### 87. 🔴 N'importe quel compte peut signaler un problème sur n'importe quel logement
+
+- **Rejoué** : un locataire sans aucun bail et un propriétaire tiers ont chacun créé un signalement sur le logement d'un autre propriétaire (201). Le propriétaire les reçoit, avec notification.
+- Un bail en brouillon, un bail signé mais pas actif, et un `lease_id` qui ne correspond pas au logement sont aussi acceptés.
+- **Historique public** : `GET /signals/units/:unitId/history` compte ces signalements, y compris les **annulés** (12 au total pour 5 résolus sur le logement de test).
+  - N'importe qui peut donc gonfler l'historique d'incidents d'un logement ou harceler un propriétaire.
+- **Attendu** :
+  - n'accepter un signalement que du locataire d'un bail actif sur ce logement (ou du propriétaire lui-même), avec un `lease_id` cohérent ;
+  - exclure les annulés de l'historique.
+- Le frontend ne propose plus que les baux actifs.
+
+### 88. 🟠 Signalements : droits et transitions
+
+- **Auteur (locataire)** :
+  - Il peut modifier `assigned_to` et `resolution_notes` (200). Il peut donc écrire lui-même la « note de résolution » du propriétaire.
+  - Il ne peut changer le statut que pour annuler, et seulement tant que le signalement est ouvert. Sinon la réponse est 403 « Seul le propriétaire peut modifier le statut ».
+- **Propriétaire** :
+  - Il peut annuler un signalement ouvert. L'annulation devrait être réservée à l'auteur ; le propriétaire dispose de « clore ».
+- **Transitions relevées en live** :
+  - open → in_review, closed, cancelled
+  - in_review → open, resolved
+  - resolved → open, closed
+  - Refusées : open → resolved, **in_review → closed** (on ne peut pas clore sans suite un signalement déjà pris en charge), in_review → cancelled.
+  - Le Swagger ne décrit que « 400 si transition invalide ».
+- **Attendu** :
+  - réserver `resolution_notes` et `assigned_to` au propriétaire ;
+  - documenter la matrice ;
+  - autoriser in_review → closed.
+- Le frontend ne propose que les transitions acceptées.
+
+### 89. 🟠 Un compte propriétaire qui loue aussi ne voit pas ses propres signalements
+
+- `GET /signals` ne renvoie à un compte de rôle propriétaire que les signalements reçus sur ses biens.
+- Un propriétaire qui est aussi locataire ailleurs (cas courant, et c'est le cas du compte de test) crée son signalement (201), puis ne le retrouve plus dans son espace locataire.
+- **Attendu** : un paramètre `?as=author|landlord`, ou les deux côtés dans la réponse avec un champ qui les distingue.
+
+### 90. 🟡 Pièces jointes de signalement
+
+- **Multipart** : `POST /signals/:id/attachments` en multipart (champ `file`, `files`, `photo`…) répond 201 **sans rien ajouter**.
+  - Seul un corps JSON `{ "attachments": [url] }` fonctionne. Le Swagger ne décrit aucun corps.
+- **URL libres** : `POST /signals` et `POST /signals/:id/attachments` acceptent aussi des URL qui ne viennent pas de `POST /files`.
+  - Attendu : n'accepter que des fichiers déposés via `POST /files`, par identifiant.
+  - À revoir avec la réserve de sécurité déjà transmise sur le relais des photos d'état des lieux.
+- **Droits** : le propriétaire peut ajouter des pièces à un signalement qu'il a reçu. C'est à confirmer comme règle produit.
+
+### 91. 🟡 Messagerie : écarts divers
+
+- **Messages `system`** : un utilisateur peut envoyer un message de type `system` (201). L'écran l'affiche comme un message de la plateforme, ce qui permet d'en imiter un. Attendu : type réservé au serveur.
+- **Pagination** : la doc dit « oldest first ». En réalité, la page 1 contient les messages **les plus récents** (triés du plus ancien au plus récent dans la page) et la page 2 les précédents. C'est le bon comportement, mais la doc est trompeuse.
+- **Messages en anglais** :
+  - « Not a participant » / « Not a participant of this conversation » (403) ;
+  - « Cannot create conversation with yourself » (400).
+  - Traduits côté frontend.
+- **Notifications** : « Message de Quelqu'un » quand l'expéditeur n'a pas de nom. Leur `metadata.url` pointe vers `/portal/messaging/:id`, qui n'existe pas dans l'application.
+- **Réactions** : une seule par personne (en poser une autre remplace la précédente). Cela convient, mais n'est pas documenté.
+- **Temps réel** : la passerelle WebSocket n'est pas utilisable derrière le relais du frontend. L'écran rafraîchit toutes les 7 s la conversation ouverte, toutes les 20 s la liste et toutes les 60 s le compteur. Un flux SSE ou un endpoint « depuis tel message » allégerait ce sondage.
+
+### 92. 🟠 Une nouvelle conversation à chaque appel pour le même logement et le même destinataire
+
+- `POST /messaging/conversations` ne renvoie la conversation existante que pour une même demande de logement (`rental_request_id`).
+- Pour un logement et un destinataire donnés, chaque appel en crée une nouvelle. Sur le compte de test, deux conversations actives avec le même propriétaire sur le même logement.
+- Chaque bouton « Écrire au propriétaire / au locataire » (visite, réservation, bail, file d'attente, signalement) en créait donc une de plus.
+- **Attendu** : dédupliquer sur (logement, participants) quand la conversation est active.
+- Le frontend réutilise maintenant la conversation active existante avant d'en créer une.
+

@@ -3832,3 +3832,116 @@ Données de test :
 - **Portefeuille** du propriétaire `qa-landlord-…` (`balance_total`) : passé de 54 000 à 7 000 F. C'est le coût des interventions payées ; l'artisan a reçu les parts correspondantes.
 - **Signalements** du propriétaire de test `pro-landlord-test-…` : un signalement est passé « En examen », avec « Arsène Artisan » assigné et une demande d'intervention ouverte.
 - **Comptes orphelins** : `qa-artisan2-…` et `qa-artisan3-…`, créés pour reproduire #78.
+
+## Lot 55 — Wallet, signalements, messagerie : soldes protégés, recharge Mobile Money réelle, retraits dans les trois espaces, suivi des signalements, messagerie vivante
+
+Demande : « parcourir et tester le flow de wallet, signalement et message avec les espaces et tout ce qui va avec, en consultant l'API : divergences, manques, écrans à ajouter, incohérences, messages d'erreur ».
+- Le wallet avait été câblé à l'IL4, les signalements à l'IL6 et à l'IP8, la messagerie à l'IL7 (puis partagée pro/artisan au Lot 54).
+- Restaient inutilisés côté front :
+  - le compteur de non-lus, les réactions, les réponses citées, l'envoi de pièces jointes, la pagination au-delà de 50 messages ;
+  - l'ajout de photos à un signalement, son annulation, sa note de résolution ;
+  - le retrait côté locataire.
+
+Rejoué en live :
+- **locataire de test** (bail activé pour l'occasion : recharges sandbox MTN de 30 000 F au total, puis paiement d'entrée de 25 000 F) ;
+- **propriétaire** `qa-landlord-…` (le compte à solde négatif) ;
+- **artisan** du Lot 54 ;
+- **locataire sans bail** et **propriétaire tiers**, pour les droits.
+
+### Comportement réel de l'API (vérifié en live)
+
+| Cas | Réponse |
+|---|---|
+| Paiement de réservation 16 000 F avec 7 000 F de total et 30 000 F de tirelire | **201** : payeur à **−9 000 F**, hôte crédité de 16 000 F (#82) |
+| Retrait : 400 F · solde 0 · sans numéro · numéro « abc » · seconde demande · montant texte | 400 « minimum » · 400 « Solde insuffisant » · 400 « Numero de telephone requis » · **201** · 400 « deja une demande » · **500** (#84) |
+| Retrait en attente | solde inchangé ; `pending_amount: 0` dans les stats (#83) ; méthode renvoyée `mtn_momo` |
+| `GET /wallet/stats` | revenus = recharges seulement, dépenses 0 malgré 111 000 F de débits (#85) |
+| `checkout` : 0 / 50 F · passerelle inconnue · MTN direct sans numéro · MTN avec `phoneNumber` · Kkiapay | 400 « Montant minimum 500 FCFA » (violation) · 404 · 400 « Erreur MTN MoMo… » · **201 `ussd_push`** (#49 en partie corrigé) · 201 `widget` |
+| Après `ussd_push` : route de statut · `verify-return` (`GSM_MTN`) · `verify-return` (`gsm_mtn`) · rejoué | **404** avant comme après · 400 (casse) · **201 `verified`, wallet crédité** · `alreadyCredited: true` (#86) |
+| `verify-return` sur un paiement FedaPay ou Kkiapay non payé | 201 `verified: false` |
+| Signalement : description / titre vides · titre de 300 caractères | 400 avec violations · 400 (max 200) |
+| Signalement par un locataire **sans bail** · par un **propriétaire tiers** · bail brouillon · bail signé non actif · `lease_id` d'un autre logement | **201** partout (#87) |
+| Historique public d'un logement | compte aussi les signalements annulés (12 au total pour 5 résolus) |
+| Transitions côté propriétaire | open → in_review, closed, cancelled · in_review → open, resolved · resolved → open, closed ; **refusées** : open → resolved, in_review → closed, in_review → cancelled |
+| Auteur : priorité · annuler (ouvert) · annuler (en examen) · autre statut · `assigned_to` + `resolution_notes` | 200 · 200 · 400 · 403 « Seul le propriétaire… » · **200** (#88) |
+| Liste et détail | `unit`, `property`, `author`, `resolver` imbriqués |
+| Pièces jointes : multipart (`file`, `files`…) · JSON `{attachments: [url]}` · par le propriétaire · par un tiers | **201 sans effet** · 201, ajoutée · 201, ajoutée · 403 (#90) |
+| Téléchargement d'une pièce jointe : auteur, propriétaire · index absent · tiers | 200 image · 404 · 403 |
+| Messagerie : conversation avec soi-même · même logement et même destinataire deux fois | 400 (anglais) · **deux conversations** (#92) |
+| Pagination `limit=2` | page 1 = les 2 plus récents (ordre croissant), page 2 = les précédents |
+| Réactions : 👍 puis ❤️ · texte libre · non participant · retrait | une seule par personne (remplacée) · 400 · 403 « Not a participant » · 200 |
+| Réponse citée · image (`metadata.file_url`) · message `system` envoyé par un utilisateur | `reply_to` renvoyé · `has_attachment: true`, fichier servi par `/attachment` · **201** (#91) |
+| Non-lus | `GET /messaging/unread-count` juste ; remis à jour par `PATCH …/read` |
+
+### Constats côté écrans
+
+| # | Espace | Constat |
+|---|---|---|
+| R1 | Locataire | Les paiements (loyer, entrée, réservation) comptaient toute la tirelire comme disponible, même au-delà du total. |
+| R2 | Locataire | **Recharge Mobile Money direct inutilisable** : pas de champ numéro, et l'écran interrogeait une route qui répond toujours 404. Résultat : « paiement non confirmé » sans jamais créditer. Kkiapay était proposé puis échouait. FedaPay : « J'ai terminé » fermait sans rien vérifier. |
+| R3 | Locataire | Solde « retirable », mais aucun bouton pour retirer. |
+| R4 | Pro, artisan | Retrait : numéro non contrôlé (l'API accepte « abc ») ; seconde demande refusée seulement après la saisie ; méthode affichée `mtn_momo`. Le wallet pro n'avait **aucun historique**. |
+| R5 | Locataire | Signalement proposé sur les baux en brouillon ou résiliés ; seulement 6 catégories de panne sur 13 types (rien pour le bruit, les parties communes, l'insalubrité). Pas d'annulation, pas d'ajout de photo, étape « Intervention » sans statut réel. |
+| R6 | Pro | Transitions fausses : in_review → closed proposé (400), impossible de rouvrir ou de remettre en attente. Aucune note de résolution. Le déclarant n'était pas nommé. |
+| R7 | Tous | Messagerie figée : rien n'arrivait sans recharger ; seuls les 50 derniers messages ; aucun compteur de non-lus hors de la page ; réactions, réponses et pièces jointes absentes. Fil jamais descendu au dernier message. |
+| R8 | Tous | Chaque « Écrire à… » créait une conversation de plus (#92). Les notifications de message, de signalement et de recharge n'ouvraient rien. |
+
+### Ce qui a été livré
+
+| Fichier | Rôle |
+|---|---|
+| `app/utils/wallet.ts` | **Nouveau**. `spendableSavings` (min(tirelire, total)), `walletInconsistent`, `withdrawalMethodLabel` (casse), `pendingWithdrawal`, `normalizeBeninPhone` (8 chiffres ou 01 + 8), `validateWithdrawal`, `gatewayNeedsPhone`, `gatewaySupported`, `validateRecharge` |
+| `app/utils/paymentPolling.ts` | `pollVerifyReturn` : sondage par `verify-return`, borné, idempotent |
+| `app/composables/useTenantWallet.ts` | `spendable` et `inconsistent`, utilisés par `PaymentModal`, `BookingPayModal` et le paiement d'entrée (`locataire/bail.vue`) |
+| `app/components/tenant/PaymentModal.vue` | Recharge : numéro Mobile Money pour MTN et Moov direct, minimum 500 F, Kkiapay retiré. Suivi par `verify-return` (ussd_push, et retour FedaPay avec « pas encore confirmé » honnête). Erreurs détaillées. |
+| `app/components/wallet/WithdrawModal.vue`, `WithdrawalList.vue`, `TransactionHistory.vue`, `InconsistencyNote.vue`, `app/composables/useWithdrawals.ts` | **Nouveaux**, communs aux trois espaces. Retrait avec numéro validé et normalisé, « Tout retirer », demande en attente annoncée d'emblée. Liste des retraits lisible. Historique paginé (« Afficher plus »). Encart sur un solde incohérent ou négatif. |
+| `app/pages/locataire/wallet.vue`, `pro/wallet.vue`, `artisan/facturation.vue`, `pro/RetraitModal.vue`, `artisan/RetraitModal.vue` | Bouton « Retirer » côté locataire ; « dont X F en cours de retrait » ; historique côté pro ; les deux anciennes modales réduites à la modale commune |
+| `app/utils/signals.ts` | **Nouveau**. Matrice des transitions relevée en live (`landlordActions`), `canTenantCancel`, `canAddAttachments`, suivi en 4 étapes réelles, tri, lieu et déclarant, `reportableLeases` (bail actif seulement), libellés des 13 types |
+| `app/components/tenant/ReportModal.vue`, `useTenantSpace.ts` | Bail actif seulement (message clair sinon) ; 4 catégories de plus (parties communes, bruit, voisinage, insalubrité), la pièce seulement pour une panne ; contrôle des photos ; « Suivre mon signalement » |
+| `app/pages/locataire/signalements.vue` | Onglets En cours / Terminés ; logement, type, intervenant ; ajout de photos ; annulation (tant que c'est ouvert) ; « Résolu selon le propriétaire » avec sa note ; « Écrire au propriétaire » ; lien `?signal=` |
+| `app/pages/pro/signalements.vue` | Actions nommées et conformes à l'API (« Prendre en charge », « Clore sans suite », « Marquer résolu » avec note, « Remettre en attente », « Rouvrir ») ; priorité modifiable ; déclarant nommé ; « Écrire au locataire » ; filtre « En cours » par défaut ; erreur de transition périmée expliquée ; lien `?signal=` |
+| `app/utils/messaging.ts`, `app/composables/useUnreadMessages.ts` | **Nouveaux**. Fusion sans doublon, nouveaux messages reçus, réactions groupées, `findConversation` (#92), contrôle des pièces jointes, extrait cité, compteur borné. Sondage du compteur (60 s, onglet visible). |
+| `app/components/messaging/Inbox.vue`, `pages/locataire/messages.vue` | **Une seule messagerie pour les trois espaces**. Rafraîchie toutes les 7 s (fil) et 20 s (liste) ; « Messages précédents » ; descente au dernier message ; réactions (6 emoji, retrait) ; réponse citée ; pièce jointe (photo ou PDF) ; zone de saisie multiligne (Entrée envoie) ; recherche ; nom de rôle si le correspondant n'a pas de nom |
+| `app/composables/useMessagingApi.ts` et six pages (visites, réservations, bail, file d'attente) | `openConversation` réutilise la conversation active ; unread-count, réactions, pièces jointes |
+| `app/layouts/*.vue` | Pastille de non-lus sur « Messages » dans les trois espaces |
+| `app/utils/housingRequest.ts` | Notifications `conversation_id` → la conversation ; `signalId` → le signalement ; `transactionId` → le wallet |
+| `app/utils/apiErrors.ts` | Messages wallet sans accents ou bruts (MTN), messages de messagerie en anglais, 403 des signalements, violations `amount.min`, `content.*`, `title.maxLength` |
+
+### Tests automatisés
+
+```
+Test Files  30 passed (30)
+     Tests  270 passed (270)   [+31 : tests/wallet.test.ts, signals.test.ts, messaging.test.ts, pollVerifyReturn, notifications, messages d'erreur — hors tests/geo.test.ts d'une autre session]
+```
+
+Les cas testés reprennent les valeurs relevées en live :
+- soldes 7 000 / 30 000 et −9 000 / 14 000 ;
+- numéro « abc » refusé ; `66000001` normalisé ;
+- matrice des transitions (open → resolved et in_review → closed jamais proposés) ;
+- page 1 = messages les plus récents.
+
+`vue-tsc` : 25 erreurs, toutes antérieures et hors de ce lot. Celle de `ReportModal.vue` (logement possiblement nul) a été corrigée au passage.
+
+### Vérification de bout en bout (Playwright, build de production local → API de production)
+
+| Id | Scénario | Résultat |
+|---|---|---|
+| W1-W2 | Recharge : Kkiapay absent, numéro demandé pour MTN direct, 400 F refusé ; 5 000 F via MTN sandbox → « Recharge effectuée », wallet 0 → 5 000 | PASS |
+| W3-W7 | Historique relu, « Retirer » côté locataire. 400 F et « abc » refusés, bouton bloqué. Retrait de 1 000 F vers `+2290197000000`. « Dont 1 000 F en cours de retrait ». Seconde demande bloquée d'emblée. | PASS |
+| W8-W9 | Pro : solde négatif expliqué, historique. Artisan : « MTN · abc », retrait en attente signalé. | PASS |
+| S1-S4 | Onglets, logement nommé. « Nuisance sonore » → `nuisance_sonore`, sans choix de pièce. Photo ajoutée après coup. Lien `?signal=` et annulation. | PASS |
+| S5-S9 | Pro : déclarant nommé, « Prendre en charge » → « Marquer résolu / Remettre en attente » (plus de « Clore »), résolu avec note. Locataire : note visible, plus d'annulation. « Écrire au propriétaire » rouvre la conversation existante (8 → 8). | PASS |
+| M1-M3 | Fil ouvert en bas sur les 50 derniers ; « Messages précédents » ; réponse citée affichée | PASS |
+| M4-M6 | Réaction 👍 ; réponse citée envoyée avec Entrée (`reply_to_id`) ; photo envoyée (message `image`) | PASS |
+| M7-M9 | Message reçu affiché sans recharger ; pastille « Messages 47 » dans la navigation pro ; mobile : liste puis fil, sans débordement | PASS |
+| Z | Zéro erreur JS | PASS |
+
+Deux défauts trouvés par ces tests et corrigés avant livraison :
+- **S3** : l'ajout de photo en multipart répondait 201 sans rien ajouter. L'écran dépose maintenant le fichier, puis envoie son URL en JSON (#90).
+- **M4** : après « Messages précédents », une réaction partait bien (201) mais ne s'affichait pas. Le message est désormais remplacé dans la liste plutôt que modifié en place.
+
+Données de test :
+- **Locataire de test** : un bail actif sur « Appart 4 » (propriétaire `qa-landlord-…`) ; un retrait de 1 000 F en attente ; plusieurs signalements (annulés ou résolus) ; une conversation de 60 messages ou plus.
+- **Locataire sans bail** : recharge de 5 000 F ; un retrait de 1 000 F en attente.
+- **Artisan** : un retrait de 1 000 F en attente vers « abc », créé pour reproduire #84. Il ne peut pas être annulé sans administrateur.
+- **Propriétaire `qa-landlord-…`** : solde toujours à −9 000 F (#82) ; deux signalements tiers reçus pendant les tests de droits (#87).

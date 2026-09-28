@@ -60,6 +60,23 @@ export interface MessageItem {
   metadata: Record<string, unknown> | null
   created_at: string
   sender: ParticipantUser
+  /** Une réaction par personne : en poser une autre remplace la précédente (vérifié en live, Lot 55). */
+  reactions?: MessageReaction[]
+  reply_to_id?: string | null
+  reply_to?: Pick<MessageItem, 'id' | 'sender_id' | 'content' | 'type'> | null
+}
+
+export interface MessageReaction {
+  user_id: string
+  emoji: string
+  created_at: string
+}
+
+export interface SendMessagePayload {
+  content: string
+  type?: 'text' | 'image' | 'document'
+  metadata?: { file_url: string; file_name: string }
+  reply_to_id?: string
 }
 
 export interface MessagesPage {

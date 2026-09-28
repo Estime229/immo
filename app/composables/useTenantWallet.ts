@@ -1,6 +1,7 @@
 import type { WalletSummary } from '~/types/wallet'
 import type { FetchState } from '~/utils/fetchState'
 import { deriveFetchState } from '~/utils/fetchState'
+import { spendableSavings, walletInconsistent } from '~/utils/wallet'
 
 /**
  * Solde du wallet, partagé entre le tableau de bord, `/locataire/wallet` et
@@ -25,6 +26,14 @@ export function useTenantWallet() {
 
   const balanceTotal = computed(() => Number(wallet.value?.balance_total ?? 0))
   const balanceSavings = computed(() => Number(wallet.value?.balance_savings ?? 0))
+  /**
+   * Ce qu'un paiement de logement peut réellement prélever (Lot 55) : l'API ne
+   * vérifie que la tirelire, qui peut dépasser le total (#82) — payer au-delà
+   * du total rend le solde négatif. Toutes les vérifications « tirelire
+   * suffisante » passent par cette valeur, jamais par balanceSavings seul.
+   */
+  const spendable = computed(() => spendableSavings(balanceTotal.value, balanceSavings.value))
+  const inconsistent = computed(() => walletInconsistent(balanceTotal.value, balanceSavings.value))
 
   async function reload() {
     state.value = 'loading'
@@ -44,5 +53,5 @@ export function useTenantWallet() {
     return nuxtApp._tenantWalletInFlight
   }
 
-  return { wallet, state, balanceTotal, balanceSavings, ensureLoaded, reload }
+  return { wallet, state, balanceTotal, balanceSavings, spendable, inconsistent, ensureLoaded, reload }
 }

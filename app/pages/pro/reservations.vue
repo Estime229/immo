@@ -64,7 +64,7 @@ async function contactGuest(b: LandlordBookingSummary) {
   contactingId.value = b.id
   bookingError.value = ''
   try {
-    const conv = await messagingApi.createConversation(b.unit_id, b.tenant_id)
+    const conv = await messagingApi.openConversation(b.unit_id, b.tenant_id)
     await navigateTo(`/pro/messages?conversation=${conv.id}`)
   } catch (e) {
     bookingError.value = e instanceof ApiRequestError ? errorText(e.mapped, "Impossible d'ouvrir la conversation.") : "Impossible d'ouvrir la conversation."

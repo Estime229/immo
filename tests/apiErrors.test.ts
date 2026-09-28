@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { mapApiError } from '../app/utils/apiErrors'
+import { errorText, mapApiError } from '../app/utils/apiErrors'
 
 describe('mapApiError', () => {
   it('place chaque violation de validation sur son champ, en français, sans exposer defaultMessage', () => {
@@ -96,5 +96,16 @@ describe('mapApiError', () => {
     const mapped = mapApiError(null, null)
     expect(mapped.kind).toBe('network')
     expect(mapped.bannerMessage).toBeTruthy()
+  })
+
+  it('Lot 55 : messages du wallet, de la messagerie et des signalements rendus lisibles', () => {
+    expect(mapApiError({ statusCode: 400, message: 'Vous avez deja une demande de retrait en attente' }, 400).bannerMessage).toContain('déjà')
+    expect(mapApiError({ statusCode: 400, message: 'Erreur MTN MoMo : Request failed with status code 400' }, 400).bannerMessage).toContain('vérifiez le numéro')
+    expect(mapApiError({ statusCode: 403, message: 'Not a participant of this conversation' }, 403).bannerMessage).toBe('Vous ne participez pas à cette conversation.')
+    expect(mapApiError({ statusCode: 403, message: 'Seul le propriétaire peut modifier le statut' }, 403).bannerMessage).toContain("l'annuler")
+    const minAmount = mapApiError({ statusCode: 400, error: 'VALIDATION_ERROR', message: 'Données invalides', violations: [{ field: 'amount', rule: 'min', defaultMessage: 'Montant minimum 500 FCFA' }] }, 400)
+    expect(errorText(minAmount, 'x')).toContain('500 FCFA')
+    const tooLong = mapApiError({ statusCode: 400, error: 'VALIDATION_ERROR', message: 'Données invalides', violations: [{ field: 'content', rule: 'maxLength', defaultMessage: 'content must be shorter than or equal to 5000 characters' }] }, 400)
+    expect(errorText(tooLong, 'x')).toContain('5 000')
   })
 })

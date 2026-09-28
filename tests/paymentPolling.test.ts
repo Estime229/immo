@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { pollTransactionStatus } from '../app/utils/paymentPolling'
+import { pollTransactionStatus, pollVerifyReturn } from '../app/utils/paymentPolling'
 import type { TransactionStatus } from '../app/types/wallet'
 
 function status(overrides: Partial<TransactionStatus> = {}): TransactionStatus {
@@ -59,5 +59,30 @@ describe('pollTransactionStatus', () => {
 
     expect(result.outcome).toBe('cancelled')
     expect(fetchStatus).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('pollVerifyReturn (Lot 55 : seul verify-return confirme et crédite un ussd_push)', () => {
+  it('s\'arrête dès que le paiement est vérifié', async () => {
+    const verify = vi.fn()
+      .mockResolvedValueOnce({ verified: false, amount: 0 })
+      .mockRejectedValueOnce(new Error('réseau'))
+      .mockResolvedValueOnce({ verified: true, amount: 5000 })
+    const result = await pollVerifyReturn(verify, { sleep: async () => {} })
+    expect(result).toEqual({ outcome: 'completed', amount: 5000 })
+    expect(verify).toHaveBeenCalledTimes(3)
+  })
+  it('finit en timeout sans jamais conclure à un échec', async () => {
+    const verify = vi.fn().mockResolvedValue({ verified: false, amount: 0 })
+    const result = await pollVerifyReturn(verify, { sleep: async () => {}, maxAttempts: 3 })
+    expect(result.outcome).toBe('timeout')
+    expect(verify).toHaveBeenCalledTimes(3)
+  })
+  it('s\'arrête si la modale est fermée', async () => {
+    const verify = vi.fn().mockResolvedValue({ verified: false, amount: 0 })
+    let calls = 0
+    const result = await pollVerifyReturn(verify, { sleep: async () => {}, isCancelled: () => ++calls > 1 })
+    expect(result.outcome).toBe('cancelled')
+    expect(verify).toHaveBeenCalledTimes(1)
   })
 })

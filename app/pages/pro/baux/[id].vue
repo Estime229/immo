@@ -156,7 +156,7 @@ async function contactTenant() {
   contacting.value = true
   actionError.value = ''
   try {
-    const conv = await messagingApi.createConversation(l.unit.id, l.tenant.id)
+    const conv = await messagingApi.openConversation(l.unit.id, l.tenant.id)
     await navigateTo(`/pro/messages?conversation=${conv.id}`)
   } catch (e) {
     actionError.value = e instanceof ApiRequestError ? errorText(e.mapped, "Impossible d'ouvrir la conversation.") : "Impossible d'ouvrir la conversation."

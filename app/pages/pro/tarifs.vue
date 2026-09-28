@@ -261,8 +261,8 @@ function waitlistName(w: LandlordWaitlistEntry) {
 async function contactWaitlistTenant(w: LandlordWaitlistEntry) {
   waitlistError.value = ''
   try {
-    await messagingApi.createConversation(selectedUnitId.value, w.tenant.id)
-    await navigateTo('/pro/messages')
+    const conv = await messagingApi.openConversation(selectedUnitId.value, w.tenant.id)
+    await navigateTo({ path: '/pro/messages', query: { conversation: conv.id } })
   } catch (e) {
     waitlistError.value = formatError(e, "Impossible d'ouvrir la conversation.")
   }

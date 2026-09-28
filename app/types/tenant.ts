@@ -333,6 +333,11 @@ export interface SignalSummary {
   resolution_notes: string | null
   assigned_to: string | null
   created_at: string
+  updated_at?: string
+  /** Renvoyés par la liste comme par le détail (vérifié en live, Lot 55) — évitent de recroiser avec la liste des biens. */
+  unit?: { id: string; name: string } | null
+  property?: { id: string; name: string } | null
+  author?: { id: string; first_name: string | null; last_name: string | null; email: string | null } | null
 }
 
 /** Corps de PATCH /signals/:id — traitement côté propriétaire (13-INTEGRATION-PRO-ET-ARTISAN.md, IP8). `assigned_to` est un nom libre (artisan/prestataire), pas un id d'équipe — donc non bloqué par I2. */

@@ -4,5 +4,5 @@ definePageMeta({ layout: 'artisan' })
 </script>
 
 <template>
-  <MessagingInbox />
+  <MessagingInbox space="artisan" />
 </template>

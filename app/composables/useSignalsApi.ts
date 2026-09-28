@@ -25,11 +25,20 @@ export function useSignalsApi() {
   }
 
   /** multipart/form-data — même motif que le dépôt KYC (Lot 3) : le relais transmet le corps brut, boundary compris. */
-  async function uploadFile(file: File) {
+  async function uploadFile(file: File, type: 'image' | 'document' = 'image') {
     const formData = new FormData()
     formData.append('file', file)
-    formData.append('type', 'image')
+    formData.append('type', type)
     return api.post<FileUploadResult>('/files', formData)
+  }
+
+  /**
+   * Ajout de photos après coup (Lot 55) : URLs déjà déposées via POST /files,
+   * en JSON `{ attachments: [...] }`. Un envoi multipart répond 201 sans rien
+   * ajouter (vérifié en live, #90).
+   */
+  async function addAttachments(id: string, urls: string[]) {
+    return api.post<SignalSummary>(`/signals/${id}/attachments`, { attachments: urls })
   }
 
   /** Ni la liste ni le détail ne renvoient les URLs des pièces jointes — seul ce point d'accès protégé, par index, les sert. */
@@ -42,5 +51,5 @@ export function useSignalsApi() {
     return api.patch<SignalSummary>(`/signals/${id}`, payload)
   }
 
-  return { list, create, uploadFile, attachmentDownloadUrl, update }
+  return { list, create, uploadFile, addAttachments, attachmentDownloadUrl, update }
 }

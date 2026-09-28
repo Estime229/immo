@@ -3,5 +3,5 @@ definePageMeta({ layout: 'pro' })
 </script>
 
 <template>
-  <MessagingInbox />
+  <MessagingInbox space="pro" />
 </template>

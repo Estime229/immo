@@ -2,13 +2,11 @@
 import type { DocumentResult } from '~/composables/usePdfDocument'
 import type { ArtisanRequestSummary } from '~/types/artisan'
 import type { RefEntry } from '~/types/reference'
-import type { WithdrawalStatus } from '~/types/wallet'
 
 definePageMeta({ layout: 'artisan' })
 
 const modal = useArtisanModal()
 const wallet = useTenantWallet()
-const walletApi = useWalletApi()
 const artisanApi = useArtisanRequestsApi()
 const refData = useReferenceData()
 const pdfDoc = usePdfDocument()
@@ -48,17 +46,7 @@ const nextReleaseLabel = computed(() => nextRelease.value
   ? `${tradeLabel(nextRelease.value.trade_reference_id)} · libéré le ${new Date(nextRelease.value.warranty_expires_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })}.`
   : '')
 
-const withdrawalsBlock = useFetchBlock(() => walletApi.fetchWithdrawals())
-onMounted(withdrawalsBlock.load)
-
-const WITHDRAWAL_STATUS_LABEL: Record<WithdrawalStatus, { label: string; tone: 'info' | 'ok' | 'danger' }> = {
-  pending: { label: 'En attente', tone: 'info' },
-  processed: { label: 'Traitée', tone: 'ok' },
-  rejected: { label: 'Rejetée', tone: 'danger' }
-}
-function withdrawalMethodLabel(m: string) {
-  return m === 'MTN_MOMO' ? 'MTN' : m === 'MOOV_MONEY' ? 'Moov' : 'Virement bancaire'
-}
+const withdrawals = useWithdrawals()
 
 const openingKey = ref<string | null>(null)
 const openError = ref('')
@@ -82,10 +70,11 @@ async function openInvoice(r: ArtisanRequestSummary) {
 
 <template>
   <div class="animate-[im-fade_.3s_ease_both]">
-    <div class="grid grid-cols-2 gap-4.5">
+    <div class="grid grid-cols-1 gap-4.5 sm:grid-cols-2">
       <div class="rounded-2xl bg-[image:var(--gradient-balance)] p-6 text-white">
         <p class="m-0 text-xs font-bold uppercase tracking-[.06em] text-white/[.58]">Solde disponible</p>
         <p class="m-0 mt-3 font-mono text-[32px] font-bold tracking-[-.02em]">{{ formatFcfa(wallet.balanceTotal.value) }}</p>
+        <p v-if="withdrawals.pending.value" class="mb-0 mt-1.5 text-[12.5px] font-semibold text-white/90">Dont {{ formatFcfa(Number(withdrawals.pending.value.amount)) }} en cours de retrait.</p>
         <button type="button" class="mt-4 rounded-md bg-white px-5 py-2.5 text-[13.5px] font-bold text-green-900" @click="modal = 'retrait'">Retirer</button>
       </div>
       <div class="rounded-2xl border border-[var(--border-escrow)] bg-[var(--surface-escrow)] p-6">
@@ -123,22 +112,6 @@ async function openInvoice(r: ArtisanRequestSummary) {
       </div>
     </div>
 
-    <div class="mt-4.5 rounded-2xl border border-[var(--border-subtle)] bg-white p-6">
-      <p class="m-0 mb-1.5 text-[15px] font-bold">Retraits</p>
-      <p class="m-0 mb-3.5 text-[12.5px] text-[var(--text-muted)]">Minimum 500 FCFA · une seule demande en attente.</p>
-      <div v-if="withdrawalsBlock.state.value === 'loading'" class="flex flex-col gap-2.5">
-        <DataSkeletonCard v-for="i in 2" :key="i" :height="46" :lines="1" />
-      </div>
-      <FeedbackAlertBanner v-else-if="withdrawalsBlock.state.value === 'error'" tone="danger">Impossible de charger vos retraits.</FeedbackAlertBanner>
-      <p v-else-if="!withdrawalsBlock.items.value.length" class="m-0 text-[13.5px] text-[var(--text-muted)]">Aucun retrait pour l'instant.</p>
-      <div v-for="w in withdrawalsBlock.items.value" :key="w.id" class="flex items-center gap-3.5 border-b border-sand-200 py-3 last:border-b-0">
-        <div class="flex-1">
-          <p class="m-0 text-[13.5px] font-semibold">Retrait — {{ withdrawalMethodLabel(w.method) }}</p>
-          <p class="mb-0 mt-0.5 text-xs text-[var(--text-faint)]">{{ new Date(w.created_at).toLocaleDateString('fr-FR') }}</p>
-        </div>
-        <span class="font-mono text-sm font-bold">{{ formatFcfa(Number(w.amount)) }}</span>
-        <CoreBadge :tone="WITHDRAWAL_STATUS_LABEL[w.status].tone" class="min-w-[120px] justify-center">{{ WITHDRAWAL_STATUS_LABEL[w.status].label }}</CoreBadge>
-      </div>
-    </div>
+    <WalletWithdrawalList class="mt-4.5" />
   </div>
 </template>

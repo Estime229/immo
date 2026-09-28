@@ -70,7 +70,13 @@ export const FIELD_RULE_MESSAGES: Record<string, string> = {
   'avance_months.max': "L'avance ne peut pas dépasser 3 mois (loi 2022-30).",
   'prepaye_months.max': 'Le prépayé ne peut pas dépasser 3 mois (loi 2022-30).',
   'first_name.isNotEmpty': 'Renseignez votre prénom.',
-  'last_name.isNotEmpty': 'Renseignez votre nom.'
+  'last_name.isNotEmpty': 'Renseignez votre nom.',
+  // Lot 55 : recharge, messagerie, signalements.
+  'amount.min': 'Le montant minimum est de 500 FCFA.',
+  'content.isNotEmpty': 'Le message est vide.',
+  'content.maxLength': 'Message trop long : 5 000 caractères au maximum.',
+  'title.maxLength': 'Titre trop long : 200 caractères au maximum.',
+  'description.isNotEmpty': 'Décrivez le problème en quelques mots.'
 }
 
 const BUSINESS_CODE_MESSAGES: Record<string, string> = {
@@ -108,7 +114,19 @@ const BACKEND_MESSAGE_FIXES: Record<string, string> = {
   'Lease not found': 'Bail introuvable.',
   'Booking not found': 'Réservation introuvable.',
   'Unit not found': 'Logement introuvable.',
-  'Validation failed (uuid is expected)': 'Lien invalide : l\'identifiant est incorrect.'
+  'Validation failed (uuid is expected)': 'Lien invalide : l\'identifiant est incorrect.',
+  // Wallet et paiements (Lot 55) : messages sans accents ou bruts de la passerelle.
+  'Numero de telephone requis': 'Indiquez le numéro Mobile Money qui recevra les fonds.',
+  'Vous avez deja une demande de retrait en attente': "Vous avez déjà une demande de retrait en attente : attendez son traitement avant d'en faire une autre.",
+  'Montant minimum de retrait : 500 FCFA': 'Le montant minimum de retrait est de 500 FCFA.',
+  'Erreur MTN MoMo : Request failed with status code 400': 'MTN Mobile Money a refusé la demande : vérifiez le numéro saisi, puis réessayez.',
+  'Transaction non trouvee': 'Transaction introuvable.',
+  'Passerelle de paiement introuvable ou inactive': "Ce moyen de paiement n'est plus disponible : choisissez-en un autre.",
+  // Messagerie et signalements (Lot 55) : messages en anglais ou sans piste.
+  'Not a participant': 'Vous ne participez pas à cette conversation.',
+  'Not a participant of this conversation': 'Vous ne participez pas à cette conversation.',
+  'Cannot create conversation with yourself': 'Vous ne pouvez pas vous écrire à vous-même : ce logement est le vôtre.',
+  'Seul le propriétaire peut modifier le statut': "Seul le propriétaire fait avancer un signalement. Vous pouvez l'annuler tant qu'il n'est pas pris en charge."
 }
 
 /**

@@ -86,7 +86,7 @@ async function contactOwner(v: VisitSummary) {
   busyId.value = v.id
   actionError.value = ''
   try {
-    const conv = await messagingApi.createConversation(v.unit_id, v.landlord_id)
+    const conv = await messagingApi.openConversation(v.unit_id, v.landlord_id)
     await navigateTo(`/locataire/messages?conversation=${conv.id}`)
   } catch (e) {
     actionError.value = e instanceof ApiRequestError ? errorText(e.mapped, "Impossible d'ouvrir la conversation.") : "Impossible d'ouvrir la conversation."

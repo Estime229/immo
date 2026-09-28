@@ -77,6 +77,15 @@ describe('notificationTarget', () => {
     expect(notificationTarget({ metadata: { visitId: 'v-1' } }, 'pro')).toBe('/pro/visites?visit=v-1')
     expect(notificationTarget({ metadata: { visitId: 'v-1' } })).toBe('/locataire/visites?visit=v-1')
   })
+  it('message, signalement et recharge (métadonnées live, Lot 55)', () => {
+    const message = { metadata: { url: '/portal/messaging/c-1', conversation_id: 'c-1', sender_id: 'u-1' } }
+    expect(notificationTarget(message)).toBe('/locataire/messages?conversation=c-1')
+    expect(notificationTarget(message, 'artisan')).toBe('/artisan/messages?conversation=c-1')
+    expect(notificationTarget({ metadata: { signalId: 's-1', unitId: 'u-1' } }, 'pro')).toBe('/pro/signalements?signal=s-1')
+    expect(notificationTarget({ metadata: { signalId: 's-1' } })).toBe('/locataire/signalements?signal=s-1')
+    expect(notificationTarget({ metadata: { amount: 5000, currency: 'XOF', msgKey: 'deposit_success', transactionId: 't-1' } })).toBe('/locataire/wallet')
+    expect(notificationTarget({ metadata: { transactionId: 't-1' } }, 'artisan')).toBe('/artisan/facturation')
+  })
 })
 
 describe('daysAgoLabel', () => {

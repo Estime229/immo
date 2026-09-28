@@ -89,6 +89,10 @@ export function notificationTarget(n: { metadata?: Record<string, unknown> | nul
   // Mandats (Lot 53, snake_case cette fois) et équipe (`memberId`/`teamId`) : espace pro seulement.
   if (typeof m.mandate_id === 'string') return `/pro/mandats?mandate=${m.mandate_id}`
   if (typeof m.memberId === 'string' || typeof m.teamId === 'string') return '/pro/equipe'
+  // Lot 55 : message reçu (snake_case, avec une `url` du back-office qui n'existe pas ici), signalement, recharge.
+  if (typeof m.conversation_id === 'string') return `/${space}/messages?conversation=${m.conversation_id}`
+  if (typeof m.signalId === 'string') return space === 'artisan' ? null : `/${space}/signalements?signal=${m.signalId}`
+  if (typeof m.transactionId === 'string') return space === 'artisan' ? '/artisan/facturation' : `/${space}/wallet`
   return null
 }
 

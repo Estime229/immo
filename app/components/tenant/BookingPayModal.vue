@@ -44,7 +44,7 @@ async function runPreview() {
 
 const displayTotal = computed(() => preview.value?.final_price ?? Number(props.booking.total_price))
 /** L'API ne débite que la tirelire (message brut « Votre tirelire contient 0 XOF… ») : dit avant le clic. */
-const shortfall = computed(() => wallet.state.value === 'success' ? Math.max(0, displayTotal.value - wallet.balanceSavings.value) : 0)
+const shortfall = computed(() => wallet.state.value === 'success' ? Math.max(0, displayTotal.value - wallet.spendable.value) : 0)
 const retentionPct = computed(() => Number(props.booking.unit?.booking_retention_percentage ?? 0))
 
 async function submitPay() {
@@ -106,10 +106,11 @@ function close() {
               <DataMoneyLine v-if="preview?.applied" label="Réduction" :value="`-${formatFcfa(preview.discount_amount)}`" tone="credit" />
               <DataMoneyLine label="Total à payer" :value="formatFcfa(displayTotal)" total />
               <p class="mb-0 mt-2 text-[12px] text-[var(--text-muted)]">
-                Prélevé sur votre tirelire<template v-if="wallet.state.value === 'success'"> ({{ formatFcfa(wallet.balanceSavings.value) }} disponibles)</template>.
+                Prélevé sur votre tirelire<template v-if="wallet.state.value === 'success'"> ({{ formatFcfa(wallet.spendable.value) }} disponibles)</template>.
               </p>
             </div>
 
+            <WalletInconsistencyNote compact />
             <div v-if="shortfall > 0" class="mt-3 rounded-md border border-warn-border bg-warn-bg px-3.5 py-3 text-[13px] text-warn-fg">
               <p class="m-0 font-bold">Il vous manque {{ formatFcfa(shortfall) }} dans votre tirelire.</p>
               <p class="mb-0 mt-1">Rechargez-la en Mobile Money, puis revenez payer avant l'expiration des {{ hold?.minutesRemaining ?? 15 }} minutes.</p>
