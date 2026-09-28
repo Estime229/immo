@@ -5,7 +5,8 @@ import { errorText } from '~/utils/apiErrors'
 import { roleHomePath } from '~/utils/roleRoutes'
 import { SIGNUP_ROLE_TO_API, apiRoleToSignupRole, needsOnboarding, safeRedirect, validateSignup } from '~/utils/onboarding'
 
-definePageMeta({ layout: 'blank' })
+// `guest-only` (Lot 56) : un compte déjà connecté ne revoit pas le formulaire.
+definePageMeta({ layout: 'blank', middleware: 'guest-only' })
 
 type AuthStep = 'email' | 'password' | 'code' | 'signup' | 'forgot'
 /** Ce que représente le code à 6 chiffres affiché à l'étape 'code'. */
@@ -30,21 +31,6 @@ function setHero(i: number) {
 }
 onMounted(startHeroTimer)
 
-/**
- * Lot 56 : un compte déjà connecté qui ouvrait /connexion revoyait le
- * formulaire (lien « Se connecter » d'une page publique, bouton précédent) —
- * il part vers la page demandée ou son espace. Une inscription inachevée
- * reste ici pour être reprise.
- */
-onMounted(async () => {
-  if (!useApiAuth().isAuthenticated()) return
-  try {
-    const me = auth.user.value ?? await auth.fetchMe()
-    if (me && !needsOnboarding(me)) navigateTo(safeRedirect(route.query.redirect) ?? roleHomePath(me.role), { replace: true })
-  } catch {
-    // Jeton expiré : le formulaire reste affiché.
-  }
-})
 onUnmounted(() => { if (heroTimer) clearInterval(heroTimer) })
 
 const step = ref<AuthStep>('email')

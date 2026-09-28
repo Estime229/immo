@@ -4005,7 +4005,7 @@ Demande : « parcourir et tester le flow de l'espace public et les relations ave
 | `app/pages/contact.vue`, `app/utils/contact.ts` | **Vrai envoi** `POST /contact`. Validation aux limites de l'API, nom et e-mail pré-remplis pour un compte connecté, `?sujet=`. Succès sans référence inventée ; échec dit tel quel, texte gardé. |
 | `app/pages/vitrine/[id].vue` | Rendu serveur (`useAsyncData`) : `<title>` et `og:title` du propriétaire dans le HTML. Partage réparé. « Écrire à ce propriétaire » (conversation réutilisée, messagerie du bon espace, connexion avec retour sinon). Vitrine inexistante et panne distinguées. « C'est votre vitrine » pour son propriétaire. |
 | `app/pages/favoris.vue` | Visiteur : invitation à se connecter, retour à `/favoris` |
-| `app/pages/connexion.vue`, `app/pages/kyc.vue`, `app/pages/louer.vue` | Déjà connecté → page demandée ou espace. `?role=bailleur` depuis « Louer votre bien ». La page d'origine suit l'inscription puis la vérification d'identité (« Revenir à ma recherche »). |
+| `app/pages/connexion.vue`, `app/middleware/guest-only.ts`, `app/pages/kyc.vue`, `app/pages/louer.vue` | Déjà connecté → page demandée ou espace, par un middleware de route (302 dès le rendu serveur). `?role=bailleur` depuis « Louer votre bien ». La page d'origine suit l'inscription puis la vérification d'identité (« Revenir à ma recherche »). |
 | `app/middleware/auth.global.ts`, `app/utils/roleRoutes.ts` | `?redirect=` conservé. Garde des espaces : pro et artisan réservés aux rôles concernés (bascule automatique si le rôle existe sans être actif, sinon retour dans son espace, conversation gardée). Espace locataire ouvert à tous (#99). Liens vers `/locataire/messages` → messagerie du rôle actif. |
 | `app/composables/useUserStateReset.ts`, `useAuthApi.ts` | Caches du compte (wallet, baux, favoris, retraits, non-lus, rôles, codes promo…) remis à zéro à la déconnexion et à chaque nouvelle connexion |
 | `app/components/layout/SiteHeader.vue`, `PublicTabBar.vue` | « Langue et devise » honnête : français seul pour l'instant, prix en FCFA, équivalents EUR/USD de l'API. Connexion avec retour à la page courante. Messagerie artisan et pastille de non-lus dans la barre mobile publique. |
@@ -4060,6 +4060,10 @@ Trois échecs de premier passage venaient du test, pas du code :
 - l'écran du code met 6,7 s à venir.
 
 X1 a d'abord été écrit avec un rechargement de page, qui vidait les caches et masquait le défaut. Il a été réécrit en navigation côté client uniquement, puis rejoué sur la prod pour montrer le défaut d'avant.
+
+En **production** (im-hazel.vercel.app, déploiement `im-6obxoxima`) : **19/20 PASS** au premier passage.
+- **T1** a échoué : un compte connecté restait sur `/connexion`. La redirection était faite au montage de la page, et la fin de l'hydratation, plus lente en production, la doublait (en local, elle passait).
+- Elle est passée dans un middleware de route (`guest-only`), qui répond 302 dès le rendu serveur. Revérifié en production après redéploiement, voir ci-dessous.
 
 Données de test :
 - **Contact** : quatre essais `POST /contact` marqués « [Test QA Lot 56] » / « QA Lot 56 », tous en 500.
