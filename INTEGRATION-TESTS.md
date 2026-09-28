@@ -3940,8 +3940,13 @@ Deux défauts trouvés par ces tests et corrigés avant livraison :
 - **S3** : l'ajout de photo en multipart répondait 201 sans rien ajouter. L'écran dépose maintenant le fichier, puis envoie son URL en JSON (#90).
 - **M4** : après « Messages précédents », une réaction partait bien (201) mais ne s'affichait pas. Le message est désormais remplacé dans la liste plutôt que modifié en place.
 
+En **production** (im-hazel.vercel.app, déploiement `im-p557shgk7`), le scénario complet a été rejoué. Le parcours wallet a utilisé un locataire neuf (`qa-tenant55-…`), pour ne pas dépendre du retrait déjà en attente sur le locataire de test. Résultat : **27/28 PASS** au premier passage.
+- **W8** a échoué : le texte de la page a été lu avant l'arrivée de l'historique (l'API répond en 4 s environ). Revérifié en attendant la ligne « Réservation courte durée » : PASS, avec l'encart « solde négatif » et le débit de −16 000 F.
+- La capture de ce passage montrait un texte inexact dans l'encart (« l'équipe Immo en a été informée ») : rien n'est signalé automatiquement. Il renvoie maintenant vers le support.
+
 Données de test :
 - **Locataire de test** : un bail actif sur « Appart 4 » (propriétaire `qa-landlord-…`) ; un retrait de 1 000 F en attente ; plusieurs signalements (annulés ou résolus) ; une conversation de 60 messages ou plus.
 - **Locataire sans bail** : recharge de 5 000 F ; un retrait de 1 000 F en attente.
+- **Locataire `qa-tenant55-…`** (créé pour la prod) : recharge de 5 000 F ; un retrait de 1 000 F en attente.
 - **Artisan** : un retrait de 1 000 F en attente vers « abc », créé pour reproduire #84. Il ne peut pas être annulé sans administrateur.
 - **Propriétaire `qa-landlord-…`** : solde toujours à −9 000 F (#82) ; deux signalements tiers reçus pendant les tests de droits (#87).
