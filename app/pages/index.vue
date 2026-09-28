@@ -307,19 +307,19 @@ const TRUST_ITEMS = [
           :style="{ backgroundImage: photos[idx], opacity: heroIndex === i ? 1 : 0 }"
         />
         <div class="absolute inset-0 bg-[image:linear-gradient(180deg,rgba(18,60,41,0)_32%,rgba(18,60,41,.74)_100%)]" />
-        <div class="absolute left-[30px] top-[26px] flex items-center gap-2 rounded-pill bg-white/[.92] px-[15px] py-2 text-[12.5px] font-bold text-green-900">
-          <span class="h-[7px] w-[7px] rounded-pill bg-green-600 shadow-[var(--ring-focus)]" />
+        <div class="absolute left-4 right-4 top-4 flex w-fit items-center gap-2 rounded-pill bg-white/[.92] px-3.5 py-2 text-[11.5px] font-bold leading-[1.3] text-green-900 sm:left-[30px] sm:right-auto sm:top-[26px] sm:px-[15px] sm:text-[12.5px]">
+          <span class="h-[7px] w-[7px] flex-none rounded-pill bg-green-600 shadow-[var(--ring-focus)]" />
           Conforme à la Loi 2022-30 · caution plafonnée à 3 mois
         </div>
-        <div class="relative w-full p-6 sm:p-10">
-          <h1 class="m-0 max-w-[620px] text-balance font-display text-hero font-extrabold tracking-hero text-white">
+        <div class="relative w-full p-6 pb-16 sm:p-10">
+          <h1 class="m-0 max-w-[620px] text-balance font-display text-[38px] font-extrabold leading-[1.04] tracking-hero text-white sm:text-hero">
             Louez en toute confiance à Cotonou.
           </h1>
-          <p class="mb-0 mt-3.5 max-w-[500px] text-[16.5px] leading-[1.5] text-white/90">
+          <p class="mb-0 mt-3.5 max-w-[500px] text-[15px] leading-[1.5] text-white/90 sm:text-[16.5px]">
             Caution séquestrée par la plateforme, état des lieux signé des deux côtés, propriétaires vérifiés.
           </p>
         </div>
-        <div class="absolute bottom-[34px] right-[30px] z-[3] flex gap-2">
+        <div class="absolute bottom-[38px] right-6 z-[3] flex gap-2 sm:bottom-[34px] sm:right-[30px]">
           <span
             v-for="(idx, i) in HERO_PHOTO_INDEXES"
             :key="idx"
@@ -379,7 +379,7 @@ const TRUST_ITEMS = [
         <p class="mb-0 mt-2 text-[14.5px] text-[var(--text-muted)]">Les logements présentés sur toute la page suivent votre choix.</p>
       </div>
 
-      <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
         <button
           v-for="key in RENTAL_KEYS"
           :key="key"
@@ -557,12 +557,12 @@ const TRUST_ITEMS = [
     <!-- Idées d'escapade -->
     <section class="mx-auto max-w-[1240px] px-[26px] pt-14">
       <h2 class="m-0 font-display text-title-2 font-bold tracking-title-2">Des idées pour votre prochaine location</h2>
-      <div class="my-[18px] flex gap-[26px] border-b border-[var(--border-subtle)]">
+      <div class="-mx-[26px] my-[18px] flex gap-[22px] overflow-x-auto px-[26px] shadow-[inset_0_-1px_0_var(--border-subtle)] [scrollbar-width:none] sm:mx-0 sm:gap-[26px] sm:px-0 [&::-webkit-scrollbar]:hidden">
         <button
           v-for="tab in ESCAPE_TABS"
           :key="tab.key"
           type="button"
-          class="-mb-px border-b-2 px-0.5 pb-3.5 text-[15px] font-bold transition-colors"
+          class="flex-none whitespace-nowrap border-b-2 px-0.5 pb-3.5 text-[15px] font-bold transition-colors"
           :class="escapeTab === tab.key ? 'border-[var(--text-primary)] text-[var(--text-primary)]' : 'border-transparent text-[var(--text-muted)]'"
           @click="escapeTab = tab.key"
         >{{ tab.label }}</button>

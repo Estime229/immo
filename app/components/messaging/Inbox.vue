@@ -307,8 +307,7 @@ const STATUS_NOTE: Record<string, string> = {
 
 <template>
   <div
-    class="grid animate-[im-fade_.3s_ease_both] grid-cols-1 overflow-hidden rounded-2xl border border-[var(--border-subtle)] bg-white lg:grid-cols-[320px_1fr]"
-    style="height: calc(100vh - 190px); min-height: 520px"
+    class="grid h-[calc(100dvh-120px-var(--mobile-tabbar-space))] min-h-[420px] animate-[im-fade_.3s_ease_both] grid-cols-1 overflow-hidden rounded-2xl border border-[var(--border-subtle)] bg-white lg:h-[calc(100vh-190px)] lg:min-h-[520px] lg:grid-cols-[320px_1fr]"
   >
     <div class="min-h-0 flex-col border-r border-[var(--border-subtle)] lg:flex" :class="mobileView === 'chat' ? 'hidden' : 'flex'">
       <div class="flex flex-col gap-2 p-4">

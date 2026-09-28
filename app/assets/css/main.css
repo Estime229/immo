@@ -156,6 +156,10 @@
   --gradient-balance: radial-gradient(90% 130% at 85% 10%, rgba(199, 127, 62, 0.5), transparent 60%),
     linear-gradient(130deg, var(--color-green-800), var(--color-green-950));
 
+  /* Hauteur réservée sous le contenu pour la barre d'onglets flottante mobile
+     (LayoutMobileTabBar : 10px d'écart + 58px + 12px de marge interne + bordure, + 8px d'air). */
+  --mobile-tabbar-space: calc(90px + env(safe-area-inset-bottom));
+
   --duration-fast: 0.16s;
   --duration-base: 0.22s;
   --duration-slow: 0.35s;
@@ -194,6 +198,10 @@ body {
 @keyframes im-slide-left {
   from { transform: translateX(-100%); }
   to { transform: translateX(0); }
+}
+@keyframes im-sheet-up {
+  from { transform: translateY(100%); }
+  to { transform: none; }
 }
 @keyframes im-veil {
   from { opacity: 0; }
