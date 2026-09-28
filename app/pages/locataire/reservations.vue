@@ -54,6 +54,7 @@ onMounted(async () => {
     tab.value = counts.value.pay ? 'pay' : counts.value.upcoming ? 'upcoming' : counts.value.past ? 'past' : 'upcoming'
   }
 })
+onMounted(() => useLandlordReservationsBadge().markAllSeen())
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })

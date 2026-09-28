@@ -39,6 +39,7 @@ function tradeLabel(id?: string) {
 const mineBlock = useFetchBlock(() => artisanApi.listMine())
 const openBlock = useFetchBlock(() => artisanApi.listOpen(profile.value?.trade_reference_id).then(r => r.data))
 onMounted(mineBlock.load)
+onMounted(() => useArtisanRequestBadge().markAllSeen())
 watch(refresh, mineBlock.load)
 watch(profile, p => { if (p?.trade_reference_id) openBlock.load() })
 

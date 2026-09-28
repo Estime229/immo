@@ -21,6 +21,7 @@ onMounted(async () => {
   tab.value = isActiveSignal(target) ? 'active' : 'done'
   nextTick(() => document.getElementById(`signal-${target.id}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }))
 })
+onMounted(() => useLandlordSignalementsBadge().markAllSeen())
 
 const reportOpen = useReportModal()
 /** `TenantReportModal` est monté globalement dans le layout, pas ici — recharger au ferme-après-envoi plutôt que d'attendre un événement qu'il ne peut pas émettre vers cette page. */

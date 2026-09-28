@@ -37,6 +37,8 @@ function tradeLabel(id?: string) {
 const block = useFetchBlock(() => artisanApi.listMine())
 onMounted(block.load)
 watch(refresh, block.load)
+// Interventions (artisan_request_id) et partenariats (partnership_id) réunis dans cette page.
+onMounted(() => useLandlordNotificationBadge(['artisan_request_id', 'partnership_id']).markAllSeen())
 
 function statusLabel(r: ArtisanRequestSummary) {
   return PHASE_LABEL_REQUESTER[interventionPhase(r)]

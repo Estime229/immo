@@ -69,6 +69,7 @@ onMounted(async () => {
   if (id && leases.value.some(l => l.id === id)) selectLease(id)
   load()
 })
+onMounted(() => useLandlordEdlBadge().markAllSeen())
 watch(() => activeLease.value?.id, (id, old) => { if (old && id !== old) load() })
 
 const rows = computed(() => [...leaseRows.value, ...bookingRows.value])

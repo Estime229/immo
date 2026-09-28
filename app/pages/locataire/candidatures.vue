@@ -28,6 +28,7 @@ async function load() {
   }
 }
 onMounted(load)
+onMounted(() => useCandidaturesBadge().markAllSeen())
 
 const tab = ref<'open' | 'closed'>('open')
 const open = computed(() => requests.value.filter(r => r.status !== 'rejected'))

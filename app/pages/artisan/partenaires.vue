@@ -7,6 +7,7 @@ definePageMeta({ layout: 'artisan' })
 const artisanApi = useArtisanRequestsApi()
 const block = useFetchBlock(() => artisanApi.myPartnerships())
 onMounted(block.load)
+onMounted(() => usePartenairesBadge().markAllSeen())
 
 const pending = computed(() => block.items.value.filter(p => p.status === 'pending'))
 const active = computed(() => block.items.value.filter(p => p.status === 'active'))

@@ -48,6 +48,7 @@ onMounted(async () => {
     myUnitsState.value = 'error'
   }
 })
+onMounted(() => useLandlordTarifsBadge().markAllSeen())
 watch(selectedUnitId, id => {
   if (!id) return
   pricingError.value = ''

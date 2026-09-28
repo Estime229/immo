@@ -28,6 +28,7 @@ onMounted(async () => {
   if (invoiceId && activeLease.value?.invoices?.some(i => i.id === invoiceId)) openPay('loyer', invoiceId)
   wallet.reload()
 })
+onMounted(() => useLandlordBauxBadge().markAllSeen())
 
 const phase = computed(() => (activeLease.value ? leasePhase(activeLease.value) : null))
 const paidIn = computed(() => phase.value === 'active' || phase.value === 'notice' || phase.value === 'terminated')

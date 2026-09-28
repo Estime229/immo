@@ -15,8 +15,26 @@ const unread = useUnreadMessages()
 let stopUnread: (() => void) | null = null
 onMounted(() => { stopUnread = unread.startPolling() })
 onBeforeUnmount(() => stopUnread?.())
-function navCount(n: { key: string; count: string }) {
-  return n.key === 'messages' ? unread.label.value : n.count
+
+/**
+ * Missions, Agences partenaires : mêmes composables que côté Pro/Locataire (voir
+ * useLandlordNotificationBadge — appelle `/notifications` pour l'utilisateur courant, quel que
+ * soit son rôle). Facturation n'a pas de badge séparé : ses événements (« Paiement reçu ») sont
+ * déjà tagués `artisan_request_id`, donc déjà comptés sous Missions — un badge distinct doublonnerait.
+ */
+const notifBadges: Record<string, ReturnType<typeof useLandlordNotificationBadge>> = {
+  missions: useArtisanRequestBadge(),
+  partenaires: usePartenairesBadge()
+}
+onMounted(() => { Object.values(notifBadges).forEach(b => b.refresh()) })
+
+function navCount(n: { key: string; count?: string }) {
+  if (n.key === 'messages') return unread.label.value
+  if (n.key in notifBadges) {
+    const c = notifBadges[n.key]!.count.value
+    return c ? (c > 99 ? '99+' : String(c)) : ''
+  }
+  return n.count ?? ''
 }
 const currentKey = computed(() => ARTISAN_NAV_ITEMS.find(n => n.to === route.path)?.key ?? 'apercu')
 const pageTitle = computed(() => ARTISAN_PAGE_TITLES[currentKey.value] ?? '')
@@ -34,7 +52,7 @@ const MOBILE_SHORTCUTS = [
   { key: 'facturation', label: 'Factures', icon: 'receipt' }
 ] as const
 const mobileTabs = computed<MobileTab[]>(() => {
-  const tabs: MobileTab[] = MOBILE_SHORTCUTS.map(t => ({ ...t, to: ARTISAN_NAV_ITEMS.find(n => n.key === t.key)!.to, active: !drawerOpen.value && currentKey.value === t.key, badge: t.key === 'messages' ? unread.label.value : undefined }))
+  const tabs: MobileTab[] = MOBILE_SHORTCUTS.map(t => ({ ...t, to: ARTISAN_NAV_ITEMS.find(n => n.key === t.key)!.to, active: !drawerOpen.value && currentKey.value === t.key, badge: navCount(t) || undefined }))
   tabs.push({ key: 'menu', label: 'Menu', icon: 'menu', active: drawerOpen.value || !tabs.some(t => t.active) })
   return tabs
 })

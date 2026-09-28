@@ -36,8 +36,30 @@ const unread = useUnreadMessages()
 let stopUnread: (() => void) | null = null
 onMounted(() => { stopUnread = unread.startPolling() })
 onBeforeUnmount(() => stopUnread?.())
-function navCount(n: { key: string; count: string }) {
-  return n.key === 'messages' ? unread.label.value : n.count
+
+/**
+ * Réservations, Bail, État des lieux, Wallet, Signalements, Candidatures : mêmes badges que côté
+ * Pro (les composables `useLandlordXBadge` ne font qu'appeler `/notifications` pour l'utilisateur
+ * courant, quel que soit son rôle — voir useLandlordNotificationBadge), plus le badge Candidatures
+ * propre au locataire (statut de ses propres candidatures, absent côté Pro — voir useCandidaturesBadge).
+ */
+const notifBadges: Record<string, ReturnType<typeof useLandlordNotificationBadge>> = {
+  reservations: useLandlordReservationsBadge(),
+  bail: useLandlordBauxBadge(),
+  edl: useLandlordEdlBadge(),
+  wallet: useWalletBadge(),
+  signalements: useLandlordSignalementsBadge(),
+  candidatures: useCandidaturesBadge()
+}
+onMounted(() => { Object.values(notifBadges).forEach(b => b.refresh()) })
+
+function navCount(n: { key: string; count?: string }) {
+  if (n.key === 'messages') return unread.label.value
+  if (n.key in notifBadges) {
+    const c = notifBadges[n.key]!.count.value
+    return c ? (c > 99 ? '99+' : String(c)) : ''
+  }
+  return n.count ?? ''
 }
 const currentKey = computed(() => NAV_ITEMS.find(n => n.to === route.path)?.key ?? 'dash')
 const pageTitle = computed(() => currentKey.value === 'dash' ? (firstName.value ? `Bonjour ${firstName.value}` : 'Bonjour') : PAGE_TITLES[currentKey.value] ?? '')
@@ -72,7 +94,7 @@ const MOBILE_SHORTCUTS = [
   { key: 'messages', label: 'Messages', icon: 'message' }
 ] as const
 const mobileTabs = computed<MobileTab[]>(() => {
-  const tabs: MobileTab[] = MOBILE_SHORTCUTS.map(t => ({ ...t, to: NAV_ITEMS.find(n => n.key === t.key)!.to, active: !drawerOpen.value && currentKey.value === t.key, badge: t.key === 'messages' ? unread.label.value : undefined }))
+  const tabs: MobileTab[] = MOBILE_SHORTCUTS.map(t => ({ ...t, to: NAV_ITEMS.find(n => n.key === t.key)!.to, active: !drawerOpen.value && currentKey.value === t.key, badge: navCount(t) || undefined }))
   tabs.push({ key: 'menu', label: 'Menu', icon: 'menu', active: drawerOpen.value || !tabs.some(t => t.active) })
   return tabs
 })

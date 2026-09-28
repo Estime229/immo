@@ -54,14 +54,20 @@ onMounted(() => { stopUnread = unread.startPolling() })
 onBeforeUnmount(() => stopUnread?.())
 
 /**
- * Réservations, Baux, États des lieux, Signalements : aucun n'a de statut « en attente de moi »
- * exploitable côté API (voir useLandlordNotificationBadge) — dérivés des notifications non lues.
+ * Réservations, Baux, États des lieux, Signalements, Artisans, Wallet, Tarifs : aucun n'a de
+ * statut « en attente de moi » exploitable côté API (voir useLandlordNotificationBadge) —
+ * dérivés des notifications non lues. Demandes, Candidatures, Mandats gardent leur compteur API
+ * (`liveCounts` ci-dessus) — c'est leur seul signal fiable (#66 pour les candidatures).
  */
 const notifBadges: Record<string, ReturnType<typeof useLandlordNotificationBadge>> = {
   reservations: useLandlordReservationsBadge(),
   baux: useLandlordBauxBadge(),
   edl: useLandlordEdlBadge(),
-  signalements: useLandlordSignalementsBadge()
+  signalements: useLandlordSignalementsBadge(),
+  // Deux clés : la page « Artisans » du Pro réunit interventions (artisan_request_id) et partenariats (partnership_id) en un seul onglet-conteneur.
+  artisans: useLandlordNotificationBadge(['artisan_request_id', 'partnership_id']),
+  wallet: useWalletBadge(),
+  tarifs: useLandlordTarifsBadge()
 }
 onMounted(() => { Object.values(notifBadges).forEach(b => b.refresh()) })
 

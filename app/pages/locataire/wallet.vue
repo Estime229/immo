@@ -10,6 +10,7 @@ const withdrawOpen = ref(false)
 
 onMounted(wallet.ensureLoaded)
 onMounted(withdrawals.load)
+onMounted(() => useWalletBadge().markAllSeen())
 // Une recharge ou un retrait change l'historique : relu à la fermeture.
 watch(payOpen, (v, was) => { if (was && !v) history.value?.load() })
 watch(withdrawOpen, (v, was) => { if (was && !v) history.value?.load() })

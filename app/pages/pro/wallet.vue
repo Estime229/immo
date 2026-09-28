@@ -6,6 +6,7 @@ const withdrawals = useWithdrawals()
 const modal = useProModal()
 const history = ref<{ load: () => Promise<void> } | null>(null)
 onMounted(wallet.ensureLoaded)
+onMounted(() => useWalletBadge().markAllSeen())
 watch(modal, (v, prev) => { if (prev === 'retrait' && v === '') history.value?.load() })
 </script>
 
