@@ -27,6 +27,7 @@ onMounted(async () => {
   if (!isActiveSignal(target)) statusFilter.value = ''
   nextTick(() => document.getElementById(`signal-${target.id}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }))
 })
+onMounted(() => useLandlordSignalementsBadge().markAllSeen())
 watch(statusFilter, block.load)
 
 /** La liste renvoie `unit`, `property` et `author` (vérifié en live, Lot 55) : plus besoin de recroiser avec la liste des biens. */

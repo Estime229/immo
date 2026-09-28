@@ -95,6 +95,7 @@ async function load() {
   }
 }
 onMounted(load)
+onMounted(() => useLandlordEdlBadge().markAllSeen())
 
 /** `?inventory=` (notification) ou `?lease=…&type=…` (fiche du bail) ouvre directement l'état des lieux. */
 let queryHandled = false

@@ -9,6 +9,7 @@ const authUser = useAuthUser()
 /** Côté pro, seulement les baux où l'on n'est pas le locataire (un propriétaire peut aussi louer ailleurs). */
 const block = useFetchBlock(async () => (await leasesApi.fetchMine()).filter(l => (l.tenant_id ?? l.tenant.id) !== authUser.value?.id))
 onMounted(block.load)
+onMounted(() => useLandlordBauxBadge().markAllSeen())
 
 const ACCENT: Record<string, string> = {
   draft: 'border-l-[var(--border-default)]',

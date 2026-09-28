@@ -53,13 +53,24 @@ let stopUnread: (() => void) | null = null
 onMounted(() => { stopUnread = unread.startPolling() })
 onBeforeUnmount(() => stopUnread?.())
 
-/** Réservations : dérivé des notifications non lues (voir useLandlordReservationsBadge — pas de statut « en attente » côté API pour ce flux). */
-const reservationsBadge = useLandlordReservationsBadge()
-onMounted(() => { reservationsBadge.refresh() })
+/**
+ * Réservations, Baux, États des lieux, Signalements : aucun n'a de statut « en attente de moi »
+ * exploitable côté API (voir useLandlordNotificationBadge) — dérivés des notifications non lues.
+ */
+const notifBadges: Record<string, ReturnType<typeof useLandlordNotificationBadge>> = {
+  reservations: useLandlordReservationsBadge(),
+  baux: useLandlordBauxBadge(),
+  edl: useLandlordEdlBadge(),
+  signalements: useLandlordSignalementsBadge()
+}
+onMounted(() => { Object.values(notifBadges).forEach(b => b.refresh()) })
 
 function liveCount(key: string) {
   if (key === 'messages') return unread.label.value
-  if (key === 'reservations') return reservationsBadge.count.value ? (reservationsBadge.count.value > 99 ? '99+' : String(reservationsBadge.count.value)) : ''
+  if (key in notifBadges) {
+    const n = notifBadges[key]!.count.value
+    return n ? (n > 99 ? '99+' : String(n)) : ''
+  }
   const n = liveCounts.value[key]
   return n ? (n > 99 ? '99+' : String(n)) : ''
 }
