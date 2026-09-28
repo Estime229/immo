@@ -106,6 +106,7 @@ const identitySubtitle = computed(() => {
           <p class="mb-0 mt-0.5 text-[11.5px] text-[var(--text-faint)]">{{ identitySubtitle }}</p>
         </div>
       </div>
+      <LayoutVerificationCard space="artisan" />
 
       <NuxtLink
         v-for="n in ARTISAN_NAV_ITEMS"

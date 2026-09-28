@@ -8,6 +8,13 @@ const displayName = computed(() => {
   if (!u) return ''
   return `${u.first_name ?? ''} ${u.last_name ?? ''}`.trim() || u.email
 })
+/**
+ * Rubriques dont l'action principale est refusée par l'API sans vérification
+ * (publier/modifier un bien, demander un artisan) : un cadenas discret, la page
+ * reste consultable — les boutons concernés ouvrent la fenêtre explicative.
+ */
+const { canAct: identityVerified } = useVerification()
+const LOCKED_NAV = new Set(['biens', 'artisans'])
 const roleLabel = computed(() => {
   const r = currentUser.value?.role
   const labels: Record<string, string> = { landlord: 'Propriétaire', agent: 'Agent', agency: 'Agence', admin: 'Admin' }
@@ -125,6 +132,7 @@ const mobileTabs = computed<MobileTab[]>(() => {
           <p class="mb-0 mt-0.5 text-[11.5px] text-[var(--text-faint)]">{{ roleLabel }}</p>
         </div>
       </div>
+      <LayoutVerificationCard space="pro" />
 
       <template v-for="g in NAV_GROUPS" :key="g.header || 'main'">
         <p v-if="g.header" class="mb-1 ml-2.5 mt-3.5 text-[10px] font-black uppercase tracking-[.07em] text-[var(--text-faint)]">{{ g.header }}</p>
@@ -137,6 +145,7 @@ const mobileTabs = computed<MobileTab[]>(() => {
         >
           <span class="w-[17px] flex-none text-center text-sm">{{ n.icon }}</span>
           <span class="flex-1">{{ n.label }}</span>
+          <CoreLockIcon v-if="!identityVerified && LOCKED_NAV.has(n.key)" :size="12" class="text-[var(--text-faint)]" />
           <span v-if="liveCount(n.key)" class="rounded-pill bg-clay-500 px-[7px] py-0.5 text-[10px] font-black text-white">{{ liveCount(n.key) }}</span>
         </NuxtLink>
       </template>

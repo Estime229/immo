@@ -286,9 +286,17 @@ watch(() => pageState.value === 'success' && myRequestsLoaded.value, ready => {
   candidatureQueryHandled = true
   if (route.query.candidature === '1') openCandidature()
 })
+/**
+ * Candidater (`POST /rental/requests`) et demander une visite (`POST /visits`)
+ * exigent un compte vérifié (403 `KYC_REQUIRED`) : un compte connecté mais non
+ * vérifié voit un cadenas, et le clic ouvre la fenêtre explicative au lieu du formulaire.
+ * Réserver un séjour, lui, n'exige pas de vérification.
+ */
+const { canAct, requireVerified } = useVerification()
 function openCandidature() {
   if (!currentUser.value) { navigateTo(`/connexion?redirect=${encodeURIComponent(`/biens/${propertyId}${selectedUnit.value ? `?unit=${selectedUnit.value.id}&candidature=1` : ''}`)}`); return }
   if (unitTaken.value || myRequest.value?.status === 'pending' || myRequest.value?.status === 'accepted') return
+  if (!requireVerified('candidater à un logement')) return
   candidatureOpen.value = true
 }
 function onCandidatureCreated(r: RentalRequestSummary) {
@@ -302,6 +310,7 @@ function shortDate(iso: string) {
 const visitModalOpen = ref(false)
 function openVisitModal() {
   if (!currentUser.value) { navigateTo(`/connexion?redirect=/biens/${propertyId}`); return }
+  if (!requireVerified('demander une visite')) return
   visitModalOpen.value = true
 }
 
@@ -585,9 +594,9 @@ async function onFavoriteSimilar(l: { propertyId: string | null }) {
               </div>
               <template v-else>
                 <p v-if="myRequest?.status === 'rejected'" class="mb-0 mt-3 text-[12.5px] text-[var(--text-muted)]">Votre précédente candidature n'a pas été retenue. Vous pouvez en déposer une nouvelle.</p>
-                <CoreButton size="lg" full-width class="mt-4" @click="openCandidature">Déposer ma candidature</CoreButton>
+                <CoreButton size="lg" full-width class="mt-4" @click="openCandidature"><CoreLockIcon v-if="!canAct" :size="15" class="mr-1.5" />Déposer ma candidature</CoreButton>
               </template>
-              <CoreButton tone="secondary" size="lg" full-width class="mt-2.5" @click="openVisitModal">Demander une visite</CoreButton>
+              <CoreButton tone="secondary" size="lg" full-width class="mt-2.5" @click="openVisitModal"><CoreLockIcon v-if="!canAct" :size="15" class="mr-1.5" />Demander une visite</CoreButton>
               <p v-if="contactError" class="mb-0 mt-3 text-[13px] font-semibold text-danger-fg">{{ contactError }}</p>
               <button type="button" class="mt-3 block w-full text-center text-[13px] font-bold text-green-700 underline disabled:opacity-60" :disabled="contactLoading" @click="sendInquiry">{{ contactLoading ? 'Ouverture…' : 'Poser une question au propriétaire' }}</button>
               <p class="mb-0 mt-2.5 text-center text-[12.5px] text-[var(--text-faint)]">Aucun montant prélevé à cette étape</p>

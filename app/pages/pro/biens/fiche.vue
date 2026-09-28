@@ -86,6 +86,13 @@ async function deleteUnit() {
   }
 }
 
+/*
+ * Vérification : `PATCH /property/:id` et la création/modification de logements
+ * exigent un compte vérifié (403 `KYC_REQUIRED`, `VerifiedUserGuard`). Les
+ * boutons concernés portent un cadenas et ouvrent la fenêtre explicative.
+ */
+const { canAct, requireVerified } = useVerification()
+
 /* ---- Édition du bien — tous ces champs sont modifiables côté API (vérifié en live, Lot 45) ---- */
 const editingProperty = ref(false)
 const edit = ref({ name: '', status: '', description: '', buildingType: '', cityId: '', neighborhoodId: '', address: '', gps: null as GeoPoint | null, onVitrine: false, characteristics: {} as Record<string, boolean> })
@@ -106,6 +113,7 @@ const storedGpsInvalid = computed(() => hasStoredGps.value && !savedGps.value)
 const editCityName = computed(() => cities.value.find(c => c.id === edit.value.cityId)?.name ?? property.value?.city?.name ?? null)
 const gpsSection = ref<HTMLElement | null>(null)
 async function placeOnMap() {
+  if (!requireVerified('modifier ce bien')) return
   await openEditProperty()
   await nextTick()
   gpsSection.value?.scrollIntoView({ behavior: 'smooth', block: 'center' })
@@ -222,7 +230,8 @@ async function addPhoto(e: Event) {
 }
 const photoBusy = ref(false)
 async function changePhotos(change: { removeId?: string; primaryId?: string }) {
-  if (!property.value) return
+  // Retirer une photo ou changer la principale passe par `PATCH /property/:id` (vérification exigée) ; en ajouter une, non.
+  if (!property.value || !requireVerified('modifier les photos')) return
   photoBusy.value = true
   uploadError.value = ''
   try {
@@ -345,7 +354,7 @@ const perfCards = computed(() => {
               {{ inSearch ? '● Visible dans la recherche' : '○ Hors recherche — aucun logement libre' }}<template v-if="property.is_publicly_listed"> · sur votre vitrine</template>
             </p>
           </div>
-          <button type="button" class="rounded-pill border border-[var(--border-default)] bg-white px-4 py-2.5 text-[13px] font-bold" @click="openEditProperty">Modifier</button>
+          <button type="button" class="rounded-pill border border-[var(--border-default)] bg-white px-4 py-2.5 text-[13px] font-bold" @click="requireVerified('modifier ce bien') && openEditProperty()"><CoreLockIcon v-if="!canAct" class="mr-1" />Modifier</button>
           <NuxtLink :to="`/biens/${property.id}`" target="_blank" class="rounded-pill border border-[var(--border-default)] bg-white px-4 py-2.5 text-[13px] font-bold">Voir l'annonce</NuxtLink>
         </div>
 
@@ -354,7 +363,7 @@ const perfCards = computed(() => {
             <strong>{{ storedGpsInvalid ? 'Position incorrecte.' : 'Pas encore placé sur la carte.' }}</strong>
             {{ storedGpsInvalid ? "La position enregistrée tombe hors du Bénin : les locataires ne voient qu'une zone approximative." : "Les locataires ne voient qu'une zone approximative autour de la ville." }}
           </p>
-          <CoreButton tone="secondary" @click="placeOnMap">Placer sur la carte</CoreButton>
+          <CoreButton tone="secondary" @click="placeOnMap"><CoreLockIcon v-if="!canAct" class="mr-1" />Placer sur la carte</CoreButton>
         </div>
 
         <div v-if="editingProperty" class="border-t border-[var(--border-subtle)] p-6">
@@ -453,7 +462,7 @@ const perfCards = computed(() => {
             <span class="font-mono text-[13.5px] font-bold">{{ formatFcfaShort(Number(u.price)) }}</span>
             <CoreBadge :tone="STATUS_TONE[u.unit_status] ?? 'neutral'">{{ STATUS_LABEL[u.unit_status] ?? u.unit_status }}</CoreBadge>
             <NuxtLink :to="{ path: '/pro/tarifs', query: { unit: u.id } }" class="rounded-pill border border-[var(--border-default)] bg-white px-3.5 py-2 text-xs font-bold">Tarifs</NuxtLink>
-            <button type="button" class="rounded-pill border border-[var(--border-default)] bg-white px-3.5 py-2 text-xs font-bold" @click="editingUnit = u">Modifier</button>
+            <button type="button" class="rounded-pill border border-[var(--border-default)] bg-white px-3.5 py-2 text-xs font-bold" @click="requireVerified('modifier ce logement') && (editingUnit = u)"><CoreLockIcon v-if="!canAct" :size="11" class="mr-1" />Modifier</button>
             <button type="button" class="rounded-pill border border-danger-border bg-white px-3.5 py-2 text-xs font-bold text-danger-fg" @click="askDeleteUnit(u)">Supprimer</button>
           </div>
           <div v-if="confirmUnitId === u.id" class="mt-3 flex flex-wrap items-center gap-2.5 rounded-md border border-danger-border bg-danger-bg px-3.5 py-3">
@@ -464,7 +473,7 @@ const perfCards = computed(() => {
         </div>
         <p v-if="unitActionError" class="mx-3.5 mb-0 mt-2 text-[13px] font-semibold text-danger-fg">{{ unitActionError }}</p>
         <div class="flex flex-wrap items-center gap-3 p-3.5">
-          <button type="button" class="rounded-sm border border-[var(--border-default)] bg-white px-4 py-2.5 text-[13px] font-bold" @click="showAddUnit = true">+ Ajouter un logement</button>
+          <button type="button" class="rounded-sm border border-[var(--border-default)] bg-white px-4 py-2.5 text-[13px] font-bold" @click="requireVerified('ajouter un logement') && (showAddUnit = true)"><CoreLockIcon v-if="!canAct" class="mr-1" />+ Ajouter un logement</button>
           <NuxtLink to="/pro/tarifs" class="text-[13px] font-bold text-green-700">Tarifs et disponibilités →</NuxtLink>
         </div>
       </div>

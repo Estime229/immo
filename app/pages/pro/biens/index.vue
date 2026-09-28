@@ -4,6 +4,11 @@ import type { PropertySearchResult } from '~/types/property'
 definePageMeta({ layout: 'pro' })
 
 const propertiesApi = useLandlordPropertiesApi()
+/** `POST /property` exige un compte vérifié (403 `KYC_REQUIRED`) : on l'explique au clic plutôt que d'ouvrir un formulaire voué à l'échec. */
+// Un <NuxtLink> navigue avant qu'un @click puisse l'en empêcher : sans vérification, c'est un bouton qui ouvre l'explication.
+const { canAct, requireVerified } = useVerification()
+const addPropertyTag = computed(() => (canAct.value ? resolveComponent('NuxtLink') : 'button'))
+const addPropertyAttrs = computed(() => (canAct.value ? { to: '/pro/biens/ajouter' } : { type: 'button', onClick: () => requireVerified('publier un bien') }))
 
 const items = ref<PropertySearchResult[]>([])
 const state = ref<'loading' | 'success' | 'error'>('loading')
@@ -63,7 +68,7 @@ function openBien(p: PropertySearchResult) {
         <option>Occupé</option>
         <option>En maintenance</option>
       </select>
-      <NuxtLink to="/pro/biens/ajouter" class="flex h-[46px] items-center rounded-pill bg-[image:var(--action-primary)] px-5 text-[13.5px] font-bold text-white shadow-action">+ Ajouter un bien</NuxtLink>
+      <component :is="addPropertyTag" v-bind="addPropertyAttrs" class="flex h-[46px] items-center gap-1.5 rounded-pill bg-[image:var(--action-primary)] px-5 text-[13.5px] font-bold text-white shadow-action"><CoreLockIcon v-if="!canAct" />+ Ajouter un bien</component>
     </div>
 
     <div v-if="state === 'loading'" class="grid grid-cols-1 gap-4.5 sm:grid-cols-2 lg:grid-cols-3">
@@ -80,7 +85,7 @@ function openBien(p: PropertySearchResult) {
       <p class="mx-auto mb-[22px] mt-2.5 max-w-[420px] text-[14.5px] leading-[1.6] text-[var(--text-muted)]">
         {{ items.length ? 'Modifiez la recherche ou le filtre de statut.' : 'Publiez votre premier bien pour commencer à recevoir des demandes.' }}
       </p>
-      <NuxtLink v-if="!items.length" to="/pro/biens/ajouter" class="inline-block rounded-md bg-[image:var(--action-primary)] px-7 py-3.5 text-[15px] font-bold text-white shadow-action">Ajouter un bien</NuxtLink>
+      <component :is="addPropertyTag" v-if="!items.length" v-bind="addPropertyAttrs" class="inline-flex items-center gap-2 rounded-md bg-[image:var(--action-primary)] px-7 py-3.5 text-[15px] font-bold text-white shadow-action"><CoreLockIcon v-if="!canAct" :size="14" />Ajouter un bien</component>
     </div>
 
     <div v-else class="grid grid-cols-1 gap-4.5 sm:grid-cols-2 lg:grid-cols-3">

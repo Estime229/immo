@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { fetchProtectedBlob, ProtectedFileError } from '../app/utils/protectedFile'
+import { fetchProtectedBlob, ProtectedFileError, protectedFileExists } from '../app/utils/protectedFile'
 
 function fakeFetch(response: Partial<Response> & { ok: boolean; status: number }) {
   return vi.fn(async () => ({
@@ -45,5 +45,22 @@ describe('fetchProtectedBlob', () => {
     const impl = fakeFetch({ ok: true, status: 200 })
     await fetchProtectedBlob('/x', null, impl)
     expect(impl).toHaveBeenCalledWith('/x', { headers: {} })
+  })
+})
+
+describe('protectedFileExists', () => {
+  const res = (status: number) => ({ ok: status >= 200 && status < 300, status, body: null }) as unknown as Response
+
+  it('200 → présent, 404 → absent, autre ou réseau → inconnu', async () => {
+    expect(await protectedFileExists('/f', 't', (async () => res(200)) as typeof fetch)).toBe(true)
+    expect(await protectedFileExists('/f', 't', (async () => res(404)) as typeof fetch)).toBe(false)
+    expect(await protectedFileExists('/f', 't', (async () => res(401)) as typeof fetch)).toBeNull()
+    expect(await protectedFileExists('/f', 't', (async () => { throw new Error('offline') }) as typeof fetch)).toBeNull()
+  })
+
+  it("envoie le jeton d'accès", async () => {
+    let auth: string | undefined
+    await protectedFileExists('/f', 'abc', (async (_u: string, init?: RequestInit) => { auth = (init?.headers as Record<string, string>).Authorization; return res(200) }) as typeof fetch)
+    expect(auth).toBe('Bearer abc')
   })
 })

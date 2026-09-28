@@ -144,7 +144,10 @@ async function submitAssign(signal: SignalSummary) {
 /* ---- Artisan et messagerie ---- */
 const proModal = useProModal()
 const artisanPrefill = useArtisanReqPrefill()
+/** `POST /artisan-requests` exige un compte vérifié (403 `KYC_REQUIRED`). */
+const { canAct, requireVerified } = useVerification()
 function callArtisan(signal: SignalSummary) {
+  if (!requireVerified('demander une intervention')) return
   artisanPrefill.value = {
     unitId: signal.unit_id,
     description: `Signalement « ${signal.title} » : ${signal.description}`.slice(0, 2000),
@@ -266,7 +269,7 @@ async function writeTenant(signal: SignalSummary) {
           >{{ a.label }}</button>
           <button v-if="r.status !== 'resolved'" type="button" class="rounded-sm border border-[var(--border-default)] bg-white px-4 py-2.5 text-[12.5px] font-bold" @click="openAssign(r)">{{ r.assigned_to ? 'Réassigner' : 'Assigner' }}</button>
           <!-- Lot 54 : du signalement à l'intervention, sans ressaisir le logement ni le problème. -->
-          <button v-if="r.status === 'open' || r.status === 'in_review'" type="button" class="rounded-sm border border-green-600 bg-white px-4 py-2.5 text-[12.5px] font-bold text-green-700" @click="callArtisan(r)">Faire intervenir un artisan</button>
+          <button v-if="r.status === 'open' || r.status === 'in_review'" type="button" class="rounded-sm border border-green-600 bg-white px-4 py-2.5 text-[12.5px] font-bold text-green-700" @click="callArtisan(r)"><CoreLockIcon v-if="!canAct" class="mr-1" />Faire intervenir un artisan</button>
           <button type="button" class="rounded-sm border border-[var(--border-default)] bg-white px-4 py-2.5 text-[12.5px] font-bold" :disabled="busyId === r.id" @click="writeTenant(r)">Écrire au locataire</button>
         </div>
 

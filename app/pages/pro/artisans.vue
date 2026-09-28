@@ -10,6 +10,8 @@ definePageMeta({ layout: 'pro' })
 const artisanApi = useArtisanRequestsApi()
 const refData = useReferenceData()
 const modal = useProModal()
+/** `POST /artisan-requests` exige un compte vérifié (403 `KYC_REQUIRED`). */
+const { canAct, requireVerified } = useVerification()
 const modalTarget = useProModalTarget()
 const refresh = useArtisanRequestsRefresh()
 
@@ -193,8 +195,8 @@ async function invite(artisanId: string) {
           @click="tab = t.key"
         >{{ t.label }}</button>
       </div>
-      <button type="button" class="rounded-pill bg-[image:var(--action-primary)] px-4.5 py-2.5 text-[13px] font-bold text-white shadow-action" @click="modal = 'artisanReq'">
-        + Demander une intervention
+      <button type="button" class="rounded-pill bg-[image:var(--action-primary)] px-4.5 py-2.5 text-[13px] font-bold text-white shadow-action" @click="requireVerified('demander une intervention') && (modal = 'artisanReq')">
+        <CoreLockIcon v-if="!canAct" class="mr-1" />+ Demander une intervention
       </button>
     </div>
 

@@ -36,5 +36,6 @@ useSeoMeta({
     <NuxtLayout>
       <NuxtPage />
     </NuxtLayout>
+    <LayoutVerificationGate />
   </div>
 </template>

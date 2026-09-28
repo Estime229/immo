@@ -8,6 +8,7 @@ import { errorText } from '~/utils/apiErrors'
 import { apiRoleToSignupRole, RCCM_FORMAT_HINT, safeRedirect } from '~/utils/onboarding'
 import { UPLOAD_ACCEPT_ATTR, UPLOAD_HINT, checkUploadFile, prepareUpload } from '~/utils/uploadFile'
 import { mergeIdSides } from '~/utils/idCardImage'
+import { verificationStage } from '~/utils/kycStatus'
 import { asStep, blockReason, checklist, coordErrors, ID_TYPES, idTypeOf, missingSides, nextStep, prevStep, progressIndex, PROGRESS_SEGMENTS, ROLE_DOCS, SIDE_LABEL, type IdSide, type IdTypeKey, type KycStep } from '~/utils/kycWizard'
 
 /**
@@ -73,8 +74,15 @@ async function loadDocs() {
 onMounted(() => Promise.all([loadSavedProfile(), loadIdCard(), loadDocs()]))
 watch(() => auth.user.value?.id, id => { if (id && idCardState.value === 'loading') loadIdCard() })
 
-const status = computed(() => auth.user.value?.profile?.kyc_status ?? null)
-const inReview = computed(() => (status.value === 'pending' || status.value === 'in_review') && idCardOnFile.value && docs.value.length > 0)
+/**
+ * Même étape que les bandeaux des espaces (`verificationStage`) : « vérifié »
+ * suit `is_verified`, comme l'API — `kyc_status` repasse à `pending` à chaque
+ * modification du profil sans retirer les droits (BACKEND-ISSUES #7).
+ */
+const pageStage = computed(() => verificationStage(auth.user.value, idCardOnFile.value && docs.value.length > 0))
+const isVerified = computed(() => pageStage.value === 'verified')
+const isRejected = computed(() => pageStage.value === 'rejected')
+const inReview = computed(() => pageStage.value === 'review')
 const progressItems = computed(() => checklist({ idCardOnFile: idCardOnFile.value, docCount: docs.value.length, nameSaved: !!savedProfile.value?.full_name_masked }))
 
 /* ---- Étape « pièce » : le type de pièce (gardé pour la session) ---- */
@@ -294,9 +302,10 @@ async function saveAndQuit() {
 
 /* ---- Textes par profil ---- */
 const WHY: Record<UserRole, string> = {
-  locataire: 'Sans vérification, vous pouvez parcourir les annonces et réserver un séjour, mais pas demander de visite, candidater à un logement ni retirer de l\'argent.',
-  bailleur: 'Sans vérification, vous ne pouvez ni publier de bien ni retirer vos revenus. Les locataires voient le badge « Vérifié » sur vos annonces.',
-  artisan: 'Sans vérification, vous ne pouvez pas retirer vos gains, et vos certifications n\'apparaissent pas sur votre vitrine.'
+  // Retraits : non bloqués par l'API (retrait d'un compte non vérifié → contrôle du solde, constaté le 2026-09-28).
+  locataire: 'Sans vérification, vous pouvez parcourir les annonces et réserver un séjour, mais pas demander de visite ni candidater à un logement.',
+  bailleur: 'Sans vérification, vous ne pouvez ni publier ou modifier un bien, ni demander un artisan. Les locataires voient le badge « Vérifié » sur vos annonces.',
+  artisan: 'Sans vérification, vos certifications n\'apparaissent pas sur votre vitrine, et les clients ne voient pas le badge « Vérifié ».'
 }
 const DOCS_SUBTITLE: Record<UserRole, string> = {
   locataire: 'Ils rassurent les propriétaires sur votre capacité à payer le loyer.',
@@ -314,16 +323,16 @@ const NEXT_STEPS: Record<UserRole, string[]> = {
   bailleur: ['Vérification de votre dossier (en général sous 24 h)', 'Publiez votre premier bien et ses logements', 'Recevez et acceptez des demandes de location'],
   artisan: ['Vérification de votre dossier (en général sous 24 h)', 'Complétez votre vitrine et vos zones d\'intervention', 'Répondez aux demandes et faites vos premières offres']
 }
-const introTitle = computed(() => (status.value === 'verified' ? 'Votre compte est vérifié' : status.value === 'rejected' ? 'Votre vérification doit être reprise' : inReview.value ? 'Vérification en cours' : 'Vérifiez votre compte'))
+const introTitle = computed(() => (isVerified.value ? 'Votre compte est vérifié' : isRejected.value ? 'Votre vérification doit être reprise' : inReview.value ? 'Vérification en cours' : 'Vérifiez votre compte'))
 const introText = computed(() => {
-  if (status.value === 'verified') return 'L\'équipe Immo a validé votre identité. Vous pouvez mettre à jour vos documents à tout moment, par exemple pour ajouter un titre de propriété.'
-  if (status.value === 'rejected') return 'Un ou plusieurs documents ont été refusés, souvent parce qu\'ils étaient illisibles. Reprenez les étapes et déposez des photos nettes.'
+  if (isVerified.value) return 'L\'équipe Immo a validé votre identité. Vous pouvez mettre à jour vos documents à tout moment, par exemple pour ajouter un titre de propriété.'
+  if (isRejected.value) return 'Un ou plusieurs documents ont été refusés, souvent parce qu\'ils étaient illisibles. Reprenez les étapes et déposez des photos nettes.'
   if (inReview.value) return 'Votre dossier est complet et en cours d\'examen, en général sous 24 h ouvrées. Vous pouvez encore le compléter.'
   return 'Trois étapes, environ 5 minutes. Préparez votre pièce d\'identité et un ou deux justificatifs.'
 })
-const introCta = computed(() => (status.value === 'verified' ? 'Mettre à jour mes documents' : status.value === 'rejected' ? 'Reprendre la vérification' : progressItems.value.some(i => i.done) ? 'Continuer' : 'Commencer'))
+const introCta = computed(() => (isVerified.value ? 'Mettre à jour mes documents' : isRejected.value ? 'Reprendre la vérification' : progressItems.value.some(i => i.done) ? 'Continuer' : 'Commencer'))
 function startWizard() {
-  go(status.value === 'verified' ? 'documents' : 'piece')
+  go(isVerified.value ? 'documents' : 'piece')
 }
 
 const showFooter = computed(() => step.value !== 'intro' && step.value !== 'envoye')
@@ -349,7 +358,7 @@ const segment = computed(() => progressIndex(step.value))
           <p class="m-0 text-[13px] font-bold uppercase tracking-[.06em] text-green-700">Vérification du compte</p>
           <h1 class="mb-0 mt-2.5 font-display text-[32px] font-bold leading-[1.1] tracking-[-.03em] sm:text-[38px]">{{ introTitle }}</h1>
           <p class="mb-0 mt-3.5 text-[16px] leading-[1.55] text-[var(--text-secondary)]">{{ introText }}</p>
-          <p v-if="status !== 'verified'" class="mb-0 mt-2.5 text-[14px] leading-[1.55] text-[var(--text-muted)]">{{ WHY[role] }}</p>
+          <p v-if="!isVerified" class="mb-0 mt-2.5 text-[14px] leading-[1.55] text-[var(--text-muted)]">{{ WHY[role] }}</p>
 
           <div class="mt-7 overflow-hidden rounded-2xl border border-[var(--border-subtle)]">
             <button

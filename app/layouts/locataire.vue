@@ -12,8 +12,9 @@ const displayName = computed(() => {
   return `${u.first_name ?? ''} ${u.last_name ?? ''}`.trim() || u.email
 })
 const firstName = computed(() => currentUser.value?.first_name?.trim() || displayName.value)
-/** `is_verified` ne dit que l'email confirmé (vrai dès le premier code OTP) — seul `profile.kyc_status` dit si l'identité a été vérifiée. */
-const verifiedLabel = computed(() => (currentUser.value?.profile?.kyc_status === 'verified' ? 'Locataire vérifié' : 'Locataire · non vérifié'))
+/** Même règle que l'API : `is_verified` (voir utils/kycStatus.ts) — `kyc_status` repasse à `pending` à chaque modification du profil. */
+const { canAct: identityVerified } = useVerification()
+const verifiedLabel = computed(() => (identityVerified.value ? 'Locataire vérifié' : 'Locataire · non vérifié'))
 
 const PAGE_TITLES: Record<string, string> = {
   dash: 'Bonjour',
@@ -120,6 +121,7 @@ const mobileTabs = computed<MobileTab[]>(() => {
           <p class="mb-0 mt-0.5 text-[11.5px] text-[var(--text-faint)]">{{ verifiedLabel }}</p>
         </div>
       </div>
+      <LayoutVerificationCard space="locataire" />
 
       <NuxtLink
         v-for="n in NAV_ITEMS"

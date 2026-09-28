@@ -3,6 +3,7 @@ import { ApiRequestError } from '~/utils/authenticatedFetcher'
 import { errorText } from '~/utils/apiErrors'
 import { UPLOAD_HINT, prepareUpload } from '~/utils/uploadFile'
 import type { GeoPoint } from '~/utils/geo'
+import { verificationGateCopy, verificationLink } from '~/utils/kycStatus'
 import {
   PROPERTY_CHARACTERISTICS, RENTAL_CHOICES, imagesPayload, rentalSetup, validateMonths, validateRentalPrices,
   type RentalChoice
@@ -14,10 +15,15 @@ const propertiesApi = useLandlordPropertiesApi()
 const pricingApi = useUnitPricingApi()
 const searchApi = usePropertySearchApi()
 const refData = useReferenceData()
-const currentUser = useAuthUser()
 
-/** `POST /property` refuse (403 `error.KYC_REQUIRED`) tant que `users.is_verified` est faux — dit dès l'arrivée, pas après avoir tout rempli. */
-const notVerified = computed(() => currentUser.value?.is_verified === false)
+/**
+ * `POST /property` refuse (403 `error.KYC_REQUIRED`) tant que `users.is_verified`
+ * est faux : l'assistant cède alors la place à une explication, plutôt que de
+ * laisser remplir cinq étapes pour un refus à la fin.
+ */
+const { canAct, stage } = useVerification()
+const notVerified = computed(() => !canAct.value)
+const gateCopy = computed(() => verificationGateCopy(stage.value, 'publier un bien'))
 
 const STEP_LABELS = ['Le bien', 'Photos', 'Le logement', 'Conditions', 'Publication']
 const STEP_HINTS = [
@@ -315,15 +321,19 @@ const summary = computed(() => {
 
 <template>
   <div>
-    <div v-if="notVerified" class="mb-4.5 flex flex-col gap-3 rounded-xl border border-warn-border bg-warn-bg px-5 py-4 sm:flex-row sm:items-center">
-      <div class="flex-1">
-        <p class="m-0 text-[14.5px] font-bold text-warn-fg">Votre identité n'est pas encore vérifiée</p>
-        <p class="mb-0 mt-0.5 text-[13.5px] text-[var(--text-secondary)]">Immo doit valider votre compte avant la publication d'un bien : la création sera refusée d'ici là.</p>
+    <div v-if="notVerified" class="mx-auto max-w-[560px] rounded-2xl border border-[var(--border-subtle)] bg-white px-7 py-9 text-center">
+      <span class="mx-auto grid h-14 w-14 place-items-center rounded-pill" :class="stage === 'rejected' ? 'bg-danger-bg text-danger-fg' : stage === 'review' ? 'bg-info-bg text-info-fg' : 'bg-green-50 text-green-700'">
+        <CoreLockIcon :size="24" />
+      </span>
+      <h2 class="mb-0 mt-4 font-display text-[22px] font-bold tracking-[-.02em]">{{ gateCopy.title }}</h2>
+      <p class="mx-auto mb-0 mt-2 max-w-[440px] text-[14.5px] leading-[1.6] text-[var(--text-secondary)]">{{ gateCopy.text }}</p>
+      <div class="mt-6 flex flex-col justify-center gap-2.5 sm:flex-row">
+        <NuxtLink :to="verificationLink('/pro/biens/ajouter')" class="rounded-md bg-[image:var(--action-primary)] px-6 py-3.5 text-[15px] font-bold text-white shadow-action">{{ gateCopy.cta }}</NuxtLink>
+        <NuxtLink to="/pro/biens" class="rounded-md border border-[var(--border-default)] bg-white px-6 py-3.5 text-[15px] font-bold">Retour à mes biens</NuxtLink>
       </div>
-      <NuxtLink to="/kyc" class="flex-none rounded-md bg-[image:var(--action-primary)] px-5 py-2.5 text-center text-[13.5px] font-bold text-white">Vérifier mon compte</NuxtLink>
     </div>
 
-    <div class="grid grid-cols-1 items-start gap-6.5 lg:grid-cols-[220px_1fr]">
+    <div v-else class="grid grid-cols-1 items-start gap-6.5 lg:grid-cols-[220px_1fr]">
       <div class="rounded-xl border border-[var(--border-subtle)] bg-white p-4.5 lg:sticky lg:top-[94px]">
         <button
           v-for="(label, i) in STEP_LABELS"

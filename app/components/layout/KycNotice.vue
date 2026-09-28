@@ -1,14 +1,11 @@
 <script setup lang="ts">
-import { deriveVerificationNotice, type VerificationSpace } from '~/utils/kycStatus'
+import { deriveVerificationNotice, verificationLink, type VerificationSpace } from '~/utils/kycStatus'
 
 const props = defineProps<{ space: VerificationSpace }>()
-const currentUser = useAuthUser()
+const { stage } = useVerification()
+const route = useRoute()
 
-const notice = computed(() => {
-  const u = currentUser.value
-  if (!u) return null
-  return deriveVerificationNotice(u.profile?.kyc_status, u.has_id_card, props.space)
-})
+const notice = computed(() => deriveVerificationNotice(stage.value, props.space))
 
 const TONE = {
   warn: { box: 'border-warn-border bg-warn-bg', ink: 'text-warn-fg', icon: '!', dot: 'bg-warn-fg' },
@@ -24,6 +21,6 @@ const TONE = {
       <p class="m-0 text-[14.5px] font-bold" :class="TONE[notice.tone].ink">{{ notice.title }}</p>
       <p class="mb-0 mt-0.5 text-[13.5px] leading-[1.5] text-[var(--text-secondary)]">{{ notice.text }}</p>
     </div>
-    <NuxtLink to="/kyc" class="flex-none whitespace-nowrap rounded-md bg-[image:var(--action-primary)] px-5 py-2.5 text-center text-[13.5px] font-bold text-white shadow-action">{{ notice.cta }}</NuxtLink>
+    <NuxtLink :to="verificationLink(route.fullPath)" class="flex-none whitespace-nowrap rounded-md bg-[image:var(--action-primary)] px-5 py-2.5 text-center text-[13.5px] font-bold text-white shadow-action">{{ notice.cta }}</NuxtLink>
   </div>
 </template>

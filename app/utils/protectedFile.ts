@@ -48,3 +48,23 @@ export async function fetchProtectedBlob(
     contentType: res.headers.get('content-type')
   }
 }
+
+/**
+ * Le fichier existe-t-il ? `true` (200), `false` (404), `null` si on ne peut pas
+ * savoir (réseau, 401…). Le corps n'est pas téléchargé : utile pour savoir si une
+ * pièce d'identité est déposée sans rapatrier l'image à chaque page.
+ */
+export async function protectedFileExists(
+  url: string,
+  accessToken: string | null,
+  fetchImpl: typeof fetch = fetch
+): Promise<boolean | null> {
+  try {
+    const res = await fetchImpl(url, { headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {} })
+    void res.body?.cancel().catch(() => {})
+    if (res.ok) return true
+    return res.status === 404 ? false : null
+  } catch {
+    return null
+  }
+}
