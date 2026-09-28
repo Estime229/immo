@@ -4127,3 +4127,55 @@ Demande : « le calendrier n'est pas intuitif, on ne voit pas le mois », avec u
 | Z | Zéro erreur JS | PASS |
 
 En **production** (im-hazel.vercel.app) : C1 à C9 et zéro erreur JS, **10/10 PASS**.
+
+## Vérification du compte (/kyc) — parcours en étapes
+
+Demande : « la page n'est pas claire, les étapes, il ne sait pas qu'il doit cliquer sur Suivant ; les documents aussi, le sélecteur il ne comprend pas ; mettre en place une page de vérification comme celle d'Airbnb ».
+
+**Avant** :
+- trois onglets (Identité / Documents / Coordonnées) sans ordre ni bouton « Suivant » ;
+- un menu déroulant de types de documents ;
+- un seul bouton final « Enregistrer et terminer » caché dans le troisième onglet.
+
+**Contraintes de l'API**, relevées en live :
+- la pièce d'identité est un seul fichier (`POST /user/id-card`, sans type ni recto/verso) ;
+- les justificatifs passent par `POST /kyc/documents` avec leur type ;
+- il n'existe pas de route « soumettre le dossier » : l'équipe examine ce qui a été déposé ;
+- aucun motif de refus n'est renvoyé ;
+- `has_id_card` de `/auth/me` vaut `false` même quand une pièce est déposée : c'est le téléchargement de la pièce qui fait foi.
+
+**Livré** :
+- `app/pages/kyc.vue` réécrite, dans une mise en page dédiée : logo, « Enregistrer et quitter » en haut ; barre de progression en quatre segments, « Retour » et « Suivant » en bas. L'étape est dans l'URL (`?etape=`), donc le bouton précédent et le rechargement fonctionnent.
+- **Écrans** :
+  - **Introduction** : état de chaque élément, ce que la vérification débloque selon le profil, qui voit les documents. Variantes : vérifié, en cours, refusé.
+  - **Choix de la pièce** : Carte d'identité / CIP, Passeport, Permis, Carte de séjour, en cartes à choix unique.
+  - **Photos** : recto puis verso (ou page du passeport), « Prendre une photo » (appareil photo sur mobile) ou importer, aperçu, « Reprendre », conseils. Une pièce déjà déposée peut être gardée.
+  - **Justificatifs** : une carte par type avec explication et bouton « Ajouter », « Recommandé » sur le principal.
+  - **Coordonnées** : nom légal, plus raison sociale / IFU / RCCM pour un bailleur, erreurs sous chaque champ.
+  - **Récapitulatif** avec « Modifier », puis **Confirmation** avec les prochaines étapes et le retour à la page d'origine.
+- `app/utils/kycWizard.ts` : étapes, pièces, faces manquantes (un PDF vaut le document entier), documents par profil, validations, raison d'un « Suivant » inactif (affichée à côté du bouton), assemblage recto/verso.
+- `app/utils/idCardImage.ts` : recto et verso assemblés en une image JPEG sous 4 Mo avant l'envoi.
+- `deriveKycStatusBanner` supprimée (plus utilisée, elle renvoyait vers « l'onglet Documents »).
+
+**Tests** : `tests/kycWizard.test.ts` (+10), 36 fichiers / 324 tests. `vue-tsc` : 23 erreurs, toutes antérieures.
+
+| Id | Scénario (compte locataire neuf, puis propriétaire vérifié) | Résultat |
+|---|---|---|
+| K1 | Introduction : trois éléments « À faire », « Commencer » | PASS |
+| K2 | Choix de la pièce : « Suivant » inactif avec la raison, actif après le choix | PASS |
+| K3 | Recto puis verso : aperçus, « Ajoutez encore : verso », conseils | PASS |
+| K4 | Pièce envoyée en une image assemblée (1664 × 2364, JPEG), relue via `GET /user/:id/id-card` | PASS |
+| K5 | Justificatifs : cartes par type, « Recommandé », dépôt direct, « Suivant » après un dépôt | PASS |
+| K6 | Coordonnées : nom pré-rempli puis enregistré ; récapitulatif avec trois « Modifier » | PASS |
+| K7-K8 | « Envoyer pour vérification » → confirmation ; le bouton précédent du navigateur revient au récapitulatif | PASS |
+| K9 | Propriétaire vérifié : « Votre compte est vérifié » → justificatifs bailleur (titre de propriété, RCCM) | PASS |
+| K10 | Mobile 390 px : « Prendre une photo », barre du bas visible, pas de débordement | PASS |
+| Z | Zéro erreur JS | PASS |
+
+Deux échecs de premier passage venaient du test :
+- « Prochaines étapes » est rendu en majuscules ;
+- sur un nouvel appareil, il faut d'abord choisir le type de pièce.
+
+Un second passage sur le même compte a montré l'introduction « Vérification en cours », qui est le comportement voulu pour un dossier complet. Le parcours a donc été rejoué sur un compte neuf.
+
+Données de test : comptes `qa-kyc-…@example.com` (locataires), chacun avec une pièce assemblée (photos de test, pas de vraie pièce) et un bulletin de salaire factice, en attente de vérification.
