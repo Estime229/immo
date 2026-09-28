@@ -52,20 +52,28 @@ onMounted(async () => {
   await Promise.all([load(), favorites.ensureLoaded()])
 })
 
-/* ---- Référentiels réels pour les libellés (eau, compteur, meublé) ---- */
+/* ---- Référentiels réels pour les libellés (eau, compteur, meublé, équipements) ---- */
 const waterRef = ref<{ code: string; labels: Record<string, string> }[]>([])
 const meterRef = ref<{ code: string; labels: Record<string, string> }[]>([])
 const furnishedRef = ref<{ code: string; labels: Record<string, string> }[]>([])
+const featureRef = ref<{ code: string; labels: Record<string, string> }[]>([])
 onMounted(async () => {
-  const [w, m, f] = await Promise.all([refData.fetchRef('WATER_SOURCE'), refData.fetchRef('METER_TYPE'), refData.fetchRef('FURNISHED_LEVEL')])
+  const [w, m, f, feat] = await Promise.all([refData.fetchRef('WATER_SOURCE'), refData.fetchRef('METER_TYPE'), refData.fetchRef('FURNISHED_LEVEL'), refData.fetchRef('FEATURE')])
   waterRef.value = w
   meterRef.value = m
   furnishedRef.value = f
+  featureRef.value = feat
 })
 function labelOf(list: { code: string; labels: Record<string, string> }[], code: string | null) {
   if (!code) return null
   return list.find(e => e.code === code)?.labels.fr ?? code
 }
+
+/** Équipements de l'unité choisie — saisis à la création (`pro/biens/ajouter.vue`) mais jamais affichés jusqu'ici. */
+const features = computed(() => {
+  const codes = selectedUnit.value?.resolved_features?.map(f => f.code) ?? []
+  return codes.map(code => labelOf(featureRef.value, code) ?? code)
+})
 
 const specs = computed(() => {
   const u = selectedUnit.value
@@ -163,7 +171,18 @@ async function loadUnitAvailability(unitId: string) {
 watch(selectedUnit, u => { if (u) loadUnitAvailability(u.id) }, { immediate: true })
 
 const dailyPricing = computed(() => pricing.value.find(p => p.billing_frequency === 'daily' && p.is_available))
-const isShortStay = computed(() => !!dailyPricing.value)
+/**
+ * Un logement « Les deux » (`rentalChoice: 'les_deux'`, voir propertyForm.ts) a à la fois une
+ * grille journalière ET mensuelle active — avant ce correctif, `isShortStay` valait toujours
+ * `true` dès qu'une grille journalière existait, rendant la candidature au bail totalement
+ * inaccessible pour ce cas : un visiteur venu depuis la section « Au mois » de l'accueil ne
+ * voyait ici qu'un calendrier de réservation courte durée, jamais l'option de bail.
+ */
+const monthlyPricing = computed(() => pricing.value.find(p => p.billing_frequency === 'monthly' && p.is_available))
+const hasBothModes = computed(() => !!dailyPricing.value && !!monthlyPricing.value)
+/** Préférence explicite (venant de la recherche, `?mode=nuit|mois`) sinon même défaut qu'avant ce correctif — à la nuit en priorité si les deux existent. */
+const viewMode = ref<'nuit' | 'mois'>(route.query.mode === 'mois' ? 'mois' : 'nuit')
+const isShortStay = computed(() => (hasBothModes.value ? viewMode.value === 'nuit' : !!dailyPricing.value))
 
 /* ---- Dates du séjour : `BookingDateRangePicker` (mois, jours de la semaine, jours pris barrés) ---- */
 const checkIn = ref<string | null>(null)
@@ -407,6 +426,14 @@ async function onFavoriteSimilar(l: { propertyId: string | null }) {
             </div>
           </div>
 
+          <template v-if="features.length">
+            <div class="my-[30px] h-px bg-sand-300" />
+            <h3 class="mb-3 mt-0 font-display text-[19px] font-bold tracking-[-.02em]">Équipements</h3>
+            <div class="flex flex-wrap gap-2">
+              <span v-for="f in features" :key="f" class="rounded-pill border border-[var(--border-subtle)] bg-white px-3.5 py-2 text-[13px] font-semibold text-[var(--text-secondary)]">{{ f }}</span>
+            </div>
+          </template>
+
           <template v-if="description">
             <div class="my-[30px] h-px bg-sand-300" />
             <h3 class="mb-3 mt-0 font-display text-[19px] font-bold tracking-[-.02em]">À propos du logement</h3>
@@ -482,8 +509,22 @@ async function onFavoriteSimilar(l: { propertyId: string | null }) {
                 >{{ u.name }}</button>
               </div>
             </div>
+            <div v-if="hasBothModes" class="mb-3.5 grid grid-cols-2 gap-1.5 rounded-pill bg-[var(--surface-page)] p-1">
+              <button
+                type="button"
+                class="rounded-pill py-2 text-[13px] font-bold transition-colors"
+                :class="viewMode === 'mois' ? 'bg-white text-green-800 shadow-sm' : 'text-[var(--text-muted)]'"
+                @click="viewMode = 'mois'"
+              >Louer au mois</button>
+              <button
+                type="button"
+                class="rounded-pill py-2 text-[13px] font-bold transition-colors"
+                :class="viewMode === 'nuit' ? 'bg-white text-green-800 shadow-sm' : 'text-[var(--text-muted)]'"
+                @click="viewMode = 'nuit'"
+              >Réserver à la nuit</button>
+            </div>
             <div class="flex items-baseline gap-2">
-              <span class="font-mono text-[28px] font-bold tracking-[-.02em] text-green-900">{{ formatFcfaShort(isShortStay ? nightlyPrice : Number(selectedUnit.price)) }}</span>
+              <span class="font-mono text-[28px] font-bold tracking-[-.02em] text-green-900">{{ formatFcfaShort(isShortStay ? nightlyPrice : Number(monthlyPricing?.price ?? selectedUnit.price)) }}</span>
               <span class="text-[15px] font-semibold text-[var(--text-muted)]">{{ isShortStay ? '/ nuit' : '/ mois' }}</span>
             </div>
 

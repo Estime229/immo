@@ -22,7 +22,7 @@ const notVerified = computed(() => currentUser.value?.is_verified === false)
 const STEP_LABELS = ['Le bien', 'Photos', 'Le logement', 'Conditions', 'Publication']
 const STEP_HINTS = [
   'Nom, type, adresse, position sur la carte et ce que le bâtiment offre.',
-  'Photos du bien — optionnel, peut être fait plus tard.',
+  'Photos du bien — 5 minimum.',
   'Type, surface, ameublement et mode de location : au mois, à la nuit ou les deux.',
   'Caution, avance et frais (location au mois) ; règles des séjours courts (location à la nuit).',
   'Date de disponibilité, puis mise en ligne.'
@@ -192,6 +192,10 @@ const requiresBookingInventory = ref(false)
 /* ---- Étape 5 : publication ---- */
 const availableFrom = ref('')
 
+/** 5 photos minimum : une annonce sans photo (ou presque) recevait bien moins de demandes — plus optionnel. */
+const MIN_PHOTOS = 5
+const step2Error = computed(() => photos.value.length < MIN_PHOTOS ? `Ajoutez au moins ${MIN_PHOTOS} photos (${photos.value.length}/${MIN_PHOTOS} pour l'instant).` : null)
+
 const step3Error = computed(() => {
   if (!unitName.value.trim() || !unitTypeId.value) return "Renseignez le nom et le type du logement."
   return validateRentalPrices(rentalChoice.value, monthlyPrice.value, nightlyPrice.value)
@@ -244,6 +248,19 @@ async function submitUnit() {
     finalLoading.value = false
     return
   }
+  /**
+   * `POST .../units` ignore silencieusement `features` — vérifié en direct : la réponse de
+   * création n'a même pas la clé `resolved_features`, alors qu'un `PATCH` immédiatement après
+   * l'applique correctement (confirmé par `resolved_features` peuplé dans SA réponse à lui).
+   * Sans ce correctif, les équipements cochés à la création étaient perdus sans avertissement.
+   */
+  if (features.value.length) {
+    try {
+      await propertiesApi.updateUnit(propertyId.value, unitId, { features: features.value })
+    } catch {
+      pricingWarning.value = "Le logement est créé, mais les équipements n'ont pas pu être enregistrés. Ajoutez-les depuis la fiche du bien."
+    }
+  }
   // Grille tarifaire : c'est elle qui range l'annonce « à la nuit » / « au mois » dans la recherche.
   const failed: string[] = []
   for (const row of setup.pricing) {
@@ -255,15 +272,20 @@ async function submitUnit() {
   }
   finalLoading.value = false
   if (failed.length) {
-    pricingWarning.value = `Le logement est créé, mais le tarif ${failed.join(' et ')} n'a pas pu être enregistré. Ajoutez-le depuis « Tarifs et disponibilités ».`
+    const tariffMsg = `le tarif ${failed.join(' et ')} n'a pas pu être enregistré`
+    pricingWarning.value = pricingWarning.value
+      ? `Le logement est créé, mais ${tariffMsg}, et les équipements n'ont pas pu être enregistrés non plus. Ajoutez-les depuis « Tarifs et disponibilités » et la fiche du bien.`
+      : `Le logement est créé, mais ${tariffMsg}. Ajoutez-le depuis « Tarifs et disponibilités ».`
     return
   }
+  if (pricingWarning.value) return
   await navigateTo({ path: '/pro/biens/fiche', query: { id: propertyId.value, created: '1' } })
 }
 
 function next() {
   showStepError.value = false
   if (step.value === 1) { submitStep1(); return }
+  if (step.value === 2 && step2Error.value) { showStepError.value = true; return }
   if (step.value === 3 && step3Error.value) { showStepError.value = true; return }
   if (step.value === 4 && step4Error.value) { showStepError.value = true; return }
   if (step.value === 5) { submitUnit(); return }
@@ -278,7 +300,10 @@ const nextLabel = computed(() => {
   if (step.value === 5) return finalLoading.value ? 'Mise en ligne…' : 'Mettre en ligne'
   return 'Étape suivante'
 })
-const currentStepError = computed(() => showStepError.value ? (step.value === 3 ? step3Error.value : step.value === 4 ? step4Error.value : null) : null)
+const currentStepError = computed(() => {
+  if (!showStepError.value) return null
+  return step.value === 2 ? step2Error.value : step.value === 3 ? step3Error.value : step.value === 4 ? step4Error.value : null
+})
 
 const summary = computed(() => {
   const parts: string[] = []
@@ -386,6 +411,9 @@ const summary = computed(() => {
         </div>
 
         <div v-else-if="step === 2">
+          <p class="m-0 mb-3.5 text-[13px] font-semibold" :class="photos.length >= MIN_PHOTOS ? 'text-ok-fg' : 'text-[var(--text-muted)]'">
+            {{ photos.length }} / {{ MIN_PHOTOS }} photos{{ photos.length >= MIN_PHOTOS ? ' ✓' : '' }}
+          </p>
           <label class="block cursor-pointer rounded-lg border-[1.5px] border-dashed border-[var(--border-default)] bg-[var(--surface-page)] p-7 text-center">
             <input type="file" accept="image/jpeg,image/png,image/webp" class="hidden" :disabled="uploading" @change="addPhoto">
             <p class="m-0 text-sm font-bold">{{ uploading ? 'Envoi en cours…' : 'Cliquez pour ajouter une photo' }}</p>
