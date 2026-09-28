@@ -4063,7 +4063,8 @@ X1 a d'abord été écrit avec un rechargement de page, qui vidait les caches et
 
 En **production** (im-hazel.vercel.app, déploiement `im-6obxoxima`) : **19/20 PASS** au premier passage.
 - **T1** a échoué : un compte connecté restait sur `/connexion`. La redirection était faite au montage de la page, et la fin de l'hydratation, plus lente en production, la doublait (en local, elle passait).
-- Elle est passée dans un middleware de route (`guest-only`), qui répond 302 dès le rendu serveur. Revérifié en production après redéploiement, voir ci-dessous.
+- Elle est passée dans un middleware de route (`guest-only`), qui répond 302 dès le rendu serveur.
+- Revérifié en production (déploiement `im-ay91l20yk`) : `curl` avec session → 302 vers `/favoris`, sans session → 200. T1 à T4 : PASS. **20/20 au total.**
 
 Données de test :
 - **Contact** : quatre essais `POST /contact` marqués « [Test QA Lot 56] » / « QA Lot 56 », tous en 500.
