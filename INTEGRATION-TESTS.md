@@ -4172,6 +4172,8 @@ Demande : « la page n'est pas claire, les étapes, il ne sait pas qu'il doit cl
 | K10 | Mobile 390 px : « Prendre une photo », barre du bas visible, pas de débordement | PASS |
 | Z | Zéro erreur JS | PASS |
 
+En **production** (im-hazel.vercel.app), sur un compte neuf : K1 à K10 et zéro erreur JS, **11/11 PASS**.
+
 Deux échecs de premier passage venaient du test :
 - « Prochaines étapes » est rendu en majuscules ;
 - sur un nouvel appareil, il faut d'abord choisir le type de pièce.
