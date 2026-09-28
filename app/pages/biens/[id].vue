@@ -7,6 +7,7 @@ import { flattenSearchResults } from '~/utils/propertyListing'
 import { ApiRequestError } from '~/utils/authenticatedFetcher'
 import { errorText } from '~/utils/apiErrors'
 import { latestRequestFor } from '~/utils/rentalRequests'
+import { resolveLocation } from '~/utils/geo'
 
 const route = useRoute()
 const searchApi = usePropertySearchApi()
@@ -106,7 +107,7 @@ onMounted(async () => {
   }
 })
 
-/* ---- Localisation : carte statique + points d'intérêt signalés (GET /properties/:id/pois, public) ---- */
+/* ---- Localisation : vraie carte + points d'intérêt signalés (GET /properties/:id/pois, public) ---- */
 const pois = ref<PointOfInterest[]>([])
 watch(() => property.value?.id, async id => {
   if (!id) return
@@ -117,11 +118,15 @@ watch(() => property.value?.id, async id => {
   }
 })
 
-const mapsUrl = computed(() => {
-  const lat = property.value?.gps_latitude
-  const lng = property.value?.gps_longitude
-  return lat && lng ? `https://www.google.com/maps?q=${lat},${lng}` : null
+const placeLabel = computed(() => [property.value?.neighborhood?.name, property.value?.city?.name].filter(Boolean).join(', '))
+/** GPS s'il est valable (au Bénin), sinon centre de la ville présenté comme zone approximative. */
+const geoLocation = computed(() => (property.value ? resolveLocation(property.value) : null))
+const mapMarkers = computed(() => {
+  const loc = geoLocation.value
+  if (!loc || !property.value) return []
+  return [{ id: property.value.id, lat: loc.lat, lng: loc.lng, precise: loc.precise, label: loc.precise ? (placeLabel.value || property.value.name) : `Secteur · ${property.value.city?.name}` }]
 })
+const mapsUrl = computed(() => (geoLocation.value?.precise ? `https://www.google.com/maps?q=${geoLocation.value.lat},${geoLocation.value.lng}` : null))
 
 const POI_ICONS: Record<string, string> = { mosque: '☪', bar: '☗', school: '⌸', ecole: '⌸', noise: '♪', bruit: '♪', church: '✚', eglise: '✚', market: '▤', marche: '▤' }
 function poiIcon(type: string) {
@@ -313,16 +318,20 @@ async function sendInquiry() {
 
 /* ---- Favoris ---- */
 async function onToggleFavorite() {
-  if (!currentUser.value) { navigateTo('/connexion'); return }
+  if (!currentUser.value) { navigateTo({ path: '/connexion', query: { redirect: route.fullPath } }); return }
   await favorites.toggleProperty(propertyId)
 }
 
 /* ---- Partage ---- */
 const shareOpen = ref(false)
 const linkCopied = ref(false)
+/** Lien partagé : l'URL est lue au montage (`location` n'existe pas dans un template Vue : « Partager » plantait), logement choisi compris. */
+const shareOrigin = ref('')
+onMounted(() => { shareOrigin.value = window.location.origin })
+const shareUrl = computed(() => `${shareOrigin.value}/biens/${propertyId}${selectedUnit.value ? `?unit=${selectedUnit.value.id}` : ''}`)
 async function copyLink() {
   try {
-    await navigator.clipboard.writeText(`${location.origin}/biens/${propertyId}`)
+    await navigator.clipboard.writeText(shareUrl.value)
     linkCopied.value = true
     setTimeout(() => { linkCopied.value = false }, 2000)
   } catch {
@@ -343,7 +352,7 @@ watch(property, async p => {
 })
 async function onFavoriteSimilar(l: { propertyId: string | null }) {
   if (!l.propertyId) return
-  if (!currentUser.value) { navigateTo('/connexion'); return }
+  if (!currentUser.value) { navigateTo({ path: '/connexion', query: { redirect: route.fullPath } }); return }
   await favorites.toggleProperty(l.propertyId)
 }
 </script>
@@ -380,7 +389,7 @@ async function onFavoriteSimilar(l: { propertyId: string | null }) {
           <p class="m-0 text-[14.5px] font-bold">Partager cette annonce</p>
         </div>
         <div class="flex gap-2.5">
-          <a :href="`https://wa.me/?text=${encodeURIComponent(`${location.origin}/biens/${propertyId}`)}`" target="_blank" rel="noopener" class="rounded-sm bg-whatsapp px-[17px] py-[11px] text-[13px] font-bold text-white">WhatsApp</a>
+          <a :href="`https://wa.me/?text=${encodeURIComponent(shareUrl)}`" target="_blank" rel="noopener" class="rounded-sm bg-whatsapp px-[17px] py-[11px] text-[13px] font-bold text-white">WhatsApp</a>
           <button type="button" class="rounded-sm border border-[var(--border-default)] bg-white px-[17px] py-[11px] text-[13px] font-bold" @click="copyLink">{{ linkCopied ? 'Lien copié ✓' : 'Copier le lien' }}</button>
         </div>
       </div>
@@ -447,15 +456,14 @@ async function onFavoriteSimilar(l: { propertyId: string | null }) {
 
           <div class="my-[30px] h-px bg-sand-300" />
           <h3 class="mb-4 mt-0 font-display text-[19px] font-bold tracking-[-.02em]">Localisation</h3>
-          <div class="relative h-[220px] overflow-hidden rounded-xl border border-[var(--border-subtle)]" style="background-image: radial-gradient(60% 60% at 30% 25%, #e7f0e8, transparent), linear-gradient(150deg, var(--color-sand-200), #e4ecdf 60%, #dfe9ef)">
-            <div class="absolute inset-0 opacity-45" style="background-image: linear-gradient(var(--border-default) 1px, transparent 1px), linear-gradient(90deg, var(--border-default) 1px, transparent 1px); background-size: 44px 44px" />
-            <div class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
-              <div class="whitespace-nowrap rounded-pill bg-green-900 px-3.5 py-2.5 font-mono text-[12.5px] font-bold text-white shadow-[0_10px_24px_rgba(18,60,41,.4)]">
-                {{ [property.neighborhood?.name, property.city?.name].filter(Boolean).join(', ') || 'Localisation non précisée' }}
-              </div>
-            </div>
-            <a v-if="mapsUrl" :href="mapsUrl" target="_blank" rel="noopener" class="absolute bottom-3.5 right-3.5 rounded-pill bg-white/[.94] px-3.5 py-2 text-[12.5px] font-bold text-green-700">Ouvrir dans Maps →</a>
+          <div v-if="mapMarkers.length" class="relative isolate h-[280px] overflow-hidden rounded-xl border border-[var(--border-subtle)]">
+            <MapView :markers="mapMarkers" :active-id="property.id" :single-zoom="15" />
+            <a v-if="mapsUrl" :href="mapsUrl" target="_blank" rel="noopener" class="absolute bottom-7 right-3.5 z-[1000] rounded-pill bg-white/[.94] px-3.5 py-2 text-[12.5px] font-bold text-green-700 shadow-card">Ouvrir dans Maps →</a>
           </div>
+          <div v-else class="grid h-[120px] place-items-center rounded-xl border border-dashed border-[var(--border-default)] bg-white px-6 text-center text-[13.5px] text-[var(--text-muted)]">
+            {{ placeLabel || 'Localisation non précisée' }}
+          </div>
+          <p v-if="geoLocation && !geoLocation.precise" class="mb-0 mt-2.5 text-[12.5px] text-[var(--text-faint)]">Position approximative : l'emplacement exact de ce bien n'est pas disponible. La zone correspond au secteur de {{ property.city?.name }}.</p>
           <p v-if="property.address" class="mb-0 mt-2.5 text-[13px] text-[var(--text-muted)]">{{ property.address }}</p>
 
           <p class="mb-2.5 mt-5 text-xs font-black uppercase tracking-[.05em] text-[var(--text-faint)]">Aux alentours</p>

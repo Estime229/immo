@@ -4070,3 +4070,33 @@ Données de test :
 - **Contact** : quatre essais `POST /contact` marqués « [Test QA Lot 56] » / « QA Lot 56 », tous en 500.
 - **Compte `qa-landlord-…`** : rôle actif basculé sur « tenant » puis revenu à « landlord » par la garde.
 - **Conversation du locataire de test** avec ce propriétaire : réutilisée, sans nouveau message.
+
+## Carte des biens — intégration du travail « carte » (Leaflet / OpenStreetMap)
+
+Travail réalisé par une autre session, resté non commité dans le répertoire partagé, intégré à la demande (« la localisation n'affiche toujours pas la carte »). Ce qu'il contient :
+- **Fiche d'un logement** : vraie carte. Repère exact si le GPS est valable au Bénin, sinon zone approximative sur la ville, annoncée comme telle.
+- **Recherche** : vue carte, avec des zones par ville cliquables pour filtrer.
+- **Espace pro** : sélecteur de position à la création et dans la fiche d'un bien.
+- **Accueil** : rappel du mode « à la nuit / au mois ».
+- **Code** : `app/utils/geo.ts` (+10 tests).
+
+**Intégration** : patch appliqué sur `main` (après la fusion responsive et le Lot 56). Un seul conflit, dans `index.vue` : la grille en deux colonnes dès la tablette (`md:`) a été gardée avec la référence ajoutée par la carte.
+
+**Au passage**, deux corrections sur les pages désormais débloquées (voir Lot 56, « À faire dans les trois pages non modifiées ») :
+- « Partager » d'une fiche plantait (`location` dans le template), comme sur la vitrine. Le lien partagé garde aussi le logement choisi (`?unit=`).
+- Les quatre renvois vers `/connexion` sans retour (favoris, logements similaires) gardent maintenant la page.
+
+**Vérifications** :
+- Tests : 34 fichiers, 308 tests. `vue-tsc` : 23 erreurs, toutes antérieures (celle du partage a disparu).
+
+| Id | Scénario | Résultat |
+|---|---|---|
+| M1 | « Résidence Poutine » (aucun GPS) : carte OpenStreetMap, zone « Secteur · Abomey-Calavi », « Position approximative » | PASS |
+| M2 | « Partager » sans erreur, lien WhatsApp avec `?unit=` | PASS |
+| M3 | « Villa Cocotiers » (GPS 6.3632, 2.4185) : repère précis, « Ouvrir dans Maps », pas de mention approximative | PASS |
+| M4 | Recherche en vue carte : tuiles, repères et zones | PASS |
+| M5 | Mobile 390 px : carte affichée, pas de débordement | PASS |
+| M6 | Pro : sélecteur de position à la création d'un bien | PASS |
+| Z | Zéro erreur JS ; non-régression T1-T4 du Lot 56 | PASS |
+
+**Limite** : seuls 9 biens sur 38 ont un GPS, et l'un d'eux (« Studio LAPERTA ») pointe en mer. Tous les autres, dont « Résidence Poutine », n'affichent qu'une zone approximative tant que leur propriétaire n'a pas placé le bien avec le nouveau sélecteur. Les tuiles viennent directement d'OpenStreetMap (gratuites, attribution affichée) : à fort trafic, il faudra un fournisseur dédié.

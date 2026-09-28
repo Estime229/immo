@@ -34,6 +34,9 @@ export interface UpdatePropertyPayload {
   city_id?: string
   neighborhood_id?: string | null
   address?: string
+  /** Modifiables (vérifié le 2026-09-28) mais pas effaçables : `null` → 500, la position reste en place. */
+  gps_latitude?: number
+  gps_longitude?: number
   characteristics?: Record<string, unknown>
   is_publicly_listed?: boolean
   images?: { url: string; rank: number; is_primary: boolean }[]

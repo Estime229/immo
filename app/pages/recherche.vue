@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { PropertySearchFilters, PropertySearchResult } from '~/types/property'
 import { flattenSearchResults, type ListingCard } from '~/utils/propertyListing'
+import { resolveLocation, type MapMarker } from '~/utils/geo'
 import { classifyRental, displayPrice, filterByRental, mapLimited, RENTAL_SUFFIX, type RentalKey, type RentalMode } from '~/utils/rentalMode'
 
 const route = useRoute()
@@ -195,6 +196,13 @@ const displayItems = computed<{ listing: ListingCard; suffix: string | undefined
 })
 const listings = computed<ListingCard[]>(() => displayItems.value.map(i => i.listing))
 const shownTotal = computed(() => (rentalMode.value === 'tous' ? total.value : filteredCards.value.length))
+/**
+ * En mode « tous », `total` compte des biens (pagination serveur) alors que la
+ * liste affiche des logements (un bien peut en avoir plusieurs) : comparer les
+ * deux masquait « Afficher plus » trop tôt et rendait les derniers biens
+ * inaccessibles. On compare donc biens chargés / biens au total.
+ */
+const hasMore = computed(() => (rentalMode.value === 'tous' ? rawResults.value.length < total.value : listings.value.length < shownTotal.value))
 
 function currentFilters(forCatalog = false): PropertySearchFilters {
   const f: PropertySearchFilters = { sort: sort.value, page: page.value, limit: forCatalog ? CATALOG_PAGE : 12 }
@@ -294,23 +302,47 @@ function openListing(l: ListingCard) {
 async function onFavorite(l: ListingCard) {
   if (!l.propertyId) return
   const ok = await favorites.toggleProperty(l.propertyId)
-  if (!ok && !useApiAuth().isAuthenticated()) navigateTo('/connexion')
+  if (!ok && !useApiAuth().isAuthenticated()) navigateTo({ path: '/connexion', query: { redirect: route.fullPath } })
 }
 
-/* ---- Vue carte : pins positionnés sur les vraies coordonnées GPS quand elles existent ---- */
-const geoPoints = computed(() => {
-  const pts = rawResults.value
-    .filter(p => p.gps_latitude && p.gps_longitude)
-    .map(p => ({ id: p.id, lat: Number(p.gps_latitude), lng: Number(p.gps_longitude), listing: listings.value.find(l => l.propertyId === p.id) }))
-    .filter(p => p.listing)
-  if (!pts.length) return []
-  const lats = pts.map(p => p.lat)
-  const lngs = pts.map(p => p.lng)
-  const [minLat, maxLat] = [Math.min(...lats), Math.max(...lats)]
-  const [minLng, maxLng] = [Math.min(...lngs), Math.max(...lngs)]
-  const norm = (v: number, min: number, max: number) => (max === min ? 50 : 10 + ((v - min) / (max - min)) * 80)
-  return pts.map(p => ({ id: p.listing!.unitId, x: norm(p.lng, minLng, maxLng), y: 100 - norm(p.lat, minLat, maxLat), listing: p.listing! }))
+/* ---- Vue carte : vraie carte (Leaflet / OpenStreetMap) ----
+ * Biens avec un GPS valable → pastille prix à l'emplacement exact.
+ * Les autres (la majorité aujourd'hui) → regroupés par ville en une zone
+ * approximative ; un clic sur la zone filtre la recherche sur cette ville. */
+const mapMarkers = computed(() => {
+  const precise: MapMarker[] = []
+  const zones = new Map<string, { lat: number; lng: number; count: number }>()
+  for (const p of rawResults.value) {
+    const propertyListings = listings.value.filter(l => l.propertyId === p.id)
+    if (!propertyListings.length) continue
+    const loc = resolveLocation(p)
+    if (!loc) continue
+    if (loc.precise) {
+      const first = propertyListings[0]!
+      precise.push({ id: first.unitId, lat: loc.lat, lng: loc.lng, precise: true, label: `${Math.round(first.price / 1000)}k` })
+    } else {
+      const city = p.city!.name
+      const zone = zones.get(city) ?? { lat: loc.lat, lng: loc.lng, count: 0 }
+      zone.count += propertyListings.length
+      zones.set(city, zone)
+    }
+  }
+  const approx: MapMarker[] = [...zones].map(([city, z]) => ({ id: `zone:${city}`, lat: z.lat, lng: z.lng, precise: false, label: `${city} · ${z.count} logement${z.count > 1 ? 's' : ''}`, shortLabel: String(z.count), weight: z.count }))
+  return [...approx, ...precise]
 })
+const approxCount = computed(() => mapMarkers.value.filter(m => !m.precise).length)
+function onMapSelect(id: string) {
+  if (id.startsWith('zone:')) {
+    const city = id.slice(5)
+    if (cityName.value !== city) {
+      cityName.value = city
+      search()
+    }
+    return
+  }
+  const l = listings.value.find(x => x.unitId === id)
+  if (l) openListing(l)
+}
 </script>
 
 <template>
@@ -508,24 +540,16 @@ const geoPoints = computed(() => {
             @unhover="hoveredId = null"
           />
         </div>
-        <div v-if="view === 'carte'" class="sticky top-[94px] h-[560px] overflow-hidden rounded-2xl border border-[var(--border-default)]" style="background-image: radial-gradient(60% 60% at 30% 25%, #e7f0e8, transparent), linear-gradient(150deg, var(--color-sand-200), #e4ecdf 60%, #dfe9ef)">
-          <div class="absolute inset-0 opacity-45" style="background-image: linear-gradient(var(--border-default) 1px, transparent 1px), linear-gradient(90deg, var(--border-default) 1px, transparent 1px); background-size: 66px 66px" />
-          <p v-if="!geoPoints.length" class="relative z-[1] flex h-full items-center justify-center px-8 text-center text-[13.5px] text-[var(--text-muted)]">Aucune coordonnée disponible pour ces résultats.</p>
-          <div
-            v-for="p in geoPoints"
-            :key="p.id"
-            class="absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer"
-            :style="{ left: `${p.x}%`, top: `${p.y}%`, zIndex: hoveredId === p.id ? 5 : 1 }"
-            @click="openListing(p.listing)"
-            @mouseenter="hoveredId = p.id"
-            @mouseleave="hoveredId = null"
-          >
-            <div class="whitespace-nowrap rounded-pill px-3.5 py-2.5 font-mono text-[12.5px] font-bold transition-all" :class="hoveredId === p.id ? 'scale-110 bg-green-900 text-white shadow-[0_10px_24px_rgba(18,60,41,.4)]' : 'scale-100 bg-white text-[var(--text-primary)] shadow-[0_3px_10px_rgba(26,23,20,.2)]'">{{ Math.round(p.listing.price / 1000) }}k</div>
+        <div v-if="view === 'carte'" class="sticky top-[94px]">
+          <div class="relative isolate h-[560px] overflow-hidden rounded-2xl border border-[var(--border-default)]">
+            <MapView :markers="mapMarkers" :active-id="hoveredId" @select="onMapSelect" @hover="hoveredId = $event" />
           </div>
+          <p v-if="!mapMarkers.length" class="mb-0 mt-2.5 text-[12.5px] text-[var(--text-faint)]">Aucune localisation disponible pour ces résultats.</p>
+          <p v-else-if="approxCount" class="mb-0 mt-2.5 text-[12.5px] text-[var(--text-faint)]">Les zones en pointillés regroupent les logements sans emplacement exact : cliquez dessus pour filtrer par ville.</p>
         </div>
       </div>
       <p v-if="rentalMode !== 'tous' && catalogTruncated" class="mb-0 mt-5 text-center text-[12.5px] text-[var(--text-faint)]">Le tri par type de location couvre les {{ CATALOG_CAP }} logements les plus pertinents — affinez par ville ou budget pour aller plus loin.</p>
-      <div v-if="listings.length < shownTotal" class="mt-[34px] flex justify-center">
+      <div v-if="hasMore" class="mt-[34px] flex justify-center">
         <button type="button" class="rounded-pill border border-[var(--border-default)] bg-white px-7 py-[13px] text-sm font-bold" :disabled="status === 'loading'" @click="loadMore">{{ status === 'loading' ? 'Chargement…' : 'Afficher plus de logements' }}</button>
       </div>
     </template>

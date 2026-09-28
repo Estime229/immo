@@ -2,6 +2,7 @@
 import { ApiRequestError } from '~/utils/authenticatedFetcher'
 import { errorText } from '~/utils/apiErrors'
 import { UPLOAD_HINT, prepareUpload } from '~/utils/uploadFile'
+import type { GeoPoint } from '~/utils/geo'
 import {
   PROPERTY_CHARACTERISTICS, RENTAL_CHOICES, imagesPayload, rentalSetup, validateMonths, validateRentalPrices,
   type RentalChoice
@@ -20,7 +21,7 @@ const notVerified = computed(() => currentUser.value?.is_verified === false)
 
 const STEP_LABELS = ['Le bien', 'Photos', 'Le logement', 'Conditions', 'Publication']
 const STEP_HINTS = [
-  'Nom, type, adresse et ce que le bâtiment offre.',
+  'Nom, type, adresse, position sur la carte et ce que le bâtiment offre.',
   'Photos du bien — optionnel, peut être fait plus tard.',
   'Type, surface, ameublement et mode de location : au mois, à la nuit ou les deux.',
   'Caution, avance et frais (location au mois) ; règles des séjours courts (location à la nuit).',
@@ -40,6 +41,9 @@ const buildingType = ref('')
 const cityId = ref('')
 const neighborhoodId = ref('')
 const address = ref('')
+/** Position choisie sur la carte. Une fois envoyée, elle ne peut plus être effacée (l'API renvoie 500 sur `null`), seulement déplacée. */
+const gps = ref<GeoPoint | null>(null)
+const gpsSaved = ref(false)
 const description = ref('')
 const characteristics = ref<Record<string, boolean>>({})
 const onVitrine = ref(true)
@@ -74,6 +78,7 @@ onMounted(async () => {
   unitTypeId.value ||= unitTypes.value[0]?.id ?? ''
   refsReady.value = true
 })
+const cityName = computed(() => cities.value.find(c => c.id === cityId.value)?.name ?? null)
 watch(cityId, async id => {
   neighborhoodId.value = ''
   neighborhoods.value = id ? await refData.fetchNeighborhoods(id) : []
@@ -86,6 +91,7 @@ function propertyPayload() {
     city_id: cityId.value,
     neighborhood_id: neighborhoodId.value || undefined,
     address: address.value.trim() || undefined,
+    ...(gps.value ? { gps_latitude: gps.value.lat, gps_longitude: gps.value.lng } : {}),
     description: description.value.trim() ? { fr: description.value.trim() } : undefined,
     characteristics: { ...characteristics.value },
     is_publicly_listed: onVitrine.value
@@ -106,6 +112,7 @@ async function submitStep1() {
       const created = await propertiesApi.create(propertyPayload())
       propertyId.value = created.id
     }
+    if (gps.value) gpsSaved.value = true
     step.value = 2
   } catch (e) {
     step1Error.value = formatError(e, 'La création a échoué.')
@@ -346,6 +353,11 @@ const summary = computed(() => {
               <p class="mb-1.5 mt-0 text-[12.5px] font-bold">Adresse (optionnel)</p>
               <input v-model="address" placeholder="Rue 12.45, Fidjrossè" class="h-[46px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-3.5 text-sm outline-none">
             </div>
+          </div>
+          <div>
+            <p class="mb-1 mt-0 text-[12.5px] font-bold">Position sur la carte (recommandé)</p>
+            <p class="mb-2.5 mt-0 text-[12.5px] text-[var(--text-muted)]">Les locataires verront le bien à cet endroit, dans la recherche et sur l'annonce.</p>
+            <MapPicker v-model="gps" :city-name="cityName" :clearable="!gpsSaved" />
           </div>
           <div>
             <p class="mb-1.5 mt-0 text-[12.5px] font-bold">Description (optionnel)</p>

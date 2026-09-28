@@ -4,6 +4,7 @@ import type { PointOfInterest } from '~/types/landlordProperty'
 import { ApiRequestError } from '~/utils/authenticatedFetcher'
 import { errorText } from '~/utils/apiErrors'
 import { prepareUpload } from '~/utils/uploadFile'
+import { formatCoords, preciseLocation, toCoordinate, type GeoPoint } from '~/utils/geo'
 import { NOISE_LEVELS, POI_TYPES, PROPERTY_CHARACTERISTICS, deleteBlocker, imagesPayload } from '~/utils/propertyForm'
 
 definePageMeta({ layout: 'pro' })
@@ -87,12 +88,28 @@ async function deleteUnit() {
 
 /* ---- Édition du bien — tous ces champs sont modifiables côté API (vérifié en live, Lot 45) ---- */
 const editingProperty = ref(false)
-const edit = ref({ name: '', status: '', description: '', buildingType: '', cityId: '', neighborhoodId: '', address: '', onVitrine: false, characteristics: {} as Record<string, boolean> })
+const edit = ref({ name: '', status: '', description: '', buildingType: '', cityId: '', neighborhoodId: '', address: '', gps: null as GeoPoint | null, onVitrine: false, characteristics: {} as Record<string, boolean> })
 const savingProperty = ref(false)
 const savePropertyError = ref('')
 const propertyTypes = ref<{ code: string; label: string }[]>([])
 const cities = ref<{ id: string; name: string }[]>([])
 const neighborhoods = ref<{ id: string; name: string }[]>([])
+
+/*
+ * Position : `preciseLocation` écarte les points hors du Bénin (cas réel d'un
+ * bien placé en pleine mer). Une position enregistrée ne peut être que
+ * déplacée — l'API renvoie 500 si on envoie `null` (vérifié le 2026-09-28).
+ */
+const savedGps = computed(() => (property.value ? preciseLocation(property.value.gps_latitude, property.value.gps_longitude) : null))
+const hasStoredGps = computed(() => toCoordinate(property.value?.gps_latitude) !== null && toCoordinate(property.value?.gps_longitude) !== null)
+const storedGpsInvalid = computed(() => hasStoredGps.value && !savedGps.value)
+const editCityName = computed(() => cities.value.find(c => c.id === edit.value.cityId)?.name ?? property.value?.city?.name ?? null)
+const gpsSection = ref<HTMLElement | null>(null)
+async function placeOnMap() {
+  await openEditProperty()
+  await nextTick()
+  gpsSection.value?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+}
 
 const PROPERTY_STATUS_OPTIONS = [
   { code: 'available', label: 'Disponible' },
@@ -112,6 +129,7 @@ async function openEditProperty() {
     cityId: p.city_id ?? '',
     neighborhoodId: p.neighborhood_id ?? '',
     address: p.address ?? '',
+    gps: savedGps.value,
     onVitrine: p.is_publicly_listed,
     characteristics: Object.fromEntries(PROPERTY_CHARACTERISTICS.map(c => [c.key, chars[c.key] === true]))
   }
@@ -140,6 +158,7 @@ async function saveProperty() {
       city_id: edit.value.cityId || undefined,
       neighborhood_id: edit.value.neighborhoodId || null,
       address: edit.value.address.trim(),
+      ...(edit.value.gps ? { gps_latitude: edit.value.gps.lat, gps_longitude: edit.value.gps.lng } : {}),
       characteristics: edit.value.characteristics,
       is_publicly_listed: edit.value.onVitrine
     })
@@ -330,6 +349,14 @@ const perfCards = computed(() => {
           <NuxtLink :to="`/biens/${property.id}`" target="_blank" class="rounded-pill border border-[var(--border-default)] bg-white px-4 py-2.5 text-[13px] font-bold">Voir l'annonce</NuxtLink>
         </div>
 
+        <div v-if="!savedGps && !editingProperty" class="mx-6 mb-5 flex flex-wrap items-center gap-3 rounded-md border border-warn-border bg-warn-bg px-4 py-3">
+          <p class="m-0 min-w-0 flex-1 text-[13px] text-warn-fg">
+            <strong>{{ storedGpsInvalid ? 'Position incorrecte.' : 'Pas encore placé sur la carte.' }}</strong>
+            {{ storedGpsInvalid ? "La position enregistrée tombe hors du Bénin : les locataires ne voient qu'une zone approximative." : "Les locataires ne voient qu'une zone approximative autour de la ville." }}
+          </p>
+          <CoreButton tone="secondary" @click="placeOnMap">Placer sur la carte</CoreButton>
+        </div>
+
         <div v-if="editingProperty" class="border-t border-[var(--border-subtle)] p-6">
           <div class="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
             <div><p class="mb-1.5 mt-0 text-[12.5px] font-bold">Nom du bien</p><input v-model="edit.name" class="h-[46px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-3.5 text-sm outline-none"></div>
@@ -361,6 +388,12 @@ const perfCards = computed(() => {
             </div>
           </div>
           <p class="mb-0 mt-1.5 text-[12px] text-[var(--text-faint)]">L'état du bâtiment est informatif : la présence dans la recherche dépend uniquement des logements libres.</p>
+          <div ref="gpsSection" class="mt-3.5">
+            <p class="mb-1 mt-0 text-[12.5px] font-bold">Position sur la carte</p>
+            <p v-if="storedGpsInvalid" class="mb-2.5 mt-0 text-[12.5px] font-semibold text-warn-fg">La position enregistrée ({{ formatCoords({ lat: Number(property.gps_latitude), lng: Number(property.gps_longitude) }) }}) est hors du Bénin : replacez le bâtiment.</p>
+            <p v-else class="mb-2.5 mt-0 text-[12.5px] text-[var(--text-muted)]">Les locataires voient le bien à cet endroit, dans la recherche et sur l'annonce.</p>
+            <MapPicker v-model="edit.gps" :city-name="editCityName" :clearable="!hasStoredGps" />
+          </div>
           <p class="mb-1.5 mt-3.5 text-[12.5px] font-bold">Description</p>
           <textarea v-model="edit.description" class="min-h-[80px] w-full resize-y rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] p-3.5 text-sm outline-none" />
           <p class="mb-2 mt-3.5 text-[12.5px] font-bold">Le bâtiment dispose de</p>

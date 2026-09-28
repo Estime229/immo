@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { PropertySearchResult } from '~/types/property'
 import { flattenSearchResults, type ListingCard } from '~/utils/propertyListing'
-import { classifyRental, mapLimited, type RentalMode } from '~/utils/rentalMode'
+import { classifyRental, mapLimited } from '~/utils/rentalMode'
 
 const { photos, formatFcfaShort } = useProperties()
 const searchApi = usePropertySearchApi()
@@ -68,7 +68,11 @@ const CATEGORY_DEFS = [
   { code: 'maison', label: 'Maisons', photoIndex: 2 }
 ] as const
 
-interface CategoryTile { label: string; count: string; empty: boolean; bg: string; unitTypeId: string }
+/**
+ * Pas de compte affiché sur les tuiles : le compte serveur (`GET /property/search?unit_type_id=`)
+ * ne sait pas filtrer par mode nuit/mois, il contredirait le reste de la page une fois un mode choisi.
+ */
+interface CategoryTile { label: string; empty: boolean; bg: string; unitTypeId: string }
 const categories = ref<CategoryTile[]>([])
 const categoriesLoading = ref(true)
 
@@ -88,7 +92,6 @@ async function loadCategories() {
     }))
     categories.value = results.map(r => ({
       label: r.label,
-      count: r.count === 0 ? '0 disponible' : `${r.count}${r.count > 1 ? ' disponibles' : ' disponible'}`,
       empty: r.count === 0,
       bg: r.count === 0 ? 'linear-gradient(150deg, var(--color-green-600), var(--color-green-900))' : photos[r.photoIndex],
       unitTypeId: r.unitTypeId
@@ -161,7 +164,6 @@ function moodStyle(m: MoodImage) {
 }
 const RENTAL_KEYS: RentalKey[] = ['nuit', 'mois']
 const rentalUnits = ref<Record<RentalKey, ListingCard[]>>({ nuit: [], mois: [] })
-const modeByUnit = ref<Record<string, RentalMode>>({})
 const rentalLoading = ref(true)
 const activeRental = ref<RentalKey>('nuit')
 
@@ -175,17 +177,14 @@ async function loadRentalModes(cards: ListingCard[]) {
         return null
       }
     })
-    const byUnit: Record<string, RentalMode> = {}
     const nuit: ListingCard[] = []
     const mois: ListingCard[] = []
     cards.forEach((c, i) => {
       const m = modes[i]
       if (!m) return
-      byUnit[c.unitId] = m
       if (m.nightly !== null) nuit.push({ ...c, price: m.nightly })
       if (m.monthly !== null) mois.push({ ...c, price: m.monthly })
     })
-    modeByUnit.value = byUnit
     rentalUnits.value = { nuit: nuit.sort((a, b) => a.price - b.price), mois: mois.sort((a, b) => a.price - b.price) }
     if (!nuit.length && mois.length) activeRental.value = 'mois'
   } finally {
@@ -225,10 +224,42 @@ function switchToOther() {
   if (el) window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 90, behavior: 'smooth' })
 }
 
+/**
+ * Rappel flottant : une fois les deux cartes « à la nuit / au mois » scrollées
+ * hors écran, tout le reste de la page (villes, annonces) reste filtré sur le
+ * choix fait plus haut — sans ce rappel, rien ne le redit une fois qu'on a
+ * défilé. N'apparaît qu'en scrollant *au-delà* des cartes (top < 0), jamais
+ * avant de les atteindre.
+ */
+const rentalToggleEl = ref<HTMLElement | null>(null)
+const showRentalReminder = ref(false)
+function scrollToRentalToggle() {
+  const el = rentalToggleEl.value
+  if (el) window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 90, behavior: 'smooth' })
+}
+
+/** IntersectionObserver écarté ici : sur cette page, son tout premier callback (état initial, avant
+ * tout scroll) n'arrivait pas de façon fiable — reproduit en direct, le badge ne s'affichait jamais
+ * tant qu'aucun clic n'avait eu lieu avant le scroll. Un simple listener de scroll, throttlé sur
+ * `requestAnimationFrame`, est trivial à vérifier et ne dépend d'aucun état initial de l'observer. */
+let rentalScrollTicking = false
+function onRentalScroll() {
+  if (rentalScrollTicking) return
+  rentalScrollTicking = true
+  requestAnimationFrame(() => {
+    const el = rentalToggleEl.value
+    showRentalReminder.value = !!el && el.getBoundingClientRect().bottom < 0
+    rentalScrollTicking = false
+  })
+}
+
 onMounted(async () => {
   const [c] = await Promise.all([refData.fetchCities(), loadCategories(), loadListings(), favorites.ensureLoaded()])
   cities.value = c
 })
+
+onMounted(() => window.addEventListener('scroll', onRentalScroll, { passive: true }))
+onUnmounted(() => window.removeEventListener('scroll', onRentalScroll))
 
 const cityRails = ref<(HTMLElement | null)[]>([])
 function setCityRail(index: number, el: unknown) {
@@ -251,7 +282,7 @@ function openListing(l: ListingCard) {
 async function onFavorite(l: ListingCard) {
   if (!l.propertyId) return
   const ok = await favorites.toggleProperty(l.propertyId)
-  if (!ok && !useApiAuth().isAuthenticated()) navigateTo('/connexion')
+  if (!ok && !useApiAuth().isAuthenticated()) navigateTo({ path: '/connexion', query: { redirect: '/' } })
 }
 
 /* ---- Idées d'escapade — navigation par ville, pas des statistiques : chaque clic lance une vraie recherche ---- */
@@ -379,7 +410,7 @@ const TRUST_ITEMS = [
         <p class="mb-0 mt-2 text-[14.5px] text-[var(--text-muted)]">Les logements présentés sur toute la page suivent votre choix.</p>
       </div>
 
-      <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+      <div ref="rentalToggleEl" class="grid grid-cols-1 gap-4 md:grid-cols-2">
         <button
           v-for="key in RENTAL_KEYS"
           :key="key"
@@ -610,5 +641,25 @@ const TRUST_ITEMS = [
     </section>
 
     <HomeLaunchOfferModal v-if="showLaunchOffer" @close="dismissLaunchOffer" @explore="exploreFromLaunchOffer" />
+
+    <!-- Rappel flottant du mode choisi (nuit/mois) — visible une fois les cartes de sélection scrollées hors écran.
+         Teleport vers body : le wrapper de page a une animation d'entrée (`animate-[im-fade_...]`) qui, même
+         terminée, fait de lui un containing block pour tout descendant `fixed` (comportement Chromium connu
+         sur un ancêtre ayant animé `transform`) — sans Teleport le badge se positionne dans le flux de la page
+         au lieu du viewport, vérifié en direct (bounding box à y≈2968 au lieu d'un point fixe de l'écran). -->
+    <Teleport to="body">
+      <Transition name="im-fade">
+        <button
+          v-if="showRentalReminder"
+          type="button"
+          class="fixed bottom-6 right-6 z-30 flex items-center gap-2.5 rounded-pill border border-[var(--border-subtle)] bg-[var(--surface-page)]/95 px-4 py-3 shadow-panel backdrop-blur-md transition-transform hover:-translate-y-0.5"
+          @click="scrollToRentalToggle"
+        >
+          <span class="h-2.5 w-2.5 flex-none rounded-pill" :class="RENTAL_META[activeRental].swatch" />
+          <span class="text-[13px] font-bold text-[var(--text-primary)]">{{ RENTAL_META[activeRental].label }}</span>
+          <span class="text-[11.5px] text-[var(--text-faint)]">changer ↑</span>
+        </button>
+      </Transition>
+    </Teleport>
   </div>
 </template>
