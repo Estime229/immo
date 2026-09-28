@@ -3822,3 +3822,13 @@ Les montants testés sont ceux du cycle réel :
 | Z | Zéro erreur JS | PASS |
 
 Le passage de C1 à D a été rejoué en deux fois, sur la même demande et sans nouveau paiement. Le test cliquait sur « Marquer terminée » avant que la page soit interactive.
+
+En **production** (im-hazel.vercel.app, déploiement `im-my4bg2j05`), le scénario A1 à Z a été rejoué avec une contre-offre de 9 000 F, soit 7 200 versés et 1 800 retenus, puis un litige réglé à 1 000 / 800 : **20/20 PASS**.
+- **A3** a d'abord échoué : le texte était lu avant la réponse de l'API. Revérifié sur une demande neuve, avec une attente sur « Remplacée » : PASS. L'API confirme l'offre de 20 000 `superseded` et la contre-offre `accepted`.
+- **H2** : le signalement traité est bien passé « En examen » avec « Arsène Artisan » assigné. Le détail du journal de test pointait sur un autre signalement.
+
+Données de test :
+- **Artisan** `qa-artisan-1790551743@example.com` (plombier) : trois interventions clôturées, un avis, un partenariat terminé avec le propriétaire de test.
+- **Portefeuille** du propriétaire `qa-landlord-…` (`balance_total`) : passé de 54 000 à 7 000 F. C'est le coût des interventions payées ; l'artisan a reçu les parts correspondantes.
+- **Signalements** du propriétaire de test `pro-landlord-test-…` : un signalement est passé « En examen », avec « Arsène Artisan » assigné et une demande d'intervention ouverte.
+- **Comptes orphelins** : `qa-artisan2-…` et `qa-artisan3-…`, créés pour reproduire #78.
