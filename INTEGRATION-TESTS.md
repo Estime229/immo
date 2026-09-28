@@ -4102,3 +4102,26 @@ Travail réalisé par une autre session, resté non commité dans le répertoire
 En **production** (im-hazel.vercel.app, déploiement `im-intrr7ql4`) : M1 à M6 et zéro erreur JS, **7/7 PASS**. La fiche de « Résidence Poutine » affiche la carte d'Abomey-Calavi avec la zone approximative.
 
 **Limite** : seuls 9 biens sur 38 ont un GPS, et l'un d'eux (« Studio LAPERTA ») pointe en mer. Tous les autres, dont « Résidence Poutine », n'affichent qu'une zone approximative tant que leur propriétaire n'a pas placé le bien avec le nouveau sélecteur. Les tuiles viennent directement d'OpenStreetMap (gratuites, attribution affichée) : à fort trafic, il faudra un fournisseur dédié.
+
+## Calendrier de réservation (courte durée) — refonte
+
+Demande : « le calendrier n'est pas intuitif, on ne voit pas le mois », avec une capture de référence (sélecteur à deux mois). L'ancien calendrier alignait 60 cases à partir d'aujourd'hui dans une grille de 7 colonnes : aucun nom de mois, aucun jour de la semaine, et le 1er du mois ne tombait pas sous le bon jour. Il calculait aussi la date avec `toISOString()`, ce qui décalait d'un jour autour de minuit (UTC+1).
+
+**Livré** :
+- `app/utils/dateRangeCalendar.ts` : grille par mois (lundi en premier), règles d'arrivée et de départ, résumé, formats ; dates ISO seulement.
+- `app/components/booking/DateRangePicker.vue` : utilisé dans la fiche d'un logement à la place de la grille.
+  - **Champs** : « Arrivée / Départ » dans la carte de réservation, qui ouvrent le calendrier. Deux mois côte à côte (un seul, en feuille, sur mobile), navigation sur 12 mois.
+  - **Affichage** : jours passés ou déjà pris barrés, arrivée et départ en ronds pleins, plage surlignée (y compris au survol). Résumé « 2 nuits · 5 oct. 2026 - 7 oct. 2026 ». Champs effaçables, « Effacer les dates », « Fermer », Échap.
+  - **Règles appliquées avant le clic** : séjour minimum et maximum ; pas de nuit prise entre l'arrivée et le départ ; départ permis le jour où une période prise commence (« départ seulement », même convention que l'API).
+
+**Tests** : `tests/dateRangeCalendar.test.ts` (+10). `vue-tsc` : 23 erreurs, toutes antérieures.
+
+| Id | Scénario (« Studio nuitée », nuits du 7 au 9 et du 22 au 23 octobre prises, 2 nuits minimum) | Résultat |
+|---|---|---|
+| C1-C2 | Champs « Arrivée / Départ » ; « Septembre 2026 / Octobre 2026 », L M M J V S D, 1er septembre sous le mardi | PASS |
+| C3 | Jours passés et nuits prises barrés, inactifs, annoncés aux lecteurs d'écran | PASS |
+| C4 | Arrivée le 5 : le 6 inactif (minimum), le 7 possible (« départ seulement »), le 8 inactif | PASS |
+| C5-C6 | « 2 nuits · 5 oct. 2026 - 7 oct. 2026 », nuit du 6 surlignée ; mois suivant / précédent | PASS |
+| C7-C8 | Fermé : dates dans les champs, total affiché, « Réserver » actif ; « Effacer les dates » puis Échap | PASS |
+| C9 | Mobile 390 px : feuille en bas d'écran, un mois, pas de débordement | PASS |
+| Z | Zéro erreur JS | PASS |

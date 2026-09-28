@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import type { AvailabilityBlock, OwnerProfile, PointOfInterest, PropertySearchResult, ReviewItem, ReviewStats, UnitPricing, UnitSearchResult } from '~/types/property'
 import type { BookingSummary, RentalRequestSummary } from '~/types/tenant'
-import { buildCalendarDays } from '~/utils/availabilityCalendar'
 import { quoteStay, rangeHitsBlock, stayLengthError } from '~/utils/stayPricing'
 import { flattenSearchResults } from '~/utils/propertyListing'
 import { ApiRequestError } from '~/utils/authenticatedFetcher'
@@ -166,21 +165,9 @@ watch(selectedUnit, u => { if (u) loadUnitAvailability(u.id) }, { immediate: tru
 const dailyPricing = computed(() => pricing.value.find(p => p.billing_frequency === 'daily' && p.is_available))
 const isShortStay = computed(() => !!dailyPricing.value)
 
-/* ---- Calendrier réel (30 jours à partir d'aujourd'hui) ---- */
-/** 60 jours : avec 30, un séjour au mois (palier mensuel) ne pouvait même pas être sélectionné. */
-const calendarDays = computed(() => buildCalendarDays(new Date(), 60, availabilityBlocks.value))
+/* ---- Dates du séjour : `BookingDateRangePicker` (mois, jours de la semaine, jours pris barrés) ---- */
 const checkIn = ref<string | null>(null)
 const checkOut = ref<string | null>(null)
-function pickDate(day: { iso: string; blocked: boolean }) {
-  if (day.blocked) return
-  // Une plage complète (checkOut déjà posé) ou un jour <= checkIn : on recommence une nouvelle sélection.
-  if (!checkIn.value || checkOut.value || day.iso <= checkIn.value) {
-    checkIn.value = day.iso
-    checkOut.value = null
-  } else {
-    checkOut.value = day.iso
-  }
-}
 const nights = computed(() => {
   if (!checkIn.value || !checkOut.value) return 0
   return Math.round((new Date(checkOut.value).getTime() - new Date(checkIn.value).getTime()) / 86400000)
@@ -509,22 +496,13 @@ async function onFavoriteSimilar(l: { propertyId: string | null }) {
             </template>
             <template v-else-if="isShortStay">
               <p class="mb-2.5 mt-4 text-xs font-black uppercase tracking-[.05em] text-[var(--text-faint)]">Vos dates<span v-if="minStay && minStay > 1" class="ml-1.5 font-semibold normal-case tracking-normal">· {{ minStay }} nuits minimum</span></p>
-              <div class="grid grid-cols-7 gap-[5px]">
-                <button
-                  v-for="day in calendarDays"
-                  :key="day.iso"
-                  :data-iso="day.iso"
-                  type="button"
-                  class="h-[36px] rounded-xs text-[12px] font-semibold transition-all"
-                  :class="[
-                    day.blocked ? 'cursor-not-allowed bg-[var(--surface-page)] text-sand-500 line-through' :
-                    (day.iso === checkIn || day.iso === checkOut) ? 'cursor-pointer bg-green-900 text-white' :
-                    (checkIn && checkOut && day.iso > checkIn && day.iso < checkOut) ? 'cursor-pointer bg-green-50 text-green-800' :
-                    'cursor-pointer bg-white text-[var(--text-primary)]'
-                  ]"
-                  @click="pickDate(day)"
-                >{{ day.date.getDate() }}</button>
-              </div>
+              <BookingDateRangePicker
+                v-model:check-in="checkIn"
+                v-model:check-out="checkOut"
+                :blocks="availabilityBlocks"
+                :min-nights="minStay"
+                :max-nights="maxStay"
+              />
 
               <div v-if="nights > 0" class="mt-4 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-page)] p-4">
                 <template v-if="stayQuote">
