@@ -2,7 +2,7 @@
 
 Relevés par l'équipe frontend en testant la plateforme contre l'API de production (`https://immo-b89b.onrender.com/v1/api`). Chaque point a été reproduit en direct (curl ou navigateur) et, quand c'était possible, confirmé dans le code de `back-end-api-immo-app`. Le détail de chaque constat se trouve dans `INTEGRATION-TESTS.md` (numéro de lot indiqué).
 
-Mis à jour le 28/09/2026 (Lot 56). Statut : **ouvert** sauf mention contraire.
+Mis à jour le 06/10/2026. Lot 56 (28/09/2026) puis **correctifs backend groupés** (05-06/10/2026, branche `fix/corrections-tests-front`, détail en bas de fichier). Statut : **ouvert** sauf mention contraire.
 
 **Légende de gravité** — 🔴 bloquant ou faille · 🟠 données incohérentes ou fonction manquante importante · 🟡 contrat d'API ou confort.
 
@@ -12,106 +12,107 @@ Mis à jour le 28/09/2026 (Lot 56). Statut : **ouvert** sauf mention contraire.
 
 | # | Gravité | Sujet | Endpoint | Lot |
 |---|---|---|---|---|
-| 1 | 🔴 | Aucun email OTP envoyé en production | `POST /auth/request-otp` | 44 |
-| 2 | 🔴 | Code `000000` accepté en production | `POST /auth/verify-otp` | 44 |
+| 1 | 🔴 | Aucun email OTP envoyé en production — **en partie corrigé** (06/10/2026) : code aligné (`email-otp.provider` cohérent avec `EmailService`) ; en prod, aucun fournisseur email n'est encore configuré — reste une action d'infra (clé Resend/SMTP) | `POST /auth/request-otp` | 44 |
+| 2 | 🔴 | Code `000000` accepté en production — **en partie corrigé** (06/10/2026) : avertissement ajouté au démarrage si le contournement est actif hors local ; aucune exception levée (choix volontaire : la prod s'en sert encore pour les tests) | `POST /auth/verify-otp` | 44 |
 | 3 | 🔴 | Limite anti-spam OTP probablement commune à tous les utilisateurs | `request-otp`, `verify-otp` | 44 |
-| 4 | 🔴 | Invitation d'équipe en 500 après écriture ; jeton perdu, personne ne peut rejoindre (cause trouvée) | `POST /team/invite` | I2, 40, 53 |
-| 5 | 🔴 | Suppression d'un bien/logement occupé acceptée | `DELETE /property/:id`, `DELETE /property/:pid/units/:uid` | 45 |
-| 6 | 🟠 | Impossible de retirer une annonce de la recherche | `GET /property/search` | 45 |
-| 7 | 🟠 | Deux notions de « vérifié » qui divergent | `/auth/me`, `PATCH /profile/me`, `VerifiedUserGuard` | 43, 45 |
-| 8 | 🟠 | `finalize` ne valide pas IFU/RCCM, écritures partielles | `POST /onboarding/finalize` | 44 |
-| 9 | 🟠 | `finalize` écrase les rôles existants | `POST /onboarding/finalize` | 44 |
-| 10 | 🟠 | Équipements enregistrés mais jamais renvoyés au public | `GET /property/:id`, `GET /property/search` | 45 |
-| 11 | 🔴 | Écritures réussies malgré une réponse 500 (cause trouvée : email envoyé après l'enregistrement) | `POST /visits`, `PATCH /visits/:id/confirm` · `reject` · `cancel` | 40, 48 |
-| 12 | 🟠 | Premier paiement en échec si le wallet n'a jamais été lu | `POST /payment/verify-return` | 40 |
+| 4 | ✅ | ~~Invitation d'équipe en 500 après écriture ; jeton perdu, personne ne peut rejoindre (cause trouvée)~~ — corrigé (06/10/2026, correctifs backend groupés) | `POST /team/invite` | I2, 40, 53 |
+| 5 | ✅ | ~~Suppression d'un bien/logement occupé acceptée~~ — corrigé (06/10/2026, correctifs backend groupés) | `DELETE /property/:id`, `DELETE /property/:pid/units/:uid` | 45 |
+| 6 | 🟠 | Impossible de retirer une annonce de la recherche — décision produit : non traité dans ce lot (06/10/2026) | `GET /property/search` | 45 |
+| 7 | 🟠 | Deux notions de « vérifié » qui divergent — **en partie corrigé** (06/10/2026) : KYC refusé remet `is_verified=false` et invalide le cache de session ; un compte vérifié qui redépose une pièce n'est pas dégradé | `/auth/me`, `PATCH /profile/me`, `VerifiedUserGuard` | 43, 45 |
+| 8 | ✅ | ~~`finalize` ne valide pas IFU/RCCM, écritures partielles~~ — corrigé (06/10/2026, correctifs backend groupés) | `POST /onboarding/finalize` | 44 |
+| 9 | ✅ | ~~`finalize` écrase les rôles existants~~ — corrigé (06/10/2026, correctifs backend groupés) | `POST /onboarding/finalize` | 44 |
+| 10 | ✅ | ~~Équipements enregistrés mais jamais renvoyés au public~~ — corrigé (06/10/2026, correctifs backend groupés) | `GET /property/:id`, `GET /property/search` | 45 |
+| 11 | ✅ | ~~Écritures réussies malgré une réponse 500 (cause trouvée : email envoyé après l'enregistrement)~~ — corrigé (06/10/2026, correctifs backend groupés) | `POST /visits`, `PATCH /visits/:id/confirm` · `reject` · `cancel` | 40, 48 |
+| 12 | ✅ | ~~Premier paiement en échec si le wallet n'a jamais été lu~~ — corrigé (06/10/2026, correctifs backend groupés) | `POST /payment/verify-return` | 40 |
 | 13 | 🟠 | Pas de filtre « à la nuit / au mois » dans la recherche | `GET /property/search` | 41, 42 |
-| 14 | 🟠 | Aucun endpoint pour enregistrer le téléphone après l'OTP | `/onboarding/draft`, `/user/update` | 44 |
-| 15 | 🟡 | `PATCH /promo-codes/:id` exige `id` dans le corps | `PATCH /promo-codes/:id` | IP (promo), revérifié 26/09 |
-| 16 | 🟡 | Doublons IFU/RCCM renvoyés en 403 au lieu de 409 | `PATCH /profile/me` | 44 |
+| 14 | ✅ | ~~Aucun endpoint pour enregistrer le téléphone après l'OTP~~ — corrigé (06/10/2026, correctifs backend groupés) | `/onboarding/draft`, `/user/update` | 44 |
+| 15 | ✅ | ~~`PATCH /promo-codes/:id` exige `id` dans le corps~~ — corrigé (06/10/2026, correctifs backend groupés) | `PATCH /promo-codes/:id` | IP (promo), revérifié 26/09 |
+| 16 | ✅ | ~~Doublons IFU/RCCM renvoyés en 403 au lieu de 409~~ — corrigé (06/10/2026, correctifs backend groupés) | `PATCH /profile/me` | 44 |
 | 17 | 🟡 | Exemple Swagger du RCCM refusé par la validation | `PATCH /profile/me` | 44 |
-| 18 | 🟡 | Upload de photo sans compte vérifié, pas de suppression unitaire | `POST /property/upload-image`, `/property/media` | 45 |
-| 19 | 🟡 | Blocages de calendrier acceptés dans le passé, message de conflit inexact | `POST /units/:id/availability-blocks` | 45 |
+| 18 | ✅ | ~~Upload de photo sans compte vérifié, pas de suppression unitaire~~ — corrigé (06/10/2026, correctifs backend groupés) | `POST /property/upload-image`, `/property/media` | 45 |
+| 19 | ✅ | ~~Blocages de calendrier acceptés dans le passé, message de conflit inexact~~ — corrigé (06/10/2026, correctifs backend groupés) | `POST /units/:id/availability-blocks` | 45 |
 | 20 | ✅ | ~~`agent_id` librement choisi à la création d'un bien~~ — corrigé (revérifié Lot 53) | `POST /property` | 45, 53 |
 | 21 | 🟡 | Pas d'état « brouillon » pour un bien | `POST /property` | 45 |
-| 22 | 🟡 | Devise « EUR » dans une notification | notifications de paiement | 40 |
-| 23 | 🟡 | `instructions.fr` du mode `redirect` rédigé pour un développeur | `POST /payment/checkout` | 8 |
-| 24 | 🟡 | Ni disponibilités d'artisan, ni date d'intervention | — | 38, 54 |
+| 22 | ✅ | ~~Devise « EUR » dans une notification~~ — corrigé (06/10/2026, correctifs backend groupés) | notifications de paiement | 40 |
+| 23 | ✅ | ~~`instructions.fr` du mode `redirect` rédigé pour un développeur~~ — corrigé (06/10/2026, correctifs backend groupés) | `POST /payment/checkout` | 8 |
+| 24 | 🟡 | Ni disponibilités d'artisan, ni date d'intervention — décision produit : non traité dans ce lot (06/10/2026) | — | 38, 54 |
 | 25 | 🟡 | Annulation d'une réservation courte durée confirmée non gérée | bookings | 40 |
-| 26 | 🟡 | Contexte d'équipe : `switch-context` ne renvoie pas une paire de jetons exploitable | `POST /auth/switch-context` | socle, I2 |
-| 27 | 🟠 | Liste d'attente : les inscrits ne sont jamais prévenus | `UnitWaitlistService.notifyWaitlist` | 46 |
-| 28 | 🟠 | Calendrier : ni l'id ni le motif d'un blocage ne sont relisibles | `GET /units/:id/availability` | 46 |
+| 26 | ✅ | ~~Contexte d'équipe : `switch-context` ne renvoie pas une paire de jetons exploitable~~ — corrigé (06/10/2026, correctifs backend groupés) | `POST /auth/switch-context` | socle, I2 |
+| 27 | ✅ | ~~Liste d'attente : les inscrits ne sont jamais prévenus~~ — corrigé (06/10/2026, correctifs backend groupés) | `UnitWaitlistService.notifyWaitlist` | 46 |
+| 28 | ✅ | ~~Calendrier : ni l'id ni le motif d'un blocage ne sont relisibles~~ — corrigé (06/10/2026, correctifs backend groupés) | `GET /units/:id/availability` | 46 |
 | 29 | 🟡 | Deux sources de vérité pour le prix (prix de base / grille tarifaire) | `units.price`, `unit_pricing` | 46 |
 | 30 | 🟡 | Pas d'endpoint de devis pour une réservation | bookings | 46 |
-| 31 | 🟡 | Tarif à 0 F ou décimal accepté ; message 409 avec le code brut | `POST/PATCH /units/:id/pricing` | 46 |
-| 32 | 🟡 | Tarifs réservés au propriétaire, pas à l'équipe | `UnitPricingService.assertOwner` | 46 |
-| 33 | 🟠 | Un logement occupé peut être proposé à une demande | `POST /housing-requests/:id/respond` | 47 |
-| 34 | 🟠 | Un propriétaire ne peut pas savoir à quelles demandes il a répondu | `GET /housing-requests/open` | 47 |
-| 35 | 🟠 | Les critères d'une demande ne sont pas filtrables (sauf ville et fréquence) | `GET /housing-requests/open` | 47 |
+| 31 | ✅ | ~~Tarif à 0 F ou décimal accepté ; message 409 avec le code brut~~ — corrigé (06/10/2026, correctifs backend groupés) | `POST/PATCH /units/:id/pricing` | 46 |
+| 32 | ✅ | ~~Tarifs réservés au propriétaire, pas à l'équipe~~ — corrigé (06/10/2026, correctifs backend groupés) | `UnitPricingService.assertOwner` | 46 |
+| 33 | ✅ | ~~Un logement occupé peut être proposé à une demande~~ — corrigé (06/10/2026, correctifs backend groupés) | `POST /housing-requests/:id/respond` | 47 |
+| 34 | ✅ | ~~Un propriétaire ne peut pas savoir à quelles demandes il a répondu~~ — corrigé (06/10/2026, correctifs backend groupés) | `GET /housing-requests/open` | 47 |
+| 35 | ✅ | ~~Les critères d'une demande ne sont pas filtrables (sauf ville et fréquence)~~ — corrigé (06/10/2026, correctifs backend groupés) | `GET /housing-requests/open` | 47 |
 | 36 | 🟡 | Cycle de vie d'une demande trop limité (ni modification, ni réouverture, ni suite donnée à une proposition) | `housing-requests` | 47 |
-| 37 | 🟡 | Budget min > max et date d'emménagement passée acceptés | `POST /housing-requests` | 47 |
-| 38 | 🟡 | Identifiant non-UUID → erreur 500 | `/housing-requests/:id/*` | 47 |
-| 39 | 🟡 | Aucun propriétaire n'est prévenu d'une nouvelle demande qui correspond à ses biens | notifications | 47 |
-| 40 | 🟠 | Confirmation d'une visite à une date passée acceptée | `PATCH /visits/:id/confirm` | 48 |
-| 41 | 🟠 | Une visite peut être marquée « réalisée » avant d'avoir eu lieu ; les demandes n'expirent jamais | `PATCH /visits/:id/complete` | 48 |
-| 42 | 🟠 | Logement sans bien parent : personne ne peut traiter la visite | `POST /visits` | 48 |
-| 43 | 🟡 | Aucune validation du corps de `POST /visits` | `POST /visits` | 48 |
-| 44 | 🟡 | Un propriétaire peut demander à visiter son propre logement ; statut du logement ignoré | `POST /visits` | 48 |
-| 45 | 🟡 | Incohérences diverses du module visites | `visit` | 48 |
-| 46 | 🟠 | Supprimer un bien laisse ses visites et réservations orphelines (`unit: null`) | `DELETE /property/:id` | 48 |
-| 47 | 🟠 | Réserver un séjour n'exige pas d'identité vérifiée (une visite, si) | `POST /bookings` | 49 |
-| 48 | 🟠 | Un hôte peut réserver et se payer son propre logement | `POST /bookings`, `POST /bookings/:id/pay` | 49 |
+| 37 | ✅ | ~~Budget min > max et date d'emménagement passée acceptés~~ — corrigé (06/10/2026, correctifs backend groupés) | `POST /housing-requests` | 47 |
+| 38 | ✅ | ~~Identifiant non-UUID → erreur 500~~ — corrigé (06/10/2026, correctifs backend groupés) | `/housing-requests/:id/*` | 47 |
+| 39 | ✅ | ~~Aucun propriétaire n'est prévenu d'une nouvelle demande qui correspond à ses biens~~ — corrigé (06/10/2026, correctifs backend groupés) | notifications | 47 |
+| 40 | ✅ | ~~Confirmation d'une visite à une date passée acceptée~~ — corrigé (06/10/2026, correctifs backend groupés) | `PATCH /visits/:id/confirm` | 48 |
+| 41 | ✅ | ~~Une visite peut être marquée « réalisée » avant d'avoir eu lieu ; les demandes n'expirent jamais~~ — corrigé (06/10/2026, correctifs backend groupés) | `PATCH /visits/:id/complete` | 48 |
+| 42 | ✅ | ~~Logement sans bien parent : personne ne peut traiter la visite~~ — corrigé (06/10/2026, correctifs backend groupés) | `POST /visits` | 48 |
+| 43 | ✅ | ~~Aucune validation du corps de `POST /visits`~~ — corrigé (06/10/2026, correctifs backend groupés) | `POST /visits` | 48 |
+| 44 | ✅ | ~~Un propriétaire peut demander à visiter son propre logement ; statut du logement ignoré~~ — corrigé (06/10/2026, correctifs backend groupés) | `POST /visits` | 48 |
+| 45 | 🟡 | Incohérences diverses du module visites — **en partie corrigé** (06/10/2026) : points a/b/c corrigés (accents, jointure propriétaire en liste, REJECTED non ré-annulable) ; d/e restent des décisions produit | `visit` | 48 |
+| 46 | ✅ | ~~Supprimer un bien laisse ses visites et réservations orphelines (`unit: null`)~~ — corrigé (06/10/2026, correctifs backend groupés) | `DELETE /property/:id` | 48 |
+| 47 | 🟠 | Réserver un séjour n'exige pas d'identité vérifiée (une visite, si) — décision produit : non traité dans ce lot (06/10/2026) | `POST /bookings` | 49 |
+| 48 | ✅ | ~~Un hôte peut réserver et se payer son propre logement~~ — corrigé (06/10/2026, correctifs backend groupés) | `POST /bookings`, `POST /bookings/:id/pay` | 49 |
 | 49 | 🟠 | Recharge Mobile Money directe impossible pour un compte sans téléphone (en partie corrigé : `phoneNumber` accepté, Lot 55) | `POST /payment/checkout` (GSM_*) | 49, 55 |
-| 50 | 🟠 | Portefeuille incohérent : tirelire supérieure au solde total (cause trouvée, voir #82) | `GET /wallet/me` | 49, 55 |
-| 51 | 🟡 | Séjour minimum appliqué au seul segment de prolongation | `POST /bookings/:id/extend` | 49 |
-| 52 | 🟡 | Trois statuts seulement : séjour terminé et hold expiré indiscernables | `bookings` | 49 |
-| 53 | 🟡 | Message « Solde insuffisant » brut | `POST /bookings/:id/pay` | 49 |
+| 50 | ✅ | ~~Portefeuille incohérent : tirelire supérieure au solde total (cause trouvée, voir #82)~~ — corrigé (06/10/2026, correctifs backend groupés) | `GET /wallet/me` | 49, 55 |
+| 51 | ✅ | ~~Séjour minimum appliqué au seul segment de prolongation~~ — corrigé (06/10/2026, correctifs backend groupés) | `POST /bookings/:id/extend` | 49 |
+| 52 | 🟡 | Trois statuts seulement : séjour terminé et hold expiré indiscernables — décision produit : non traité dans ce lot (06/10/2026) | `bookings` | 49 |
+| 53 | ✅ | ~~Message « Solde insuffisant » brut~~ — corrigé (06/10/2026, correctifs backend groupés) | `POST /bookings/:id/pay` | 49 |
 | 54 | 🔴 | Un locataire peut signer un bail brouillon jamais envoyé | `PATCH /leases/:id/sign` | 50 |
 | 55 | 🔴 | Re-signer un bail actif le fait repasser « signé » : plus facturé, plus résiliable | `PATCH /leases/:id/sign` | 50 |
-| 56 | 🔴 | État des lieux réécrit après la signature de l'autre partie | `PATCH /inventories/:id` | 50 |
-| 57 | 🟠 | Aucune restitution de la caution (ni de l'avance, ni du prépayé) | `terminate`, `cancel-unpaid` | 50 |
-| 58 | 🟠 | Un brouillon de bail bloque le calendrier et ne peut être ni supprimé ni annulé | `POST /leases`, `PATCH /leases/:id`, `cancel-unpaid` | 50 |
+| 56 | ✅ | ~~État des lieux réécrit après la signature de l'autre partie~~ — corrigé (06/10/2026, correctifs backend groupés) | `PATCH /inventories/:id` | 50 |
+| 57 | 🟠 | Aucune restitution de la caution (ni de l'avance, ni du prépayé) — décision produit : non traité dans ce lot (06/10/2026) | `terminate`, `cancel-unpaid` | 50 |
+| 58 | ✅ | ~~Un brouillon de bail bloque le calendrier et ne peut être ni supprimé ni annulé~~ — corrigé (06/10/2026, correctifs backend groupés) | `POST /leases`, `PATCH /leases/:id`, `cancel-unpaid` | 50 |
 | 59 | 🟠 | La fin de bail n'est jamais automatique ; la date de départ du préavis n'est pas renvoyée | facturation, `give-notice` | 50 |
-| 60 | 🟠 | Le locataire ne peut pas résilier (garde de rôle), contrairement à la documentation | `PATCH /leases/:id/terminate` | 50 |
-| 61 | 🟠 | Doublons d'état des lieux ; un brouillon vide suffit à libérer la retenue d'un séjour | `POST /inventories`, retenue des réservations | 50 |
-| 62 | 🟡 | Création de bail : date invalide → 500, fin avant début, logement d'un autre bien acceptés | `POST /leases` | 50 |
-| 63 | 🟡 | États des lieux : aucune validation, messages en anglais, PDF d'un séjour incomplet | `/inventories`, `GET /pdf/inventories/:id` | 50 |
-| 64 | 🟡 | `auto-debit` sans `enabled` enregistre `null` | `PATCH /leases/:id/auto-debit` | 50 |
+| 60 | 🟠 | Le locataire ne peut pas résilier (garde de rôle), contrairement à la documentation — **en partie corrigé** (06/10/2026) : doc Swagger corrigée (résiliation réservée au propriétaire, confirmé conforme au code) | `PATCH /leases/:id/terminate` | 50 |
+| 61 | ✅ | ~~Doublons d'état des lieux ; un brouillon vide suffit à libérer la retenue d'un séjour~~ — corrigé (06/10/2026, correctifs backend groupés) | `POST /inventories`, retenue des réservations | 50 |
+| 62 | ✅ | ~~Création de bail : date invalide → 500, fin avant début, logement d'un autre bien acceptés~~ — corrigé (06/10/2026, correctifs backend groupés) | `POST /leases` | 50 |
+| 63 | ✅ | ~~États des lieux : aucune validation, messages en anglais, PDF d'un séjour incomplet~~ — corrigé (06/10/2026, correctifs backend groupés) | `/inventories`, `GET /pdf/inventories/:id` | 50 |
+| 64 | ✅ | ~~`auto-debit` sans `enabled` enregistre `null`~~ — corrigé (06/10/2026, correctifs backend groupés) | `PATCH /leases/:id/auto-debit` | 50 |
 | 65 | 🟡 | Pas de `GET /leases/:id` ; `/leases/my` mêle les deux rôles | `GET /leases/my` | 50 |
-| 66 | 🟠 | Candidatures : ni le propriétaire (nouvelle candidature) ni le candidat refusé ne sont prévenus | `POST /rental/requests`, `…/reject` | 51 |
-| 67 | 🟠 | Retenir un candidat crée un second bail sur un logement déjà engagé ; logement « loué » dès l'acceptation, sans retour possible | `PATCH /rental/requests/:id/accept` | 51 |
-| 68 | 🟡 | Bail préparé à l'acceptation : prépayé ignoré, notification trompeuse, id du bail non renvoyé | `PATCH /rental/requests/:id/accept` | 51 |
-| 69 | 🟡 | Le candidat ne peut pas retirer sa candidature ; refus sans motif ; statuts indiscernables | `/rental/requests` | 51 |
-| 70 | 🟡 | Candidature : date invalide → 500, date passée acceptée, message trop long sans détail ; équipe exclue | `/rental/requests` | 51 |
-| 71 | 🟠 | Photos d'état des lieux effacées à chaque modification | `GET` / `PATCH /inventories/:id` | 52 |
+| 66 | ✅ | ~~Candidatures : ni le propriétaire (nouvelle candidature) ni le candidat refusé ne sont prévenus~~ — corrigé (06/10/2026, correctifs backend groupés) | `POST /rental/requests`, `…/reject` | 51 |
+| 67 | ✅ | ~~Retenir un candidat crée un second bail sur un logement déjà engagé ; logement « loué » dès l'acceptation, sans retour possible~~ — corrigé (06/10/2026, correctifs backend groupés) | `PATCH /rental/requests/:id/accept` | 51 |
+| 68 | ✅ | ~~Bail préparé à l'acceptation : prépayé ignoré, notification trompeuse, id du bail non renvoyé~~ — corrigé (06/10/2026, correctifs backend groupés) | `PATCH /rental/requests/:id/accept` | 51 |
+| 69 | ✅ | ~~Le candidat ne peut pas retirer sa candidature ; refus sans motif ; statuts indiscernables~~ — corrigé (06/10/2026, correctifs backend groupés) | `/rental/requests` | 51 |
+| 70 | ✅ | ~~Candidature : date invalide → 500, date passée acceptée, message trop long sans détail ; équipe exclue~~ — corrigé (06/10/2026, correctifs backend groupés) | `/rental/requests` | 51 |
+| 71 | ✅ | ~~Photos d'état des lieux effacées à chaque modification~~ — corrigé (06/10/2026, correctifs backend groupés) | `GET` / `PATCH /inventories/:id` | 52 |
 | 72 | 🟠 | Le PDF de l'état des lieux n'a ni photos ni comparaison avec l'entrée ; la sortie n'alimente rien | `GET /pdf/inventories/:id` | 52 |
-| 73 | 🟡 | État des lieux accepté sur une réservation annulée ; URL de photo relative → 500 | `POST /inventories`, relais photo | 52 |
-| 74 | 🔴 | Un utilisateur déjà inscrit, invité dans une équipe, ne peut jamais accepter | `POST /team/invite` (branche `in_app`) | 53 |
-| 75 | 🟠 | Invitations et membres : ni annulation, ni relance, ni départ volontaire | `/team` | 53 |
+| 73 | ✅ | ~~État des lieux accepté sur une réservation annulée ; URL de photo relative → 500~~ — corrigé (06/10/2026, correctifs backend groupés) | `POST /inventories`, relais photo | 52 |
+| 74 | ✅ | ~~Un utilisateur déjà inscrit, invité dans une équipe, ne peut jamais accepter~~ — corrigé (06/10/2026, correctifs backend groupés) | `POST /team/invite` (branche `in_app`) | 53 |
+| 75 | ✅ | ~~Invitations et membres : ni annulation, ni relance, ni départ volontaire~~ — corrigé (06/10/2026, correctifs backend groupés) | `/team` | 53 |
 | 76 | 🟠 | Un mandat ne donne aucun accès ; sa fin laisse l'agent désigné sur les biens | `/agent-mandates`, `PATCH /property/:id` | 53 |
-| 77 | 🟡 | Équipe et mandats : permissions non appliquées, identités manquantes, refus indiscernable | `/team`, `/agent-mandates` | 53 |
-| 78 | 🔴 | Après l'inscription, la session garde le rôle « tenant » (même rafraîchie) : 403 sur son propre espace | `POST /onboarding/finalize`, `POST /auth/refresh` | 54 |
-| 79 | 🟠 | `retained_amount` jamais remis à zéro une fois la retenue versée ou partagée | `artisan-requests` | 54 |
-| 80 | 🟡 | Offres d'artisan : prix 0 et retenue sans garantie acceptés ; « Données invalides » sans détail | `POST /artisan-requests/:id/offers`, `…/dispute` | 54 |
+| 77 | 🟡 | Équipe et mandats : permissions non appliquées, identités manquantes, refus indiscernable — décision produit : non traité dans ce lot (06/10/2026) | `/team`, `/agent-mandates` | 53 |
+| 78 | ✅ | ~~Après l'inscription, la session garde le rôle « tenant » (même rafraîchie) : 403 sur son propre espace~~ — corrigé (06/10/2026, correctifs backend groupés) | `POST /onboarding/finalize`, `POST /auth/refresh` | 54 |
+| 79 | ✅ | ~~`retained_amount` jamais remis à zéro une fois la retenue versée ou partagée~~ — corrigé (06/10/2026, correctifs backend groupés) | `artisan-requests` | 54 |
+| 80 | ✅ | ~~Offres d'artisan : prix 0 et retenue sans garantie acceptés ; « Données invalides » sans détail~~ — corrigé (06/10/2026, correctifs backend groupés) | `POST /artisan-requests/:id/offers`, `…/dispute` | 54 |
 | 81 | 🟡 | Interventions : ni lien avec le signalement d'origine, ni contact du demandeur pour l'artisan | `artisan-requests` | 54 |
-| 82 | 🔴 | Solde négatif : un paiement de logement ne vérifie que la tirelire, qui peut dépasser le total | `POST /bookings/:id/pay`, `/wallet/pay-rent`, `/leases/:id/entry-payment`, `PATCH /artisan-requests/:id/pay` | 55 |
-| 83 | 🟠 | Retrait en attente non réservé : le montant reste dépensable, `pending_amount` l'ignore | `POST /wallet/withdraw`, `GET /wallet/stats` | 55 |
-| 84 | 🟠 | Retrait : numéro et montant non validés (« abc » accepté, montant texte → 500), méthode en minuscules, aucune annulation | `POST /wallet/withdraw` | 55 |
-| 85 | 🟠 | Statistiques du wallet fausses : revenus = recharges seulement, dépenses toujours à 0 | `GET /wallet/stats` | 55 |
-| 86 | 🟠 | Mobile Money direct : statut introuvable (404), seul `verify-return` crédite ; `gatewayType` attendu en minuscules | `/payment/transactions/:id/status`, `/payment/verify-return` | 55 |
-| 87 | 🔴 | N'importe quel compte peut signaler un problème sur n'importe quel logement ; l'historique public compte aussi les annulés | `POST /signals`, `GET /signals/units/:unitId/history` | 55 |
-| 88 | 🟠 | Signalements : l'auteur écrit la note de résolution et l'assignation, le propriétaire annule, transitions non documentées | `PATCH /signals/:id` | 55 |
-| 89 | 🟠 | Un compte propriétaire qui loue aussi ne voit pas ses propres signalements | `GET /signals` | 55 |
-| 90 | 🟡 | Pièces jointes de signalement : multipart ignoré (201 sans effet), corps non documenté, URL libres acceptées | `POST /signals/:id/attachments`, `POST /signals` | 55 |
-| 91 | 🟡 | Messagerie : message `system` envoyable par un utilisateur, pagination documentée à l'envers, messages en anglais, « Message de Quelqu'un » | `/messaging` | 55 |
-| 92 | 🟠 | Une nouvelle conversation à chaque appel pour le même logement et le même destinataire | `POST /messaging/conversations` | 55 |
-| 93 | 🔴 | Formulaire de contact inutilisable : 500 à chaque envoi (après ~6 s) | `POST /contact` | 56 |
-| 94 | 🟠 | Vitrine vide alors que la recherche montre les annonces du même propriétaire ; vitrine publique ouverte aux comptes locataires | `GET /public/owners/:userId`, `GET /property/search` | 56 |
-| 95 | 🟠 | Un logement loué (bail actif) reste « disponible » dans la recherche et la fiche publique | `unit_status`, `GET /property/search`, `GET /public/units/:id` | 56 |
-| 96 | 🟡 | Identifiant mal formé → 500 au lieu de 400/404 | `GET /property/:id`, `GET /reviews/property/:id(/stats)` | 56 |
-| 97 | 🟡 | `ai-search` et `semantic-search` renvoient exactement la recherche textuelle | `GET /property/ai-search`, `/semantic-search` | 56 |
-| 98 | 🟡 | Statistiques avancées du propriétaire en 500, y compris pour un propriétaire avec des biens | `GET /property/landlord/stats/advanced` | 56 |
-| 99 | 🟡 | Rôles incomplets et appels refusés : un propriétaire qui loue n'a pas le rôle `tenant` ; `agent-mandates/mine` en 403 pour tout non-agent | `GET /auth/roles`, `GET /agent-mandates/mine` | 56 |
-| 100 | 🟡 | Adresse exacte et GPS publics, alors que l'offre propriétaire promet l'adresse masquée jusqu'à la visite | `GET /property/:id`, `GET /public/properties/:id` | 56 |
+| 82 | ✅ | ~~Solde négatif : un paiement de logement ne vérifie que la tirelire, qui peut dépasser le total~~ — corrigé (06/10/2026, correctifs backend groupés) | `POST /bookings/:id/pay`, `/wallet/pay-rent`, `/leases/:id/entry-payment`, `PATCH /artisan-requests/:id/pay` | 55 |
+| 83 | ✅ | ~~Retrait en attente non réservé : le montant reste dépensable, `pending_amount` l'ignore~~ — corrigé (06/10/2026, correctifs backend groupés) | `POST /wallet/withdraw`, `GET /wallet/stats` | 55 |
+| 84 | ✅ | ~~Retrait : numéro et montant non validés (« abc » accepté, montant texte → 500), méthode en minuscules, aucune annulation~~ — corrigé (06/10/2026, correctifs backend groupés) | `POST /wallet/withdraw` | 55 |
+| 85 | ✅ | ~~Statistiques du wallet fausses : revenus = recharges seulement, dépenses toujours à 0~~ — corrigé (06/10/2026, correctifs backend groupés) | `GET /wallet/stats` | 55 |
+| 86 | ✅ | ~~Mobile Money direct : statut introuvable (404), seul `verify-return` crédite ; `gatewayType` attendu en minuscules~~ — corrigé (06/10/2026, correctifs backend groupés) | `/payment/transactions/:id/status`, `/payment/verify-return` | 55 |
+| 87 | ✅ | ~~N'importe quel compte peut signaler un problème sur n'importe quel logement ; l'historique public compte aussi les annulés~~ — corrigé (06/10/2026, correctifs backend groupés) | `POST /signals`, `GET /signals/units/:unitId/history` | 55 |
+| 88 | ✅ | ~~Signalements : l'auteur écrit la note de résolution et l'assignation, le propriétaire annule, transitions non documentées~~ — corrigé (06/10/2026, correctifs backend groupés) | `PATCH /signals/:id` | 55 |
+| 89 | ✅ | ~~Un compte propriétaire qui loue aussi ne voit pas ses propres signalements~~ — corrigé (06/10/2026, correctifs backend groupés) | `GET /signals` | 55 |
+| 90 | ✅ | ~~Pièces jointes de signalement : multipart ignoré (201 sans effet), corps non documenté, URL libres acceptées~~ — corrigé (06/10/2026, correctifs backend groupés) | `POST /signals/:id/attachments`, `POST /signals` | 55 |
+| 91 | ✅ | ~~Messagerie : message `system` envoyable par un utilisateur, pagination documentée à l'envers, messages en anglais, « Message de Quelqu'un »~~ — corrigé (06/10/2026, correctifs backend groupés) | `/messaging` | 55 |
+| 92 | ✅ | ~~Une nouvelle conversation à chaque appel pour le même logement et le même destinataire~~ — corrigé (06/10/2026, correctifs backend groupés) | `POST /messaging/conversations` | 55 |
+| 93 | ✅ | ~~Formulaire de contact inutilisable : 500 à chaque envoi (après ~6 s)~~ — corrigé (06/10/2026, correctifs backend groupés) | `POST /contact` | 56 |
+| 94 | 🟠 | Vitrine vide alors que la recherche montre les annonces du même propriétaire ; vitrine publique ouverte aux comptes locataires — **en partie corrigé** (06/10/2026) : vitrine masquée aux comptes locataires (404) ; la vitrine « vide » pour un propriétaire reste liée à #6 (décision produit, non traité) | `GET /public/owners/:userId`, `GET /property/search` | 56 |
+| 95 | ✅ | ~~Un logement loué (bail actif) reste « disponible » dans la recherche et la fiche publique~~ — corrigé (06/10/2026, correctifs backend groupés) | `unit_status`, `GET /property/search`, `GET /public/units/:id` | 56 |
+| 96 | ✅ | ~~Identifiant mal formé → 500 au lieu de 400/404~~ — corrigé (06/10/2026, correctifs backend groupés) : ParseUUIDPipe posé sur `property`, `review`, et par cohérence sur tous les `:id` de `leases`/`lease-buffers`/`lease-pdf` | `GET /property/:id`, `GET /reviews/property/:id(/stats)` | 56 |
+| 97 | 🟡 | `ai-search` et `semantic-search` renvoient exactement la recherche textuelle — décision produit : non traité dans ce lot (06/10/2026) | `GET /property/ai-search`, `/semantic-search` | 56 |
+| 98 | ✅ | ~~Statistiques avancées du propriétaire en 500, y compris pour un propriétaire avec des biens~~ — corrigé (06/10/2026, correctifs backend groupés) | `GET /property/landlord/stats/advanced` | 56 |
+| 99 | 🟡 | Rôles incomplets et appels refusés : un propriétaire qui loue n'a pas le rôle `tenant` ; `agent-mandates/mine` en 403 pour tout non-agent — **en partie corrigé** (06/10/2026) : `GET /agent-mandates/mine` ouvert aux non-agents (renvoie `[]`) ; le manque du rôle `tenant` pour un propriétaire qui loue (`GET /auth/roles`) n'a pas été retesté | `GET /auth/roles`, `GET /agent-mandates/mine` | 56 |
+| 100 | 🟡 | Adresse exacte et GPS publics, alors que l'offre propriétaire promet l'adresse masquée jusqu'à la visite — décision produit : non traité dans ce lot (06/10/2026) | `GET /property/:id`, `GET /public/properties/:id` | 56 |
+| 101 | 🔴 | ~~Élévation de privilèges à l'inscription : `role` du brouillon d'onboarding acceptait n'importe quelle valeur (ex. `admin`), et `finalize` était rejouable~~ — **corrigé** (06/10/2026, découvert et corrigé durant ce lot, jamais exposé en prod) | `POST /onboarding/draft`, `POST /onboarding/finalize` | — |
 
 ---
 
@@ -964,3 +965,44 @@ La place de marché repose entièrement sur des propriétaires qui viennent cons
   - soit une adresse et un GPS approximatifs (quartier, point décalé) tant qu'aucune visite n'est acceptée ;
   - soit retirer la promesse de la page.
 
+
+---
+
+## Correctifs backend groupés (05-06/10/2026)
+
+Suite à ce relevé, les corrections ont été implémentées directement dans `back-end-api-immo-app`, réparties en six lots par domaine (A wallet/paiement, B signalements/messagerie/contact/demandes, C baux/états des lieux/candidatures, D biens/recherche/public, E visites/réservations/artisans, F auth/onboarding/équipe), chacun sur sa propre branche puis fusionné sans conflit dans `fix/corrections-tests-front`.
+
+**Résultat de l'intégration** (06/10/2026) :
+- `npx tsc --noEmit` : 0 erreur.
+- `npx jest --silent` (suite complète) : **258 suites / 2248 tests**, tous verts (référence de départ : 235 suites / 1904 tests).
+- Script d'intégration maison contre l'API reconstruite localement (migrations incluses) : **46/46** vérifications passées, couvrant la faille d'élévation de privilèges, les 403/409/400 attendus, les montants wallet, et les corrections de contrat listées ci-dessous.
+
+**Nouvelle faille découverte et corrigée dans ce lot** (jamais exposée en prod, voir ligne #101 du tableau) : le rôle choisi dans le brouillon d'onboarding (`POST /onboarding/draft { role }`) n'était pas validé — un appel direct avec `role: "admin"` puis `finalize` donnait un compte administrateur. Corrigé par une liste blanche de rôles + un `finalize` non rejouable.
+
+### Changements de contrat d'API à connaître côté frontend
+
+- `POST /onboarding/finalize` renvoie désormais aussi `token`, `refresh_token`, `active_role` (additif) ; peut répondre 409 si le profil est déjà complet.
+- `POST /auth/switch-context` renvoie aussi `refresh_token` (additif) ; `switch-role` conserve `active_team_id`.
+- `POST /team/invite` renvoie un champ `email_sent` (additif) ; un utilisateur déjà inscrit reçoit désormais un vrai lien `/invite/<token>` qu'il peut accepter.
+- Nouvelles routes : `DELETE /team/invitations/:id`, `POST /team/memberships/:id/leave`, `DELETE /leases/:id` (brouillon), `PATCH /rental/requests/:id/withdraw`, `PATCH /wallet/withdrawals/:id/cancel`, `GET /units/:id/availability-blocks`, `GET /housing-requests/responses/mine`, `DELETE /property/:id/media/:mediaId`.
+- `GET /agent-mandates/mine` : ne renvoie plus 403 à un non-agent (renvoie `[]`).
+- Un logement **ne passe plus `OCCUPIED` à l'acceptation d'une candidature** : c'est désormais le paiement d'entrée du bail (activation) qui le fait. Un éventuel affichage frontend qui dépendait de l'ancien moment doit être revérifié.
+- Un retrait Mobile Money est débité **à la demande**, plus à l'approbation (l'approbation ne fait que confirmer).
+- `GET /payment/transactions/:id/status` accepte aussi un `gateway_ref` en plus de l'id, et se limite au wallet de l'appelant (un ancien appel inter-comptes recevra 404).
+- Plusieurs routes acceptent désormais des 400/403/409 nouveaux là où elles répondaient 200/201/500 à tort (détail dans le tableau récapitulatif ci-dessus, colonne Sujet).
+
+### Migrations SQL à appliquer manuellement en production (Render)
+
+Dans cet ordre, avant le déploiement du code (ou juste après, elles sont idempotentes) :
+1. `database/migrations/010_wallet_integrity_and_unit_occupied.sql` — répare les wallets déjà incohérents, pose 2 contraintes CHECK `NOT VALID` sur `wallets`, backfill `unit_status=occupied` pour les baux déjà actifs.
+2. `database/migrations/012_artisan_request_retention_released_at.sql` — ajoute `artisan_requests.retention_released_at`.
+3. `database/migrations/013_team_invitation_member_link.sql` — ajoute `team_invitations.member_id` (FK).
+
+### Configuration à revoir (hors code)
+
+- **#1** : aucun fournisseur d'email n'est configuré en production (Resend/SMTP) — le code est corrigé mais reste inactif sans ces clés.
+- **#2** : `ALLOW_OTP_BYPASS` est toujours actif en production (un avertissement s'affiche désormais au démarrage) — à désactiver volontairement quand les tests OTP ne seront plus nécessaires, sachant que cela retire le contournement de test.
+
+### Restant ouvert (ni corrigé, ni décision produit documentée)
+
+`#59` (fin de bail non automatique), `#65` (pas de `GET /leases/:id`), `#72` (PDF d'état des lieux sans photos/comparaison), `#76` (mandat sans accès réel), `#81` (intervention sans lien au signalement d'origine), et la première moitié de `#99` (rôle `tenant` absent pour un propriétaire qui loue, non retestée).
