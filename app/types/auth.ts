@@ -6,7 +6,7 @@
  * le code du backend, jamais de mémoire. »
  *
  * Champs et exemples vérifiés le 2026-09-17 sur le Swagger live
- * (https://immo-b89b.onrender.com/docs/v1-json). Ne pas deviner un champ
+ * (https://jorgo-immo-dev-api.duckdns.org/docs/v1-json). Ne pas deviner un champ
  * absent des exemples : ouvrir un ticket backend pour le faire documenter.
  */
 

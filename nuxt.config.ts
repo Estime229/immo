@@ -15,7 +15,7 @@ export default defineNuxtConfig({
     // server/api/proxy/[...path].ts, qui tourne côté serveur Nuxt (pas de CORS entre
     // deux serveurs) et ne connaît, lui, que cette URL.
     // Surchargeable en local via NUXT_API_BASE=http://localhost:3000/v1/api
-    apiBase: 'https://immo-b89b.onrender.com/v1/api',
+    apiBase: 'https://jorgo-immo-dev-api.duckdns.org/v1/api',
     public: {
       // Chemin relatif appelé par le navigateur — même origine, donc pas de CORS.
       apiProxyBase: '/api/proxy',

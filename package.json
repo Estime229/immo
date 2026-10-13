@@ -8,7 +8,7 @@
     "generate": "nuxt generate",
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
-    "api:fetch-schema": "curl -sS https://immo-b89b.onrender.com/docs/v1-json -o swagger.json",
+    "api:fetch-schema": "curl -sS https://jorgo-immo-dev-api.duckdns.org/docs/v1-json -o swagger.json",
     "api:types": "openapi-typescript swagger.json -o app/types/api.d.ts",
     "api:sync": "npm run api:fetch-schema && npm run api:types",
     "api:check": "npm run api:fetch-schema && npm run api:types && git diff --exit-code -- app/types/api.d.ts swagger.json",
