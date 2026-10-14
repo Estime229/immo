@@ -1,8 +1,8 @@
 import type { LeaseSummary, RentalRequestStatus, RentalRequestSummary, VisitSummary } from '../types/tenant'
 import { leasePhase, noticeDepartureDate } from './leases'
 
-export const CANDIDATURE_LABEL: Record<RentalRequestStatus, string> = { pending: 'En attente', accepted: 'Retenue', rejected: 'Non retenue' }
-export const CANDIDATURE_TONE: Record<RentalRequestStatus, 'ok' | 'warn' | 'neutral'> = { pending: 'warn', accepted: 'ok', rejected: 'neutral' }
+export const CANDIDATURE_LABEL: Record<RentalRequestStatus, string> = { pending: 'En attente', accepted: 'Retenue', rejected: 'Non retenue', withdrawn: 'Retirée' }
+export const CANDIDATURE_TONE: Record<RentalRequestStatus, 'ok' | 'warn' | 'neutral'> = { pending: 'warn', accepted: 'ok', rejected: 'neutral', withdrawn: 'neutral' }
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
 

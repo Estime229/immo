@@ -104,7 +104,7 @@ async function saveEdit() {
 }
 
 /* ---- Envoi (signe à votre place) ---- */
-const confirm = ref<'' | 'send' | 'cancel' | 'terminate'>('')
+const confirm = ref<'' | 'send' | 'cancel' | 'terminate' | 'delete'>('')
 async function send() {
   confirm.value = ''
   await run(() => leasesApi.send(leaseId.value), "Le bail n'a pas pu être envoyé.")
@@ -112,6 +112,21 @@ async function send() {
 async function cancelUnpaid() {
   confirm.value = ''
   await run(() => leasesApi.cancelUnpaid(leaseId.value), "Le bail n'a pas pu être annulé.")
+}
+
+/** Supprime un brouillon jamais envoyé et libère le blocage de calendrier (#58) — retour à la liste, le bail n'existe plus. */
+async function deleteDraft() {
+  confirm.value = ''
+  busy.value = true
+  actionError.value = ''
+  try {
+    await leasesApi.remove(leaseId.value)
+    await navigateTo('/pro/baux')
+  } catch (e) {
+    actionError.value = e instanceof ApiRequestError ? errorText(e.mapped, "Le brouillon n'a pas pu être supprimé.") : "Le brouillon n'a pas pu être supprimé."
+  } finally {
+    busy.value = false
+  }
 }
 
 /* ---- Résiliation ---- */
@@ -209,11 +224,12 @@ async function openQuittance(id: string) {
         <div v-if="phase === 'draft' && !editing" class="mt-4 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-page)] p-4.5">
           <p class="m-0 text-[14px] font-bold">Brouillon — pas encore envoyé à {{ tenantName }}</p>
           <p class="mb-0 mt-1.5 text-[13px] leading-[1.55] text-[var(--text-muted)]">
-            Relisez les conditions et le contrat, puis envoyez-le. Attention : le logement est déjà bloqué dans votre calendrier sur cette période, et un brouillon ne peut pas encore être supprimé.
+            Relisez les conditions et le contrat, puis envoyez-le. Le logement est bloqué dans votre calendrier sur cette période tant que le brouillon existe.
           </p>
           <div class="mt-3.5 flex flex-wrap gap-2.5">
             <CoreButton tone="secondary" @click="startEdit">Modifier</CoreButton>
             <CoreButton :disabled="busy" @click="confirm = 'send'">Signer et envoyer</CoreButton>
+            <CoreButton tone="danger" :disabled="busy" @click="confirm = 'delete'">Supprimer le brouillon</CoreButton>
           </div>
         </div>
         <div v-else-if="phase === 'draft' && editing" class="mt-4 rounded-md border border-[var(--border-default)] bg-white p-4.5">
@@ -232,7 +248,6 @@ async function openQuittance(id: string) {
               </select>
             </label>
           </div>
-          <p class="mb-0 mt-2 text-[12px] text-[var(--text-faint)]">Changer les dates ne libère pas l'ancienne période du calendrier (limite actuelle de l'API).</p>
           <label v-if="formExceeds" class="mt-3 flex cursor-pointer items-start gap-2.5 rounded-md border border-warn-border bg-warn-bg p-3 text-[13px] text-warn-fg">
             <input v-model="form.depositAck" type="checkbox" class="mt-0.5 accent-green-600">
             <span>Caution au-delà de 3 mois de loyer (plafond de la Loi 2022-30) : je confirme l'accord des deux parties.</span>
@@ -376,6 +391,14 @@ async function openQuittance(id: string) {
               <div class="mt-5 flex gap-2.5">
                 <CoreButton tone="secondary" size="lg" full-width @click="confirm = ''">Pas encore</CoreButton>
                 <CoreButton size="lg" full-width :disabled="busy" @click="send">Signer et envoyer</CoreButton>
+              </div>
+            </template>
+            <template v-else-if="confirm === 'delete'">
+              <h3 class="m-0 font-display text-xl font-bold tracking-[-.02em]">Supprimer ce brouillon ?</h3>
+              <p class="mb-0 mt-2.5 text-sm leading-[1.6] text-[var(--text-muted)]">Le brouillon est supprimé et le logement redevient disponible à cette période. C'est irréversible ; {{ tenantName }} n'a reçu aucune notification (le bail n'a jamais été envoyé).</p>
+              <div class="mt-5 flex gap-2.5">
+                <CoreButton tone="secondary" size="lg" full-width @click="confirm = ''">Garder le brouillon</CoreButton>
+                <CoreButton tone="danger" size="lg" full-width :disabled="busy" @click="deleteDraft">{{ busy ? 'Suppression…' : 'Supprimer' }}</CoreButton>
               </div>
             </template>
             <template v-else-if="confirm === 'cancel'">

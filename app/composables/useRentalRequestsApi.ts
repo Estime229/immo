@@ -25,5 +25,10 @@ export function useRentalRequestsApi() {
     return api.patch<RentalRequestSummary>(`/rental/requests/${id}/reject`)
   }
 
-  return { fetchMine, create, accept, reject }
+  /** Le candidat retire lui-même sa candidature — réservé au statut `pending` côté API (#69). */
+  async function withdraw(id: string) {
+    return api.patch<RentalRequestSummary>(`/rental/requests/${id}/withdraw`)
+  }
+
+  return { fetchMine, create, accept, reject, withdraw }
 }

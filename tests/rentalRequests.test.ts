@@ -1,11 +1,18 @@
 import { describe, expect, it } from 'vitest'
-import { acceptancePreview, conflictingLease, draftLeaseFor, groupByUnit, latestRequestFor, leaseStartIfAccepted, validateCandidature, visitOf } from '../app/utils/rentalRequests'
+import { acceptancePreview, CANDIDATURE_LABEL, CANDIDATURE_TONE, conflictingLease, draftLeaseFor, groupByUnit, latestRequestFor, leaseStartIfAccepted, validateCandidature, visitOf } from '../app/utils/rentalRequests'
 import type { RentalRequestSummary, VisitSummary } from '../app/types/tenant'
 
 const unit = { id: 'u1', name: 'F2', price: '50000.00', caution_months: 2, avance_months: 1, prepaye_months: 1 }
 const req = (o: Partial<RentalRequestSummary>): RentalRequestSummary => ({
   id: 'r', unit_id: 'u1', tenant_id: 't1', status: 'pending', message: null, desired_move_in_at: null,
   created_at: '2026-09-27T10:00:00Z', responded_at: null, conversation_id: null, unit, ...o
+})
+
+describe('candidature retirée (#69)', () => {
+  it('a un libellé et un ton distincts de "rejected"', () => {
+    expect(CANDIDATURE_LABEL.withdrawn).toBe('Retirée')
+    expect(CANDIDATURE_TONE.withdrawn).toBe('neutral')
+  })
 })
 
 describe('validateCandidature — contrôles absents de l\'API (live : date invalide → 500, date passée acceptée)', () => {

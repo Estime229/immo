@@ -29,5 +29,10 @@ export function useWalletApi() {
     return api.get<WithdrawalRequest[]>('/wallet/withdrawals/my')
   }
 
-  return { fetchMe, fetchStats, fetchTransactions, payRent, requestWithdrawal, fetchWithdrawals }
+  /** Annule sa propre demande en attente — re-crédite le wallet, réservé au statut `pending` (#83/#84). */
+  async function cancelWithdrawal(id: string) {
+    return api.patch<WithdrawalRequest>(`/wallet/withdrawals/${id}/cancel`)
+  }
+
+  return { fetchMe, fetchStats, fetchTransactions, payRent, requestWithdrawal, fetchWithdrawals, cancelWithdrawal }
 }

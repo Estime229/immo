@@ -594,6 +594,7 @@ async function onFavoriteSimilar(l: { propertyId: string | null }) {
               </div>
               <template v-else>
                 <p v-if="myRequest?.status === 'rejected'" class="mb-0 mt-3 text-[12.5px] text-[var(--text-muted)]">Votre précédente candidature n'a pas été retenue. Vous pouvez en déposer une nouvelle.</p>
+                <p v-else-if="myRequest?.status === 'withdrawn'" class="mb-0 mt-3 text-[12.5px] text-[var(--text-muted)]">Vous avez retiré votre précédente candidature. Vous pouvez en déposer une nouvelle.</p>
                 <CoreButton size="lg" full-width class="mt-4" @click="openCandidature"><CoreLockIcon v-if="!canAct" :size="15" class="mr-1.5" />Déposer ma candidature</CoreButton>
               </template>
               <CoreButton tone="secondary" size="lg" full-width class="mt-2.5" @click="openVisitModal"><CoreLockIcon v-if="!canAct" :size="15" class="mr-1.5" />Demander une visite</CoreButton>

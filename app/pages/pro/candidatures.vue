@@ -218,7 +218,7 @@ function leaseLinkFor(r: RentalRequestSummary) {
             <h3 class="m-0 font-display text-xl font-bold tracking-[-.02em]">Retenir {{ name(accepting) }} ?</h3>
             <ul class="mb-0 mt-3 list-disc space-y-1.5 pl-5 text-[13.5px] leading-[1.55] text-[var(--text-secondary)]">
               <li>Un <strong>bail brouillon</strong> est préparé ; vous le relisez puis l'envoyez pour signature.</li>
-              <li>Le logement est marqué <strong>loué</strong> et bloqué dans votre calendrier à partir du {{ formatDate(acceptStart.date) }}.</li>
+              <li>Le logement est <strong>bloqué dans votre calendrier</strong> à partir du {{ formatDate(acceptStart.date) }} ; il ne sera marqué <strong>loué</strong> qu'une fois le bail signé et le premier paiement reçu.</li>
               <li v-if="others">Les {{ others }} autre{{ others > 1 ? 's' : '' }} candidature{{ others > 1 ? 's' : '' }} en attente {{ others > 1 ? 'sont refusées' : 'est refusée' }} ; leurs auteurs sont prévenus.</li>
               <li>C'est définitif : l'application ne permet pas de revenir en arrière.</li>
             </ul>

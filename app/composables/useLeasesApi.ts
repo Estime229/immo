@@ -91,6 +91,11 @@ export function useLeasesApi() {
     return api.patch<LeaseSummary>(`/leases/${id}`, payload)
   }
 
+  /** Supprime un bail encore en brouillon (jamais envoyé) et libère le blocage de calendrier (#58). */
+  async function remove(id: string) {
+    return api.delete<{ deleted: boolean }>(`/leases/${id}`)
+  }
+
   return {
     fetchMine,
     sign,
@@ -106,6 +111,7 @@ export function useLeasesApi() {
     send,
     cancelUnpaid,
     terminate,
-    updateDraft
+    updateDraft,
+    remove
   }
 }

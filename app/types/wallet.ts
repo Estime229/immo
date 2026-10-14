@@ -59,8 +59,12 @@ export interface PayRentResult {
 }
 
 export type WithdrawalMethod = 'MTN_MOMO' | 'MOOV_MONEY' | 'BANK_TRANSFER'
-/** 3 valeurs réelles (pending/processed/rejected) — le libellé « Approuvée » de la maquette n'a pas d'équivalent serveur distinct. */
-export type WithdrawalStatus = 'pending' | 'processed' | 'rejected'
+/**
+ * 4 valeurs réelles — le libellé « Approuvée » de la maquette n'a pas
+ * d'équivalent serveur distinct. `cancelled` : le demandeur a annulé sa
+ * propre demande en attente (`PATCH /wallet/withdrawals/:id/cancel`, #83/#84).
+ */
+export type WithdrawalStatus = 'pending' | 'processed' | 'rejected' | 'cancelled'
 
 export interface WithdrawalRequest {
   id: string

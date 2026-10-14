@@ -29,6 +29,9 @@ describe('retraits', () => {
     expect(pendingWithdrawal([w({ id: 'a' }), w({ id: 'b', status: 'pending', created_at: '2026-09-21T00:00:00Z' }), w({ id: 'c', status: 'pending', created_at: '2026-09-25T00:00:00Z' })])?.id).toBe('c')
     expect(pendingWithdrawal([w({ status: 'rejected' })])).toBeNull()
   })
+  it('une demande annulée (#83/#84) ne bloque plus une nouvelle demande', () => {
+    expect(pendingWithdrawal([w({ status: 'cancelled' })])).toBeNull()
+  })
   it('normalise les numéros béninois (8 ou 10 chiffres) et refuse le reste', () => {
     expect(normalizeBeninPhone('97 00 00 00')).toBe('+22997000000')
     expect(normalizeBeninPhone('+229 01 97 00 00 00')).toBe('+2290197000000')

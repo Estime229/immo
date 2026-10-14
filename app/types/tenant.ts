@@ -505,7 +505,8 @@ export interface UpdateInventoryPayload {
  * `unit` est joint complet (règles d'entrée comprises) ; `tenant` seulement
  * côté propriétaire (`for=landlord`), avec réputation et badge de confiance.
  */
-export type RentalRequestStatus = 'pending' | 'accepted' | 'rejected'
+/** `withdrawn` : le candidat a retiré sa candidature lui-même (`PATCH /rental/requests/:id/withdraw`, #69). */
+export type RentalRequestStatus = 'pending' | 'accepted' | 'rejected' | 'withdrawn'
 
 export interface RentalRequestSummary {
   id: string

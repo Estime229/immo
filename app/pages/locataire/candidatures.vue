@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import type { LeaseSummary, RentalRequestSummary } from '~/types/tenant'
+import { ApiRequestError } from '~/utils/authenticatedFetcher'
+import { errorText } from '~/utils/apiErrors'
 import { CANDIDATURE_LABEL, CANDIDATURE_TONE, draftLeaseFor } from '~/utils/rentalRequests'
 import { leasePhase } from '~/utils/leases'
 
@@ -30,13 +32,34 @@ async function load() {
 onMounted(load)
 onMounted(() => useCandidaturesBadge().markAllSeen())
 
+const CLOSED_STATUSES = ['rejected', 'withdrawn']
 const tab = ref<'open' | 'closed'>('open')
-const open = computed(() => requests.value.filter(r => r.status !== 'rejected'))
-const closed = computed(() => requests.value.filter(r => r.status === 'rejected'))
+const open = computed(() => requests.value.filter(r => !CLOSED_STATUSES.includes(r.status)))
+const closed = computed(() => requests.value.filter(r => CLOSED_STATUSES.includes(r.status)))
 const shown = computed(() => (tab.value === 'open' ? open.value : closed.value))
 watch(requests, list => {
-  if (highlight && list.find(r => r.id === highlight)?.status === 'rejected') tab.value = 'closed'
+  if (highlight && CLOSED_STATUSES.includes(list.find(r => r.id === highlight)?.status ?? '')) tab.value = 'closed'
 })
+
+/* ---- Retirer sa candidature (#69) ---- */
+const withdrawing = ref<RentalRequestSummary | null>(null)
+const withdrawBusy = ref(false)
+const withdrawError = ref('')
+async function confirmWithdraw() {
+  const r = withdrawing.value
+  if (!r) return
+  withdrawBusy.value = true
+  withdrawError.value = ''
+  try {
+    await rentalApi.withdraw(r.id)
+    withdrawing.value = null
+    await load()
+  } catch (e) {
+    withdrawError.value = e instanceof ApiRequestError ? errorText(e.mapped, "La candidature n'a pas pu être retirée.") : "La candidature n'a pas pu être retirée."
+  } finally {
+    withdrawBusy.value = false
+  }
+}
 
 function formatDate(iso: string | null) {
   if (!iso) return ''
@@ -106,12 +129,15 @@ function leaseLink(r: RentalRequestSummary) {
         <p v-if="r.message" class="mb-0 mt-3 rounded-md bg-[var(--surface-page)] p-3 text-[13px] leading-[1.55] text-[var(--text-secondary)] [overflow-wrap:anywhere]">« {{ r.message }} »</p>
 
         <p v-if="r.status === 'pending'" class="mb-0 mt-3 text-[12.5px] leading-[1.55] text-[var(--text-muted)]">
-          Le propriétaire n'a pas encore répondu. Pour retirer votre candidature, écrivez-lui : l'application ne permet pas encore de la retirer vous-même.
+          Le propriétaire n'a pas encore répondu.
         </p>
         <div v-else-if="r.status === 'accepted'" class="mt-3 rounded-md border border-ok-border bg-ok-bg p-3.5 text-[13px] leading-[1.55] text-green-900">
           <p class="m-0 font-bold">Retenue le {{ formatDate(r.responded_at) }} ✓</p>
           <p class="mb-0 mt-1">{{ leaseStep(r) }}</p>
         </div>
+        <p v-else-if="r.status === 'withdrawn'" class="mb-0 mt-3 text-[12.5px] leading-[1.55] text-[var(--text-muted)]">
+          Vous avez retiré cette candidature{{ r.responded_at ? ` le ${formatDate(r.responded_at)}` : '' }}.
+        </p>
         <p v-else class="mb-0 mt-3 text-[12.5px] leading-[1.55] text-[var(--text-muted)]">
           Non retenue{{ r.responded_at ? ` le ${formatDate(r.responded_at)}` : '' }} : le propriétaire a choisi un autre candidat ou décliné.
         </p>
@@ -120,8 +146,23 @@ function leaseLink(r: RentalRequestSummary) {
           <NuxtLink v-if="r.status === 'accepted'" :to="leaseLink(r)" class="rounded-sm bg-[image:var(--action-primary)] px-4 py-2.5 text-[12.5px] font-bold text-white">Voir mon bail</NuxtLink>
           <NuxtLink v-if="r.conversation_id" :to="`/locataire/messages?conversation=${r.conversation_id}`" class="rounded-sm border border-[var(--border-default)] bg-white px-4 py-2.5 text-[12.5px] font-bold">Conversation</NuxtLink>
           <NuxtLink v-if="listingLink(r)" :to="listingLink(r) ?? ''" class="rounded-sm border border-[var(--border-default)] bg-white px-4 py-2.5 text-[12.5px] font-bold">Voir l'annonce</NuxtLink>
+          <button v-if="r.status === 'pending'" type="button" class="rounded-sm border border-[var(--border-default)] bg-white px-4 py-2.5 text-[12.5px] font-bold text-danger-fg" @click="withdrawing = r; withdrawError = ''">Retirer ma candidature</button>
         </div>
       </div>
     </template>
+
+    <Teleport to="body">
+      <div v-if="withdrawing" class="fixed inset-0 z-[90] grid animate-[im-veil_.22s_ease_both] place-items-center bg-black/50 p-6 backdrop-blur-[3px]" @click="withdrawing = null">
+        <div class="w-[460px] max-w-full animate-[im-rise_.28s_var(--ease-standard)_both] rounded-2xl bg-[var(--surface-page)] p-6.5" @click.stop>
+          <h3 class="m-0 font-display text-xl font-bold tracking-[-.02em]">Retirer cette candidature ?</h3>
+          <p class="mb-0 mt-2.5 text-sm leading-[1.6] text-[var(--text-muted)]">Le propriétaire ne pourra plus la retenir. C'est définitif ; vous pourrez déposer une nouvelle candidature si le logement est encore disponible.</p>
+          <p v-if="withdrawError" class="mb-0 mt-3 rounded-md border border-danger-border bg-danger-bg px-3.5 py-2.5 text-[13px] font-semibold text-danger-fg">{{ withdrawError }}</p>
+          <div class="mt-5 flex gap-2.5">
+            <CoreButton tone="secondary" size="lg" full-width @click="withdrawing = null">Garder ma candidature</CoreButton>
+            <CoreButton tone="danger" size="lg" full-width :disabled="withdrawBusy" @click="confirmWithdraw">{{ withdrawBusy ? 'Retrait…' : 'Retirer' }}</CoreButton>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>

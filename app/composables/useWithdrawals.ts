@@ -22,5 +22,22 @@ export function useWithdrawals() {
   }
 
   const pending = computed(() => pendingWithdrawal(list.value))
-  return { list, state, pending, load }
+
+  /** Annulation d'une demande en attente (#83/#84) — recharge la liste pour refléter le re-crédit. */
+  const cancellingId = useState<string | null>('withdrawalsCancellingId', () => null)
+  const cancelError = useState('withdrawalsCancelError', () => '')
+  async function cancel(id: string) {
+    cancellingId.value = id
+    cancelError.value = ''
+    try {
+      await walletApi.cancelWithdrawal(id)
+      await load()
+    } catch {
+      cancelError.value = "La demande n'a pas pu être annulée. Réessayez."
+    } finally {
+      cancellingId.value = null
+    }
+  }
+
+  return { list, state, pending, load, cancel, cancellingId, cancelError }
 }
