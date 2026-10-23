@@ -163,7 +163,7 @@ const mobileTabs = computed<MobileTab[]>(() => {
         </div>
       </header>
 
-      <div class="max-w-[1120px] px-4 pb-[calc(var(--mobile-tabbar-space)+1.5rem)] pt-7 sm:px-8 lg:pb-[60px]">
+      <div class="w-full px-4 pb-[calc(var(--mobile-tabbar-space)+1.5rem)] pt-7 sm:px-8 lg:pb-[60px]">
         <slot />
       </div>
     </main>
