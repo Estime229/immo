@@ -117,9 +117,14 @@ const mobileTabs = computed<MobileTab[]>(() => {
     <div v-if="drawerOpen" class="fixed inset-0 z-40 bg-black/50 lg:hidden" @click="drawerOpen = false" />
 
     <aside
-      class="fixed inset-y-0 left-0 z-50 flex h-screen w-[270px] flex-col gap-1.5 overflow-y-auto border-r border-[var(--border-subtle)] bg-white p-3.5 transition-transform duration-200 lg:sticky lg:top-0 lg:translate-x-0"
+      class="fixed inset-y-0 left-0 z-50 h-screen w-[270px] border-r border-[var(--border-subtle)] bg-white transition-transform duration-200 lg:sticky lg:top-0 lg:translate-x-0"
       :class="drawerOpen ? 'translate-x-0' : '-translate-x-full'"
     >
+      <!-- Défilement interne sur ce div, séparé de l'<aside> sticky : un `position: sticky`
+      qui défile son propre overflow ne se repeint pas (bug de rendu Chromium/WebKit
+      constaté en direct — le scrollTop change mais rien ne bouge à l'écran tant qu'un
+      autre reflow n'intervient pas). Les deux rôles doivent être sur des éléments différents. -->
+      <div class="flex h-full flex-col gap-1.5 overflow-y-auto p-3.5">
       <NuxtLink to="/" class="flex items-center gap-2.5 px-2 pb-3">
         <img src="/images/logo.png" alt="Immo" class="h-[30px] w-[30px] rounded-sm" width="30" height="30">
         <span class="font-display text-xl font-extrabold tracking-[-.025em] text-green-900">Immo <span class="text-xs font-bold tracking-normal text-clay-500">Pro</span></span>
@@ -149,6 +154,7 @@ const mobileTabs = computed<MobileTab[]>(() => {
           <span v-if="liveCount(n.key)" class="rounded-pill bg-clay-500 px-[7px] py-0.5 text-[10px] font-black text-white">{{ liveCount(n.key) }}</span>
         </NuxtLink>
       </template>
+      </div>
     </aside>
 
     <main class="min-w-0">

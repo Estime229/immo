@@ -91,9 +91,14 @@ const identitySubtitle = computed(() => {
     <div v-if="drawerOpen" class="fixed inset-0 z-40 bg-black/50 lg:hidden" @click="drawerOpen = false" />
 
     <aside
-      class="fixed inset-y-0 left-0 z-50 flex h-screen w-[250px] flex-col gap-1.5 overflow-y-auto border-r border-[var(--border-subtle)] bg-white p-3.5 transition-transform duration-200 lg:sticky lg:top-0 lg:translate-x-0"
+      class="fixed inset-y-0 left-0 z-50 h-screen w-[250px] border-r border-[var(--border-subtle)] bg-white transition-transform duration-200 lg:sticky lg:top-0 lg:translate-x-0"
       :class="drawerOpen ? 'translate-x-0' : '-translate-x-full'"
     >
+      <!-- Défilement interne sur ce div, séparé de l'<aside> sticky : un `position: sticky`
+      qui défile son propre overflow ne se repeint pas (bug de rendu Chromium/WebKit
+      constaté en direct — le scrollTop change mais rien ne bouge à l'écran tant qu'un
+      autre reflow n'intervient pas). Les deux rôles doivent être sur des éléments différents. -->
+      <div class="flex h-full flex-col gap-1.5 overflow-y-auto p-3.5">
       <NuxtLink to="/" class="flex items-center gap-2.5 px-2 pb-3">
         <img src="/images/logo.png" alt="Immo" class="h-[30px] w-[30px] rounded-sm" width="30" height="30">
         <span class="font-display text-xl font-extrabold tracking-[-.025em] text-green-900">Immo <span class="text-xs font-bold tracking-normal text-info-fg">Artisan</span></span>
@@ -119,6 +124,7 @@ const identitySubtitle = computed(() => {
         <span class="flex-1">{{ n.label }}</span>
         <span v-if="navCount(n)" class="rounded-pill bg-clay-500 px-2 py-0.5 text-[10.5px] font-black text-white">{{ navCount(n) }}</span>
       </NuxtLink>
+      </div>
     </aside>
 
     <main class="min-w-0">
