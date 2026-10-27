@@ -346,7 +346,14 @@ const segment = computed(() => progressIndex(step.value))
         <img src="/images/logo.png" alt="" class="h-8 w-8 rounded-[9px]" width="32" height="32">
         <span class="hidden font-display text-[20px] font-extrabold tracking-[-.025em] text-green-900 sm:inline">Immo</span>
       </NuxtLink>
-      <button v-if="step !== 'envoye'" type="button" class="rounded-pill border border-[var(--border-default)] bg-white px-4 py-2 text-[13.5px] font-bold hover:bg-[var(--surface-page)]" :disabled="busy" @click="saveAndQuit">
+      <button
+        v-if="step !== 'envoye'"
+        type="button"
+        class="rounded-pill border border-[var(--border-default)] bg-white px-4 py-2 text-[13.5px] font-bold hover:bg-[var(--surface-page)]"
+        :disabled="busy"
+        :title="step === 'intro' ? WHY[role] : undefined"
+        @click="saveAndQuit"
+      >
         {{ step === 'intro' ? 'Plus tard' : 'Enregistrer et quitter' }}
       </button>
     </header>

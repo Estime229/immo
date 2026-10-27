@@ -244,6 +244,9 @@ onUnmounted(() => { cancelled = true })
               <div class="mt-3 flex gap-2">
                 <button v-for="p in RECHARGE_PRESETS" :key="p" type="button" class="flex-1 rounded-sm border border-[var(--border-default)] bg-white py-2.5 font-mono text-[13px] font-bold transition-colors hover:border-green-600 hover:text-green-700" @click="amount = String(p)">{{ p / 1000 }}k</button>
               </div>
+              <!-- Clarifie que la recharge alimente directement la tirelire (RecordTransaction type SAVING côté API,
+                   pas une étape séparée) — sans ce texte, rien n'indique que ce montant servira à payer un loyer. -->
+              <p class="mb-0 mt-3 text-[12.5px] text-[var(--text-muted)]">Ce montant sera immédiatement disponible dans votre tirelire, pour payer un loyer ou une réservation.</p>
 
               <p class="mb-2 mt-4.5 text-[13px] font-bold text-[var(--text-muted)]">Passerelle</p>
               <div v-if="gatewaysLoading" class="text-[13px] text-[var(--text-muted)]">Chargement…</div>

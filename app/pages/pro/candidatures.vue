@@ -132,6 +132,12 @@ function leaseLinkFor(r: RentalRequestSummary) {
   const l = draftLeaseFor(leases.value, r.unit_id, r.tenant_id)
   return l ? `/pro/baux/${l.id}` : null
 }
+/** Brouillon jamais envoyé : l'action la plus importante en attente côté propriétaire — le signaler plutôt
+ * que de le laisser se fondre dans la liste des candidatures traitées (amélioration UX, tâche 4). */
+function leaseNeedsSending(r: RentalRequestSummary): boolean {
+  const l = draftLeaseFor(leases.value, r.unit_id, r.tenant_id)
+  return !!l && leasePhase(l) === 'draft'
+}
 </script>
 
 <template>
@@ -205,8 +211,9 @@ function leaseLinkFor(r: RentalRequestSummary) {
             <p class="m-0 text-[14px] font-bold">{{ name(r) }} — {{ r.unit?.name ?? 'logement supprimé' }}</p>
             <p class="mb-0 mt-0.5 text-[12.5px] text-[var(--text-muted)]">{{ CANDIDATURE_LABEL[r.status] }} le {{ formatDate(r.responded_at) }}</p>
           </div>
-          <CoreBadge :tone="CANDIDATURE_TONE[r.status]">{{ CANDIDATURE_LABEL[r.status] }}</CoreBadge>
-          <NuxtLink v-if="r.status === 'accepted' && leaseLinkFor(r)" :to="leaseLinkFor(r) ?? ''" class="text-[12.5px] font-bold text-green-700 underline">Voir le bail</NuxtLink>
+          <CoreBadge v-if="r.status === 'accepted' && leaseNeedsSending(r)" tone="warn">Bail à envoyer</CoreBadge>
+          <CoreBadge v-else :tone="CANDIDATURE_TONE[r.status]">{{ CANDIDATURE_LABEL[r.status] }}</CoreBadge>
+          <NuxtLink v-if="r.status === 'accepted' && leaseLinkFor(r)" :to="leaseLinkFor(r) ?? ''" class="text-[12.5px] font-bold text-green-700 underline">{{ leaseNeedsSending(r) ? 'Relire et envoyer' : 'Voir le bail' }}</NuxtLink>
         </div>
       </template>
     </template>

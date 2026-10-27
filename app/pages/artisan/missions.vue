@@ -164,6 +164,8 @@ function openTerminerModal(requestId: string) {
             <div class="flex-1">
               <p class="m-0 text-[14.5px] font-bold">{{ tradeLabel(m.trade_reference_id) }}</p>
               <p class="mb-0 mt-0.5 text-xs text-[var(--text-faint)]">{{ m.unit?.name ?? 'Logement' }}</p>
+              <!-- Avant : il fallait ouvrir le détail pour savoir où se trouve le logement (amélioration UX, tâche 5). -->
+              <p v-if="m.unit?.address" class="mb-0 mt-0.5 truncate text-xs text-[var(--text-faint)]">📍 {{ m.unit.address }}</p>
             </div>
           </div>
           <div class="mt-3 flex items-center justify-between">
