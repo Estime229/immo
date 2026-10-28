@@ -72,7 +72,9 @@ export function useProModalTarget() {
  * Signalement d'origine d'une demande d'intervention (Lot 54) : la modale
  * « Demander une intervention » arrive pré-remplie (logement, description) et,
  * une fois la demande créée, fait passer le signalement « En examen » avec
- * l'artisan en assigné. L'API ne relie pas les deux objets : c'est le front qui le fait.
+ * l'artisan en assigné. `signalId` est aussi envoyé dans `POST /artisan-requests`
+ * (audit UX, migration 014) : l'API relie les deux et transmet les photos du
+ * signalement à l'artisan, en plus de son texte déjà repris dans `description`.
  */
 export function useArtisanReqPrefill() {
   return useState<{ unitId: string; description: string; signalId: string; signalStatus: string } | null>('artisanReqPrefill', () => null)

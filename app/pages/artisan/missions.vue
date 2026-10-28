@@ -180,6 +180,13 @@ function openTerminerModal(requestId: string) {
         <p class="mb-0 mt-1 text-[13px] text-[var(--text-muted)]">{{ selected.unit?.name ?? 'Logement' }} · {{ selected.requester ? [selected.requester.first_name, selected.requester.last_name].filter(Boolean).join(' ') || 'Demandeur' : 'Demandeur' }}</p>
         <p class="mb-0 mt-4 text-sm leading-[1.6] text-[var(--text-secondary)]">{{ selected.description }}</p>
 
+        <!-- Photos du signalement d'origine, si cette demande en vient (amélioration UX, tâche 5) : avant, seul le texte était transmis. -->
+        <div v-if="selected.signal?.attachments?.length" class="mt-3.5 flex flex-wrap gap-2">
+          <a v-for="(url, i) in selected.signal.attachments" :key="url" :href="url" target="_blank" rel="noopener" class="block h-16 w-16 overflow-hidden rounded-md border border-[var(--border-default)]">
+            <img :src="url" :alt="`Photo ${i + 1} du signalement`" class="h-full w-full object-cover">
+          </a>
+        </div>
+
         <template v-if="tab === 'ouvertes'">
           <p class="mb-2 mt-4.5 text-[12.5px] font-bold">Message au demandeur (optionnel)</p>
           <textarea v-model="applyMessage" placeholder="Disponible dès demain, je peux passer voir le souci." class="min-h-[70px] w-full resize-y rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-3.5 py-3 text-sm outline-none" />

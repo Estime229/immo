@@ -90,7 +90,8 @@ async function submit() {
       trade_reference_id: tradeId.value,
       description: description.value.trim(),
       target_artisan_id: mode.value === 'direct' ? targetArtisanId.value : undefined,
-      restricted_to_partners: mode.value === 'open' ? restrictedToPartners.value : undefined
+      restricted_to_partners: mode.value === 'open' ? restrictedToPartners.value : undefined,
+      signal_id: prefill.value?.signalId
     })
     refresh.value++
     // Venue d'un signalement : il passe « En examen », l'artisan en assigné (sans bloquer si ça échoue).

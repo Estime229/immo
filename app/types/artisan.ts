@@ -40,6 +40,10 @@ export interface ArtisanRequestSummary {
   requester?: ArtisanRequestParty
   target_artisan?: ArtisanRequestParty
   conversation_id?: string
+  /** Signalement locataire d'origine (bouton « Faire intervenir un artisan », `pro/signalements.vue`) — absent sur une demande créée sans passer par un signalement. */
+  signal_id?: string | null
+  /** Joint par `GET /artisan-requests/my` quand `signal_id` est renseigné — photos du signalement, voir `signal.model.ts`. */
+  signal?: { id: string; attachments: string[] } | null
   /** Poste ouvert d'origine dont cette ligne est une candidature (`apply()`) — absent sur une demande directe ou sur le poste ouvert lui-même. */
   public_posting_id?: string | null
   restricted_to_partners?: boolean
@@ -62,6 +66,8 @@ export interface CreateArtisanRequestPayload {
   unit_id: string
   description: string
   restricted_to_partners?: boolean
+  /** UUID du signalement d'origine — voir `ArtisanRequestSummary.signal_id`. */
+  signal_id?: string
 }
 
 export interface ArtisanOffer {

@@ -7,6 +7,18 @@ definePageMeta({ layout: 'locataire' })
 const wallet = useTenantWallet()
 const { openPay } = usePaymentModal()
 
+/** Explication complète (solde vs tirelire) montrée une fois sur le tableau de bord, puis
+ * remplacée par la ligne courte habituelle — cookie plutôt que localStorage pour que le
+ * serveur la lise au rendu et évite le flash d'affichage avant hydratation (voir AppDownloadBanner). */
+const walletIntroDismissed = useCookie<string | null>('immo_wallet_intro_dismissed', {
+  default: () => null,
+  sameSite: 'lax',
+  maxAge: 60 * 60 * 24 * 365
+})
+function dismissWalletIntro() {
+  walletIntroDismissed.value = '1'
+}
+
 const bookingsApi = useBookingsApi()
 const housingRequestsApi = useHousingRequestsApi()
 const waitlistApi = useWaitlistApi()
@@ -93,14 +105,24 @@ const activity = computed(() => buildActivityFeed(signalsBlock.items.value, noti
 const activityLoading = computed(() => signalsBlock.state.value === 'loading' || notificationsBlock.state.value === 'loading')
 </script>
 
+<!--
+  Mise en page pilotée par la largeur réellement disponible (container queries
+  sur la racine), pas par celle de l'écran : sur tablette, la barre latérale
+  apparaît en paysage (lg) et disparaît en portrait, si bien que l'espace utile
+  est presque le même (≈ 700 px) dans les deux sens.
+  - < @xl (576 px)    : une colonne (téléphone) ;
+  - @xl → @5xl        : tablette — logements en grille, wallet à l'horizontale,
+                        prochaines étapes et activité côte à côte ;
+  - ≥ @5xl (1024 px)  : bureau — logements | wallet, puis étapes | activité.
+-->
 <template>
-  <div class="animate-[im-fade_.3s_ease_both]">
+  <div class="@container animate-[im-fade_.3s_ease_both]">
     <LayoutKycNotice space="locataire" />
     <FeedbackAlertBanner v-if="lateInfo" tone="danger" action-label="Payer maintenant" class="mb-5" @action="payLateLease">
       {{ dashAlert }}
     </FeedbackAlertBanner>
 
-    <div class="grid grid-cols-1 gap-4.5 lg:grid-cols-[1.35fr_1fr]">
+    <div class="grid grid-cols-1 gap-4.5 @5xl:grid-cols-[1.35fr_1fr]">
       <div class="rounded-2xl border border-[var(--border-subtle)] bg-white p-5.5">
         <div class="mb-4 flex items-baseline justify-between">
           <p class="m-0 text-xs font-black uppercase tracking-[.06em] text-[var(--text-faint)]">Mes logements</p>
@@ -120,25 +142,25 @@ const activityLoading = computed(() => signalsBlock.state.value === 'loading' ||
           Aucun bail pour l'instant.
         </p>
 
-        <div v-else class="flex flex-col gap-2.5">
-          <div
+        <!-- Plusieurs baux sur tablette : deux cartes par ligne ; le titre passe sur deux lignes et le statut sous le loyer, plutôt que de tout tronquer sur une seule ligne. -->
+        <div v-else class="grid grid-cols-1 gap-2.5" :class="leaseCards.length > 1 ? '@xl:grid-cols-2 @5xl:grid-cols-1' : ''">
+          <button
             v-for="l in leaseCards"
             :key="l.id"
-            class="flex cursor-pointer gap-3.5 rounded-lg border border-[var(--border-subtle)] p-3 transition-shadow hover:shadow-raised"
+            type="button"
+            class="flex w-full min-w-0 items-center gap-3.5 rounded-lg border border-[var(--border-subtle)] p-3 text-left transition-shadow hover:shadow-raised"
             @click="openLease(l.id)"
           >
-            <div class="h-[66px] w-[78px] flex-none rounded-md bg-cover bg-center" :style="{ backgroundImage: l.photo }" />
+            <div class="h-[66px] w-[78px] flex-none self-start rounded-md bg-cover bg-center" :style="{ backgroundImage: l.photo }" />
             <div class="min-w-0 flex-1">
-              <div class="flex items-center gap-2">
-                <p class="m-0 truncate text-[14.5px] font-bold tracking-[-.01em]">{{ l.title }}</p>
-                <CoreBadge :tone="l.tone" class="flex-none">{{ l.statusLabel }}</CoreBadge>
-              </div>
-              <div class="mt-2 flex items-baseline gap-3">
-                <span class="font-mono text-sm font-bold">{{ l.rentFmt }}<span class="font-body text-[11px] font-medium text-[var(--text-faint)]"> / mois</span></span>
+              <p class="m-0 line-clamp-2 text-[14.5px] font-bold leading-snug tracking-[-.01em]">{{ l.title }}</p>
+              <div class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                <span class="whitespace-nowrap font-mono text-sm font-bold">{{ l.rentFmt }}<span class="font-body text-[11px] font-medium text-[var(--text-faint)]"> / mois</span></span>
+                <CoreBadge :tone="l.tone">{{ l.statusLabel }}</CoreBadge>
               </div>
             </div>
-            <span class="self-center text-[15px] text-[var(--text-faint)]">→</span>
-          </div>
+            <span class="flex-none text-[15px] text-[var(--text-faint)]">→</span>
+          </button>
         </div>
       </div>
 
@@ -147,25 +169,36 @@ const activityLoading = computed(() => signalsBlock.state.value === 'loading' ||
           <p class="m-0 text-xs font-black uppercase tracking-[.06em] text-[var(--text-faint)]">Mon wallet</p>
           <NuxtLink to="/locataire/wallet" class="text-[12.5px] font-bold text-green-700">Détail →</NuxtLink>
         </div>
-        <div v-if="wallet.state.value === 'loading'"><DataSkeletonCard :height="70" :lines="1" /></div>
-        <div v-else class="grid grid-cols-2 gap-3">
-          <div class="rounded-md border border-[var(--border-subtle)] bg-[var(--surface-page)] p-3.5">
-            <p class="m-0 text-[11.5px] font-bold text-[var(--text-muted)]">Solde disponible</p>
-            <p class="mb-0 mt-1.5 font-mono text-lg font-bold">{{ formatFcfaShort(wallet.balanceTotal.value) }}</p>
+        <!-- Tablette : le wallet occupe toute la largeur, soldes à gauche, explication et « Recharger » à droite. -->
+        <div class="grid grid-cols-1 gap-3 @xl:grid-cols-2 @xl:gap-5 @5xl:grid-cols-1 @5xl:gap-3">
+          <div v-if="wallet.state.value === 'loading'"><DataSkeletonCard :height="70" :lines="1" /></div>
+          <div v-else class="grid grid-cols-2 content-start gap-3">
+            <div class="min-w-0 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-page)] p-3.5">
+              <p class="m-0 text-[11.5px] font-bold text-[var(--text-muted)]">Solde disponible</p>
+              <p class="mb-0 mt-1.5 whitespace-nowrap font-mono text-lg font-bold">{{ formatFcfaShort(wallet.balanceTotal.value) }}</p>
+            </div>
+            <div class="min-w-0 rounded-md border border-green-100 bg-green-50 p-3.5">
+              <p class="m-0 text-[11.5px] font-bold text-green-700">Tirelire</p>
+              <p class="mb-0 mt-1.5 whitespace-nowrap font-mono text-lg font-bold text-green-900">{{ formatFcfaShort(wallet.balanceSavings.value) }}</p>
+            </div>
           </div>
-          <div class="rounded-md border border-green-100 bg-green-50 p-3.5">
-            <p class="m-0 text-[11.5px] font-bold text-green-700">Tirelire</p>
-            <p class="mb-0 mt-1.5 font-mono text-lg font-bold text-green-900">{{ formatFcfaShort(wallet.balanceSavings.value) }}</p>
+          <div>
+            <div v-if="!walletIntroDismissed" class="rounded-md border border-green-100 bg-green-50 px-3.5 py-3">
+              <p class="mb-0 text-[12.5px] leading-[1.5] text-green-900">
+                La tirelire est la part réservée au logement : c'est elle qui sert à payer un loyer ou une réservation. Les deux soldes ne bougent pas ensemble — une recharge crédite les deux, un revenu locatif ne crédite que le solde disponible.
+              </p>
+              <button type="button" class="mt-2 text-[12px] font-bold text-green-700 underline" @click="dismissWalletIntro">Compris</button>
+            </div>
+            <p v-else class="m-0 text-[12.5px] leading-[1.5] text-[var(--text-muted)]">
+              La tirelire est la part réservée au logement : c'est elle qui sert à payer un loyer ou une réservation.
+            </p>
+            <button type="button" class="mt-3.5 block w-full rounded-md bg-[image:var(--action-primary)] py-3 text-center text-sm font-bold text-white shadow-action" @click="openPay('recharge')">Recharger</button>
           </div>
         </div>
-        <p class="mb-0 mt-3 text-[12.5px] leading-[1.5] text-[var(--text-muted)]">
-          La tirelire est la part réservée au logement : c'est elle qui sert à payer un loyer ou une réservation.
-        </p>
-        <button type="button" class="mt-3.5 block w-full rounded-md bg-[image:var(--action-primary)] py-3 text-center text-sm font-bold text-white shadow-action" @click="openPay('recharge')">Recharger</button>
       </div>
     </div>
 
-    <div class="mt-4.5 grid grid-cols-1 gap-4.5 lg:grid-cols-2">
+    <div class="mt-4.5 grid grid-cols-1 gap-4.5 @xl:grid-cols-2">
       <div class="rounded-2xl border border-[var(--border-subtle)] bg-white p-5.5">
         <p class="mb-1.5 mt-0 text-xs font-black uppercase tracking-[.06em] text-[var(--text-faint)]">Prochaines étapes</p>
         <div v-if="nextStepsLoading" class="flex flex-col gap-2 pt-2">
@@ -175,10 +208,10 @@ const activityLoading = computed(() => signalsBlock.state.value === 'loading' ||
         <div v-else v-for="n in nextSteps" :key="n.key" class="flex items-center gap-3.5 border-b border-sand-200 py-3.5 last:border-b-0">
           <div class="grid h-[34px] w-[34px] flex-none place-items-center rounded-sm bg-warn-bg text-sm">◷</div>
           <div class="min-w-0 flex-1">
-            <p class="m-0 truncate text-sm font-semibold">{{ n.label }}</p>
+            <p class="m-0 line-clamp-2 text-sm font-semibold leading-snug">{{ n.label }}</p>
             <p class="mb-0 mt-0.5 truncate text-xs text-[var(--text-faint)]">{{ n.hint }}</p>
           </div>
-          <NuxtLink :to="n.to" class="flex-none rounded-pill border border-[var(--border-default)] bg-white px-3.5 py-2 text-xs font-bold">{{ n.cta }}</NuxtLink>
+          <NuxtLink :to="n.to" class="inline-flex min-h-10 flex-none items-center rounded-pill border border-[var(--border-default)] bg-white px-4 text-xs font-bold">{{ n.cta }}</NuxtLink>
         </div>
       </div>
       <div class="rounded-2xl border border-[var(--border-subtle)] bg-white p-5.5">
@@ -189,7 +222,7 @@ const activityLoading = computed(() => signalsBlock.state.value === 'loading' ||
         <p v-else-if="!activity.length" class="mb-0 mt-3 text-[13px] text-[var(--text-muted)]">Aucune activité récente.</p>
         <div v-else v-for="a in activity" :key="a.key" class="flex items-center gap-3.5 border-b border-sand-200 py-3 last:border-b-0">
           <span class="h-2 w-2 flex-none rounded-pill" :class="a.dot" />
-          <p class="m-0 flex-1 truncate text-[13.5px]">{{ a.label }}</p>
+          <p class="m-0 line-clamp-2 min-w-0 flex-1 text-[13.5px] leading-snug">{{ a.label }}</p>
           <span class="flex-none whitespace-nowrap text-xs text-[var(--text-faint)]">{{ formatDate(a.date) }}</span>
         </div>
       </div>
