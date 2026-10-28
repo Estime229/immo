@@ -1,5 +1,5 @@
 <script setup lang="ts">
-/** Pastille d'initiales — Immo n'utilise pas de photo de profil. */
+/** Pastille d'initiales, ou photo si `avatarUrl` est fourni (voir `useUserApi().uploadAvatar`). */
 interface AvatarProps {
   /** Nom complet ; les deux premières initiales sont extraites */
   name: string
@@ -7,6 +7,8 @@ interface AvatarProps {
   size?: number
   /** Force la couleur ; sinon dérivée du nom */
   color?: string
+  /** Photo de profil (`avatar_url`) — absente ou en échec de chargement : repli sur les initiales. */
+  avatarUrl?: string | null
 }
 
 const props = withDefaults(defineProps<AvatarProps>(), { size: 40 })
@@ -18,11 +20,14 @@ const initials = computed(() =>
 )
 const background = computed(() => props.color || PALETTE[props.name.length % PALETTE.length])
 const fontSize = computed(() => Math.round(props.size * 0.32))
+
+const imgFailed = ref(false)
+watch(() => props.avatarUrl, () => { imgFailed.value = false })
 </script>
 
 <template>
-  <div
-    class="grid flex-none place-items-center rounded-pill font-body font-bold text-white"
-    :style="{ width: `${size}px`, height: `${size}px`, background, fontSize: `${fontSize}px` }"
-  >{{ initials }}</div>
+  <div class="flex-none overflow-hidden rounded-pill" :style="{ width: `${size}px`, height: `${size}px` }">
+    <img v-if="avatarUrl && !imgFailed" :src="avatarUrl" :alt="name" class="h-full w-full object-cover" @error="imgFailed = true">
+    <div v-else class="grid h-full w-full place-items-center font-body font-bold text-white" :style="{ background, fontSize: `${fontSize}px` }">{{ initials }}</div>
+  </div>
 </template>

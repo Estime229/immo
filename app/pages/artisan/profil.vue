@@ -3,12 +3,15 @@ import type { ArtisanProfile } from '~/types/artisan'
 import type { RefEntry } from '~/types/reference'
 import { ApiRequestError } from '~/utils/authenticatedFetcher'
 import { errorText } from '~/utils/apiErrors'
+import { prepareAvatarUpload } from '~/utils/uploadFile'
 
 definePageMeta({ layout: 'artisan' })
 
 const profileApi = useArtisanProfileApi()
 const refData = useReferenceData()
 const currentUser = useAuthUser()
+const authApi = useAuthApi()
+const userApi = useUserApi()
 
 const tab = ref<'infos' | 'portfolio'>('infos')
 const TABS = [
@@ -75,6 +78,28 @@ const displayName = computed(() => {
   return `${u.first_name ?? ''} ${u.last_name ?? ''}`.trim() || u.email
 })
 
+/* ---- Photo de profil ---- */
+const avatarUploading = ref(false)
+const avatarError = ref('')
+const avatarInput = ref<HTMLInputElement | null>(null)
+async function onAvatarSelected(e: Event) {
+  const file = (e.target as HTMLInputElement).files?.[0]
+  if (!file) return
+  avatarUploading.value = true
+  avatarError.value = ''
+  try {
+    const ready = await prepareAvatarUpload(file)
+    if (ready.error) { avatarError.value = ready.error; return }
+    await userApi.uploadAvatar(ready.file)
+    await authApi.fetchMe()
+  } catch (err) {
+    avatarError.value = err instanceof ApiRequestError ? errorText(err.mapped, "L'envoi de la photo a échoué.") : "L'envoi de la photo a échoué."
+  } finally {
+    avatarUploading.value = false
+    if (avatarInput.value) avatarInput.value.value = ''
+  }
+}
+
 /* ---- Portfolio ---- */
 const uploading = ref(false)
 const portfolioError = ref('')
@@ -134,7 +159,13 @@ async function removePhoto(mediaId: string) {
       <LayoutAccountNameForm class="mb-4.5 max-w-[680px]" />
       <div class="max-w-[680px] rounded-2xl border border-[var(--border-subtle)] bg-white p-6">
         <div class="mb-4.5 flex items-center gap-4">
-          <CoreAvatar :name="displayName" :size="64" color="var(--color-green-700)" />
+          <div class="relative flex-none">
+            <CoreAvatar :name="displayName" :avatar-url="currentUser?.avatar_url" :size="64" color="var(--color-green-700)" />
+            <label class="absolute -bottom-1 -right-1 grid h-7 w-7 cursor-pointer place-items-center rounded-pill border-2 border-white bg-green-600 text-[12px] text-white shadow-card" :class="{ 'pointer-events-none opacity-60': avatarUploading }">
+              {{ avatarUploading ? '…' : '✎' }}
+              <input ref="avatarInput" type="file" accept="image/*" class="hidden" :disabled="avatarUploading" @change="onAvatarSelected">
+            </label>
+          </div>
           <div>
             <p class="m-0 font-display text-xl font-bold">{{ displayName }}</p>
             <p class="mb-0 mt-1 text-[13px] text-[var(--text-muted)]">
@@ -142,6 +173,7 @@ async function removePhoto(mediaId: string) {
               <template v-if="profile?.reputation_score !== null && profile?.reputation_score !== undefined"> · ★ {{ profile.reputation_score.toFixed(1) }} ({{ profile.review_count }} avis)</template>
               <template v-else> · Aucun avis pour l'instant</template>
             </p>
+            <p v-if="avatarError" class="mb-0 mt-1 text-[12px] font-semibold text-danger-fg">{{ avatarError }}</p>
           </div>
         </div>
 

@@ -2,6 +2,7 @@
 import type { NotificationChannel, NotificationPreferences, ProfileMe } from '~/types/profile'
 import { ApiRequestError } from '~/utils/authenticatedFetcher'
 import { errorText } from '~/utils/apiErrors'
+import { prepareAvatarUpload } from '~/utils/uploadFile'
 
 definePageMeta({ layout: 'locataire' })
 
@@ -27,6 +28,28 @@ const displayName = computed(() => {
 
 function maskedStatus(v: string | null) {
   return v ? 'Renseigné' : 'Non renseigné'
+}
+
+/* ---- Photo de profil ---- */
+const avatarUploading = ref(false)
+const avatarError = ref('')
+const avatarInput = ref<HTMLInputElement | null>(null)
+async function onAvatarSelected(e: Event) {
+  const file = (e.target as HTMLInputElement).files?.[0]
+  if (!file) return
+  avatarUploading.value = true
+  avatarError.value = ''
+  try {
+    const ready = await prepareAvatarUpload(file)
+    if (ready.error) { avatarError.value = ready.error; return }
+    await userApi.uploadAvatar(ready.file)
+    await authApi.fetchMe()
+  } catch (err) {
+    avatarError.value = err instanceof ApiRequestError ? errorText(err.mapped, "L'envoi de la photo a échoué.") : "L'envoi de la photo a échoué."
+  } finally {
+    avatarUploading.value = false
+    if (avatarInput.value) avatarInput.value.value = ''
+  }
 }
 
 /* ---- Profil (informations éditables) ---- */
@@ -209,10 +232,17 @@ async function toggleChannel(channel: NotificationChannel) {
       <div class="grid grid-cols-1 gap-4.5 lg:grid-cols-2">
         <div class="rounded-2xl border border-[var(--border-subtle)] bg-white p-6">
           <div class="flex items-center gap-4">
-            <CoreAvatar :name="displayName" :size="72" color="var(--color-green-700)" />
+            <div class="relative flex-none">
+              <CoreAvatar :name="displayName" :avatar-url="currentUser?.avatar_url" :size="72" color="var(--color-green-700)" />
+              <label class="absolute -bottom-1 -right-1 grid h-7 w-7 cursor-pointer place-items-center rounded-pill border-2 border-white bg-green-600 text-[12px] text-white shadow-card" :class="{ 'pointer-events-none opacity-60': avatarUploading }">
+                {{ avatarUploading ? '…' : '✎' }}
+                <input ref="avatarInput" type="file" accept="image/*" class="hidden" :disabled="avatarUploading" @change="onAvatarSelected">
+              </label>
+            </div>
             <div>
               <p class="m-0 font-display text-xl font-bold tracking-[-.02em]">{{ displayName }}</p>
               <p class="mb-0 mt-1 text-[13px] text-[var(--text-muted)]">Locataire</p>
+              <p v-if="avatarError" class="mb-0 mt-1 text-[12px] font-semibold text-danger-fg">{{ avatarError }}</p>
             </div>
           </div>
           <div class="mt-5">

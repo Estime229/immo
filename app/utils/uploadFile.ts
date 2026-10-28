@@ -55,3 +55,15 @@ export async function prepareUpload(file: File): Promise<{ file: File; error: nu
   const error = checkUploadFile(ready)
   return error ? { file: null, error } : { file: ready, error: null }
 }
+
+/** Avatar (`POST /user/avatar`) : images uniquement, 3 Mo max côté API — contraintes distinctes de `prepareUpload` (PDF+image, 4 Mo, pensé pour les documents KYC). */
+export async function prepareAvatarUpload(file: File): Promise<{ file: File; error: null } | { file: null; error: string }> {
+  const ready = await compressImage(file)
+  if (!ready.type.startsWith('image/')) {
+    return { file: null, error: 'Envoyez une photo JPG, PNG ou WebP.' }
+  }
+  if (ready.size > 3 * 1024 * 1024) {
+    return { file: null, error: 'Cette photo dépasse 3 Mo même après compression. Essayez une photo moins lourde.' }
+  }
+  return { file: ready, error: null }
+}

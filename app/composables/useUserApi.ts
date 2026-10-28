@@ -15,5 +15,16 @@ export function useUserApi() {
     return api.post<{ first_name: string; last_name: string }>('/user/update', payload)
   }
 
-  return { deleteAccount, updateIdentity }
+  /**
+   * Photo de profil — `POST /user/avatar`, champ multipart `avatar`. Réponse non
+   * typée par le Swagger (schéma `unknown`) : on rafraîchit `useAuthUser()` via
+   * `fetchMe()` après coup plutôt que de se fier à sa forme exacte.
+   */
+  async function uploadAvatar(file: File) {
+    const formData = new FormData()
+    formData.append('avatar', file)
+    return api.post('/user/avatar', formData)
+  }
+
+  return { deleteAccount, updateIdentity, uploadAvatar }
 }

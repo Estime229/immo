@@ -3,6 +3,7 @@ import type { NotificationChannel, NotificationPreferences, ProfileMe } from '~/
 import { ApiRequestError } from '~/utils/authenticatedFetcher'
 import { errorText } from '~/utils/apiErrors'
 import { validateIfu, validateRccm } from '~/utils/onboarding'
+import { prepareAvatarUpload } from '~/utils/uploadFile'
 
 definePageMeta({ layout: 'pro' })
 
@@ -38,6 +39,34 @@ onMounted(loadProfile)
 
 function maskedStatus(v: string | null) {
   return v ? 'Renseigné' : 'Non renseigné'
+}
+
+const displayName = computed(() => {
+  const u = currentUser.value
+  if (!u) return 'Vous'
+  return `${u.first_name ?? ''} ${u.last_name ?? ''}`.trim() || u.email
+})
+
+/* ---- Photo de profil ---- */
+const avatarUploading = ref(false)
+const avatarError = ref('')
+const avatarInput = ref<HTMLInputElement | null>(null)
+async function onAvatarSelected(e: Event) {
+  const file = (e.target as HTMLInputElement).files?.[0]
+  if (!file) return
+  avatarUploading.value = true
+  avatarError.value = ''
+  try {
+    const ready = await prepareAvatarUpload(file)
+    if (ready.error) { avatarError.value = ready.error; return }
+    await userApi.uploadAvatar(ready.file)
+    await authApi.fetchMe()
+  } catch (err) {
+    avatarError.value = err instanceof ApiRequestError ? errorText(err.mapped, "L'envoi de la photo a échoué.") : "L'envoi de la photo a échoué."
+  } finally {
+    avatarUploading.value = false
+    if (avatarInput.value) avatarInput.value.value = ''
+  }
 }
 
 const fullName = ref('')
@@ -165,6 +194,19 @@ async function toggleChannel(channel: NotificationChannel) {
     <template v-if="tab === 'identite'">
       <LayoutAccountNameForm class="mb-4.5 max-w-[640px]" />
       <div class="max-w-[640px] rounded-2xl border border-[var(--border-subtle)] bg-white p-6">
+        <div class="mb-4.5 flex items-center gap-4">
+          <div class="relative flex-none">
+            <CoreAvatar :name="displayName" :avatar-url="currentUser?.avatar_url" :size="64" color="var(--color-green-700)" />
+            <label class="absolute -bottom-1 -right-1 grid h-7 w-7 cursor-pointer place-items-center rounded-pill border-2 border-white bg-green-600 text-[12px] text-white shadow-card" :class="{ 'pointer-events-none opacity-60': avatarUploading }">
+              {{ avatarUploading ? '…' : '✎' }}
+              <input ref="avatarInput" type="file" accept="image/*" class="hidden" :disabled="avatarUploading" @change="onAvatarSelected">
+            </label>
+          </div>
+          <div>
+            <p class="m-0 font-display text-lg font-bold">{{ displayName }}</p>
+            <p v-if="avatarError" class="mb-0 mt-1 text-[12px] font-semibold text-danger-fg">{{ avatarError }}</p>
+          </div>
+        </div>
         <p class="mb-4 mt-0 text-[15px] font-bold">Identité</p>
         <div class="flex justify-between border-b border-sand-200 py-3.5">
           <span class="text-[13.5px] text-[var(--text-faint)]">E-mail</span>
