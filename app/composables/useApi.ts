@@ -1,4 +1,5 @@
-import { createAuthenticatedFetcher, type RequestInitLike } from '~/utils/authenticatedFetcher'
+import { ApiRequestError, createAuthenticatedFetcher, type RequestInitLike } from '~/utils/authenticatedFetcher'
+import { errorText } from '~/utils/apiErrors'
 
 /**
  * Point d'entrée unique pour tout appel API authentifié. Pose le Bearer,
@@ -20,18 +21,37 @@ export function useApi() {
       return { accessToken: pair.accessToken }
     },
     onAuthFailure: () => clearTokens(),
+    // $fetch est appelé sans son typage de routes Nuxt (l'URL est celle de l'API distante, pas une
+    // route du serveur Nuxt) : sinon TypeScript dépasse sa profondeur de comparaison (TS2321).
     doFetch: (url, opts) =>
-      $fetch(url, {
+      ($fetch as (request: string, options?: Record<string, unknown>) => Promise<unknown>)(url, {
         baseURL: config.public.apiProxyBase,
         ...opts
-      } as Parameters<typeof $fetch>[1])
+      })
   })
 
   function call<T = unknown>(url: string, opts: RequestInitLike = {}): Promise<T> {
     return fetcher.request<T>(url, opts, !!teamContext.value)
   }
 
+  /**
+   * Contrat repris de l'ancien projet immo-admin : `apiFetch(url, opts)` lève une `Error`
+   * dont le message est déjà lisible et qui porte `status`. Les composables admin
+   * (useUsers, useWallet…) s'en servent tels quels ; le reste d'Immo utilise get/post/….
+   */
+  async function apiFetch<T = unknown>(url: string, opts: RequestInitLike = {}): Promise<T> {
+    try {
+      return await call<T>(url, opts)
+    } catch (err) {
+      if (!(err instanceof ApiRequestError)) throw err
+      const wrapped = new Error(errorText(err.mapped, 'Une erreur est survenue. Réessayez.')) as Error & { status?: number | null }
+      wrapped.status = err.status
+      throw wrapped
+    }
+  }
+
   return {
+    apiFetch,
     get: <T = unknown>(url: string, query?: Record<string, unknown>) => call<T>(url, { method: 'GET', query }),
     post: <T = unknown>(url: string, body?: unknown) => call<T>(url, { method: 'POST', body }),
     patch: <T = unknown>(url: string, body?: unknown) => call<T>(url, { method: 'PATCH', body }),

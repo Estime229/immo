@@ -16,6 +16,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@lucide/vue": "^1.64.0",
     "leaflet": "^1.9.4",
     "nuxt": "^4.4.8",
     "vue": "^3.5.39",

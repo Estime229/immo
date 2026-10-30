@@ -38,5 +38,5 @@ export function publicRouteTitle(path: string): string | null {
 
 /** Pages à ne pas indexer : espaces connectés, flux techniques, maquette interne. */
 export function isPrivatePath(path: string): boolean {
-  return ['/locataire', '/pro', '/artisan', '/kyc', '/connexion', '/invite', '/payment', '/design-system'].some(p => path === p || path.startsWith(`${p}/`))
+  return ['/locataire', '/pro', '/artisan', '/kyc', '/connexion', '/invite', '/payment', '/design-system', '/admin'].some(p => path === p || path.startsWith(`${p}/`))
 }

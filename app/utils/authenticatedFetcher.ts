@@ -27,6 +27,8 @@ export interface RequestInitLike {
   headers?: Record<string, string>
   body?: unknown
   query?: Record<string, unknown>
+  /** Téléchargements binaires (pièce d'identité côté admin). */
+  responseType?: 'json' | 'blob' | 'text'
 }
 
 export class ApiRequestError extends Error {

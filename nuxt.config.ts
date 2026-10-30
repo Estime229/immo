@@ -8,6 +8,9 @@ export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true },
   css: [resolve('./app/assets/css/main.css')],
+  // Préserve le contexte Nuxt (useState/useCookie…) à travers les await imbriqués en SSR :
+  // requis par les composables admin (middleware → ensureSession → ensureLevelsLoaded → apiFetch).
+  experimental: { asyncContext: true },
   runtimeConfig: {
     // Serveur uniquement — jamais exposé au navigateur. Le backend ne renvoie pas
     // d'en-têtes CORS pour l'origine du front (vérifié le 2026-09-17 : un appel
@@ -28,6 +31,7 @@ export default defineNuxtConfig({
     }
   },
   vite: {
-    plugins: [tailwindcss()]
+    plugins: [tailwindcss()],
+    optimizeDeps: { include: ['@lucide/vue'] }
   }
 })
