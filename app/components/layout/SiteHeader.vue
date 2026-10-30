@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ArrowLeftRight, ArrowRight, ChevronRight, CircleQuestionMark, Globe, Heart, House, LayoutDashboard, Mail } from '@lucide/vue'
 import type { UserRole } from '~/types/auth'
 import { roleHomePath, roleLabel } from '~/utils/roleRoutes'
 import { draftFromQuery, summarizeSearch } from '~/utils/searchPill'
@@ -176,7 +177,7 @@ function closeMenu() {
           class="hidden h-[42px] w-[42px] place-items-center rounded-pill border border-[var(--border-default)] bg-white text-[17px] transition-colors hover:border-green-600 lg:grid"
           aria-label="Langue et devise"
           @click="openLang"
-        >✦</button>
+        ><Globe class="h-[18px] w-[18px]" :stroke-width="1.9" /></button>
         <button
           type="button"
           class="relative flex items-center gap-[9px] rounded-pill border bg-white py-[5px] pl-[13px] pr-[6px] shadow-card transition-[box-shadow,border-color] duration-[var(--duration-base)] hover:shadow-raised"
@@ -201,27 +202,27 @@ function closeMenu() {
       <div class="fixed inset-0 z-[44]" @click="closeMenu" />
       <div class="absolute right-[26px] top-[66px] z-[45] w-80 animate-[im-rise_.2s_ease_both] rounded-xl border border-[var(--border-subtle)] bg-white p-2 shadow-panel">
         <button type="button" class="flex w-full items-center gap-3.5 rounded-md px-3.5 py-3 text-left hover:bg-sand-100" @click="openLang">
-          <span class="w-[22px] text-center text-lg">✦</span><span class="text-[14.5px] font-semibold">Langue et devise</span>
+          <Globe class="h-[18px] w-[22px] flex-none" :stroke-width="1.9" /><span class="text-[14.5px] font-semibold">Langue et devise</span>
         </button>
         <NuxtLink to="/faq" class="flex items-center gap-3.5 rounded-md px-3.5 py-3 hover:bg-sand-100" @click="closeMenu">
-          <span class="w-[22px] text-center text-lg">?</span><span class="text-[14.5px] font-semibold">Centre d'aide</span>
+          <CircleQuestionMark class="h-[18px] w-[22px] flex-none" :stroke-width="1.9" /><span class="text-[14.5px] font-semibold">Centre d'aide</span>
         </NuxtLink>
         <div class="my-2 h-px bg-sand-200" />
         <NuxtLink to="/louer" class="flex items-start gap-3.5 rounded-md px-3.5 py-3 hover:bg-clay-50" @click="closeMenu">
-          <span class="w-[22px] text-center text-lg">⌂</span>
+          <House class="mt-0.5 h-[18px] w-[22px] flex-none text-clay-700" :stroke-width="1.9" />
           <span>
             <p class="m-0 text-[14.5px] font-bold">Mettre un bien en location</p>
-            <p class="mb-0 mt-[3px] text-[12.5px] leading-[1.5] text-[var(--text-muted)]">Loyers suivis et caution séquestrée. C'est simple, et sans frais de publication.</p>
+            <p class="mb-0 mt-[3px] text-[12.5px] leading-[1.5] text-[var(--text-muted)]">Annonces, bail signé en ligne, loyers suivis et caution séquestrée par Immo pendant le bail.</p>
           </span>
         </NuxtLink>
         <NuxtLink to="/favoris" class="flex items-center gap-3.5 rounded-md px-3.5 py-3 hover:bg-sand-100" @click="closeMenu">
-          <span class="w-[22px] text-center text-base text-fav">♥</span>
+          <Heart class="h-[18px] w-[22px] flex-none text-fav" :stroke-width="1.9" />
           <span class="text-[14.5px] font-semibold">Mes favoris{{ favoriteCount ? ` (${favoriteCount})` : '' }}</span>
         </NuxtLink>
         <div class="my-2 h-px bg-sand-200" />
         <template v-if="auth.user.value">
           <NuxtLink :to="spacePath" class="flex items-center gap-3.5 rounded-md px-3.5 py-3 hover:bg-green-50" @click="closeMenu">
-            <span class="w-[22px] text-center text-lg text-green-700">◧</span>
+            <LayoutDashboard class="h-[18px] w-[22px] flex-none text-green-700" :stroke-width="1.9" />
             <span class="text-[14.5px] font-bold text-green-700">Mon espace{{ auth.user.value ? ` (${roleLabel(auth.user.value.role)})` : '' }}</span>
           </NuxtLink>
           <template v-if="otherRoles.length">
@@ -234,7 +235,7 @@ function closeMenu() {
               :disabled="switchingRole"
               @click="pickRole(r)"
             >
-              <span class="w-[22px] text-center text-lg text-[var(--text-faint)]">⇄</span>
+              <ArrowLeftRight class="h-[18px] w-[22px] flex-none text-[var(--text-faint)]" :stroke-width="1.9" />
               <span class="text-[14.5px] font-semibold">{{ switchingRole ? 'Changement…' : `Espace ${roleLabel(r)}` }}</span>
             </button>
           </template>
@@ -274,7 +275,7 @@ function closeMenu() {
       </p>
       <NuxtLink :to="spacePath" class="mt-3 flex items-center justify-between rounded-2xl bg-green-700 px-4 py-3.5 text-white shadow-action transition-transform active:scale-[.98]">
         <span class="text-[15px] font-bold">Mon espace {{ roleLabel(auth.user.value.role).toLowerCase() }}</span>
-        <span aria-hidden="true" class="text-lg">→</span>
+        <ArrowRight class="h-[18px] w-[18px]" aria-hidden="true" :stroke-width="1.9" />
       </NuxtLink>
       <template v-if="otherRoles.length">
         <p class="mb-1.5 mt-5 text-[11px] font-black uppercase tracking-[.05em] text-[var(--text-faint)]">Basculer vers</p>
@@ -288,7 +289,7 @@ function closeMenu() {
             @click="pickRole(r)"
           >
             <span class="text-[15px] font-semibold">{{ switchingRole ? 'Changement…' : `Espace ${roleLabel(r).toLowerCase()}` }}</span>
-            <span aria-hidden="true" class="text-[var(--text-faint)]">⇄</span>
+            <ArrowLeftRight class="h-4 w-4 text-[var(--text-faint)]" aria-hidden="true" :stroke-width="1.9" />
           </button>
         </div>
       </template>
@@ -299,13 +300,13 @@ function closeMenu() {
 
     <div class="mt-4 overflow-hidden rounded-2xl bg-white shadow-hairline">
       <button type="button" class="flex w-full items-center gap-3.5 border-b border-[var(--border-subtle)] px-4 py-3.5 text-left" @click="accountOpen = false; openLang()">
-        <span class="w-[22px] text-center text-lg">✦</span><span class="flex-1 text-[15px] font-semibold">Langue et devise</span><span aria-hidden="true" class="text-[var(--text-faint)]">›</span>
+        <Globe class="h-[18px] w-[22px] flex-none" :stroke-width="1.9" /><span class="flex-1 text-[15px] font-semibold">Langue et devise</span><ChevronRight class="h-4 w-4 text-[var(--text-faint)]" aria-hidden="true" :stroke-width="1.9" />
       </button>
       <NuxtLink to="/faq" class="flex items-center gap-3.5 border-b border-[var(--border-subtle)] px-4 py-3.5">
-        <span class="w-[22px] text-center text-lg">?</span><span class="flex-1 text-[15px] font-semibold">Centre d'aide</span><span aria-hidden="true" class="text-[var(--text-faint)]">›</span>
+        <CircleQuestionMark class="h-[18px] w-[22px] flex-none" :stroke-width="1.9" /><span class="flex-1 text-[15px] font-semibold">Centre d'aide</span><ChevronRight class="h-4 w-4 text-[var(--text-faint)]" aria-hidden="true" :stroke-width="1.9" />
       </NuxtLink>
       <NuxtLink to="/contact" class="flex items-center gap-3.5 px-4 py-3.5">
-        <span class="w-[22px] text-center text-lg">✉</span><span class="flex-1 text-[15px] font-semibold">Nous contacter</span><span aria-hidden="true" class="text-[var(--text-faint)]">›</span>
+        <Mail class="h-[18px] w-[22px] flex-none" :stroke-width="1.9" /><span class="flex-1 text-[15px] font-semibold">Nous contacter</span><ChevronRight class="h-4 w-4 text-[var(--text-faint)]" aria-hidden="true" :stroke-width="1.9" />
       </NuxtLink>
     </div>
 
@@ -315,34 +316,20 @@ function closeMenu() {
   </LayoutBottomSheet>
 
   <!-- Langue et devise -->
-  <Teleport to="body">
-    <div
-      v-if="langOpen"
-      class="fixed inset-0 z-[96] grid animate-[im-veil_.22s_ease_both] place-items-center bg-black/50 p-6 backdrop-blur-[3px]"
-      @click="langOpen = false"
-    >
-      <div class="flex max-h-[86vh] w-[560px] max-w-[calc(100vw-3rem)] animate-[im-rise_.28s_var(--ease-standard)_both] flex-col overflow-hidden rounded-2xl bg-[var(--surface-page)] shadow-panel" @click.stop>
-        <div class="flex items-center justify-between border-b border-[var(--border-subtle)] px-6 py-[18px]">
-          <h3 class="m-0 font-display text-[19px] font-bold tracking-[-.02em]">Langue et devise</h3>
-          <button type="button" class="grid h-[34px] w-[34px] place-items-center rounded-pill bg-sand-200 text-[15px] text-sand-800" @click="langOpen = false">✕</button>
-        </div>
-        <div class="overflow-y-auto p-6">
-          <p class="mb-3 mt-0 text-xs font-black uppercase tracking-[.05em] text-[var(--text-faint)]">Langue</p>
-          <div class="rounded-md border-[1.5px] border-green-600 bg-green-50 px-4 py-3.5">
-            <p class="m-0 text-sm font-bold">Français</p>
-            <p class="mb-0 mt-[3px] text-[12.5px] text-[var(--text-muted)]">Seule langue disponible pour l'instant. L'anglais, le fɔngbè et le yorùbá sont prévus.</p>
-          </div>
-          <p class="mb-3 mt-6 text-xs font-black uppercase tracking-[.05em] text-[var(--text-faint)]">Devise</p>
-          <div class="rounded-md border border-[var(--border-default)] bg-white px-4 py-3.5">
-            <p class="m-0 text-sm font-bold">Franc CFA (XOF)</p>
-            <p class="mb-0 mt-[3px] text-[12.5px] text-[var(--text-muted)]">Tous les prix, loyers et paiements sont en FCFA.</p>
-            <ul v-if="rates.length" class="mb-0 mt-2.5 list-none p-0 text-[12.5px] text-[var(--text-secondary)]">
-              <li v-for="r in rates" :key="r.currency_code" class="font-mono">{{ rateLine(r) }}</li>
-            </ul>
-            <p v-if="rates.length" class="mb-0 mt-1.5 text-[11.5px] text-[var(--text-faint)]">Équivalents indicatifs, pour se repérer depuis l'étranger.</p>
-          </div>
-        </div>
-      </div>
+  <CoreModal :open="langOpen" title="Langue et devise" width="560px" @close="langOpen = false">
+    <p class="mb-3 mt-0 text-label font-bold uppercase tracking-label text-[var(--text-faint)]">Langue</p>
+    <div class="rounded-md border-[1.5px] border-green-600 bg-green-50 px-4 py-3.5">
+      <p class="m-0 text-sm font-bold">Français</p>
+      <p class="mb-0 mt-[3px] text-[12.5px] text-[var(--text-muted)]">Seule langue disponible pour l'instant.</p>
     </div>
-  </Teleport>
+    <p class="mb-3 mt-6 text-label font-bold uppercase tracking-label text-[var(--text-faint)]">Devise</p>
+    <div class="rounded-md border border-[var(--border-default)] bg-white px-4 py-3.5">
+      <p class="m-0 text-sm font-bold">Franc CFA (XOF)</p>
+      <p class="mb-0 mt-[3px] text-[12.5px] text-[var(--text-muted)]">Tous les prix, loyers et paiements sont en FCFA.</p>
+      <ul v-if="rates.length" class="mb-0 mt-2.5 list-none p-0 text-[12.5px] text-[var(--text-secondary)]">
+        <li v-for="r in rates" :key="r.currency_code" class="font-mono">{{ rateLine(r) }}</li>
+      </ul>
+      <p v-if="rates.length" class="mb-0 mt-1.5 text-[11.5px] text-[var(--text-faint)]">Équivalents indicatifs, pour se repérer depuis l'étranger.</p>
+    </div>
+  </CoreModal>
 </template>

@@ -1,7 +1,9 @@
 <script setup lang="ts">
+import { ArrowRight, ArrowUp, Check, ChevronLeft, ChevronRight, ClipboardCheck, Search, ShieldCheck, Smartphone } from '@lucide/vue'
 import type { PropertySearchResult } from '~/types/property'
 import { flattenSearchResults, type ListingCard } from '~/utils/propertyListing'
-import { classifyRental, mapLimited } from '~/utils/rentalMode'
+import { classifyRental, mapLimited, type RentalMode } from '~/utils/rentalMode'
+import { buildSearchQuery, digitsOnly } from '~/utils/searchPill'
 
 const { photos, formatFcfaShort } = useProperties()
 const searchApi = usePropertySearchApi()
@@ -11,11 +13,19 @@ const favorites = usePropertyFavorites()
 /* ---- Barre de recherche ---- */
 const query = ref('')
 const cityName = ref('')
+/** Chiffres seuls (« 100 000 F » → 100000), comme la feuille de recherche mobile : `/recherche` fait `Number(budget)`. */
 const budget = ref('')
+const budgetDisplay = computed(() => (budget.value ? Number(budget.value).toLocaleString('fr-FR') : ''))
+function onBudgetInput(e: Event) {
+  const input = e.target as HTMLInputElement
+  budget.value = digitsOnly(input.value)
+  // Une lettre tapée ne change pas `budget` : sans cette ligne, elle resterait affichée dans le champ.
+  input.value = budgetDisplay.value
+}
 const cities = ref<{ id: string; name: string }[]>([])
 
 function runSearch() {
-  navigateTo({ path: '/recherche', query: { q: query.value || undefined, city: cityName.value || undefined, budget: budget.value || undefined } })
+  navigateTo({ path: '/recherche', query: buildSearchQuery({ q: query.value, city: cityName.value, budget: budget.value, mode: 'tous' }) })
 }
 
 const popularChips = computed(() => cities.value.slice(0, 4).map(c => ({ label: `Logements à ${c.name}`, city: c.name })))
@@ -31,23 +41,6 @@ onMounted(() => {
   heroTimer = setInterval(() => { heroIndex.value = (heroIndex.value + 1) % HERO_PHOTO_INDEXES.length }, 5000)
 })
 onUnmounted(() => clearInterval(heroTimer))
-
-/* ---- Offre de lancement — modale à la première visite, une seule fois par navigateur ---- */
-const LAUNCH_OFFER_SEEN_KEY = 'immo:launch-offer-seen'
-const showLaunchOffer = ref(false)
-onMounted(() => {
-  if (!localStorage.getItem(LAUNCH_OFFER_SEEN_KEY)) {
-    setTimeout(() => { showLaunchOffer.value = true }, 900)
-  }
-})
-function dismissLaunchOffer() {
-  showLaunchOffer.value = false
-  localStorage.setItem(LAUNCH_OFFER_SEEN_KEY, '1')
-}
-function exploreFromLaunchOffer() {
-  dismissLaunchOffer()
-  navigateTo('/recherche')
-}
 
 /* ---- Catégories réelles — comptées via GET /property/search?unit_type_id=..., un vrai type de logement par catégorie ---- */
 /**
@@ -75,27 +68,34 @@ const CATEGORY_DEFS = [
 interface CategoryTile { label: string; empty: boolean; bg: string; unitTypeId: string }
 const categories = ref<CategoryTile[]>([])
 const categoriesLoading = ref(true)
+/** Identifiant de chaque code UNIT_TYPE connu — sert aussi aux idées de location plus bas. */
+const unitTypeIds = ref<Record<string, string>>({})
 
 async function loadCategories() {
   categoriesLoading.value = true
   try {
     const unitTypes = await refData.fetchRef('UNIT_TYPE')
+    unitTypeIds.value = Object.fromEntries(unitTypes.map(u => [u.code, u.id]))
     const results = await Promise.all(CATEGORY_DEFS.map(async def => {
       const entry = unitTypes.find(u => u.code === def.code)
-      if (!entry) return { ...def, count: 0, unitTypeId: '' }
+      if (!entry) return { ...def, count: 0 as number | null, unitTypeId: '' }
       try {
         const res = await searchApi.search({ unit_type_id: entry.id, limit: 1 })
-        return { ...def, count: res.total, unitTypeId: entry.id }
+        return { ...def, count: res.total as number | null, unitTypeId: entry.id }
       } catch {
-        return { ...def, count: 0, unitTypeId: entry.id }
+        // Compte inconnu (panne ponctuelle) : la tuile reste normale et cliquable, jamais grisée comme « vide ».
+        return { ...def, count: null, unitTypeId: entry.id }
       }
     }))
     categories.value = results.map(r => ({
       label: r.label,
       empty: r.count === 0,
-      bg: r.count === 0 ? 'linear-gradient(150deg, var(--color-green-600), var(--color-green-900))' : photos[r.photoIndex],
+      bg: r.count === 0 ? 'linear-gradient(150deg, var(--color-green-600), var(--color-green-900))' : (photos[r.photoIndex] ?? ''),
       unitTypeId: r.unitTypeId
     }))
+  } catch {
+    // Référentiel indisponible : sans identifiant de type, aucune tuile ne mènerait à une vraie recherche — la section se masque.
+    categories.value = []
   } finally {
     categoriesLoading.value = false
   }
@@ -113,17 +113,30 @@ function pickCategory(c: CategoryTile) {
 /* ---- Annonces réelles : chargées une fois, puis classées nuit / mois (voir plus bas) ---- */
 interface CityGroup { name: string; units: ListingCard[] }
 const listingsLoading = ref(true)
+/** Recherche ou classement en échec : un bandeau d'erreur, jamais « Aucun logement publié ». */
+const listingsError = ref(false)
+/**
+ * Le classement nuit / mois coûte un `GET /units/:id/pricing` par logement : on se limite aux
+ * 30 annonces les plus récentes, et chaque classement obtenu est gardé pour la session —
+ * revenir sur l'accueil ne relance que les tarifs des logements nouveaux.
+ */
+const LISTING_LIMIT = 30
+const rentalModeCache = useState<Record<string, RentalMode>>('homeRentalModes', () => ({}))
 
 async function loadListings() {
   listingsLoading.value = true
+  rentalLoading.value = true
+  listingsError.value = false
   try {
-    const res = await searchApi.search({ limit: 60, sort: 'newest' })
+    const res = await searchApi.search({ limit: LISTING_LIMIT, sort: 'newest' })
     const properties = (res.data as PropertySearchResult[]).filter((p): p is PropertySearchResult => !('_virtual' in p))
     await loadRentalModes(flattenSearchResults(properties))
   } catch {
-    rentalLoading.value = false
+    rentalUnits.value = { nuit: [], mois: [] }
+    listingsError.value = true
   } finally {
     listingsLoading.value = false
+    rentalLoading.value = false
   }
 }
 
@@ -168,28 +181,30 @@ const rentalLoading = ref(true)
 const activeRental = ref<RentalKey>('nuit')
 
 async function loadRentalModes(cards: ListingCard[]) {
-  rentalLoading.value = true
-  try {
-    const modes = await mapLimited(cards, 10, async c => {
-      try {
-        return classifyRental(await searchApi.fetchPricing(c.unitId), c.price)
-      } catch {
-        return null
-      }
-    })
-    const nuit: ListingCard[] = []
-    const mois: ListingCard[] = []
-    cards.forEach((c, i) => {
-      const m = modes[i]
-      if (!m) return
-      if (m.nightly !== null) nuit.push({ ...c, price: m.nightly })
-      if (m.monthly !== null) mois.push({ ...c, price: m.monthly })
-    })
-    rentalUnits.value = { nuit: nuit.sort((a, b) => a.price - b.price), mois: mois.sort((a, b) => a.price - b.price) }
-    if (!nuit.length && mois.length) activeRental.value = 'mois'
-  } finally {
-    rentalLoading.value = false
-  }
+  const cache = rentalModeCache.value
+  const modes = await mapLimited(cards, 6, async c => {
+    const known = cache[c.unitId]
+    if (known) return known
+    try {
+      const mode = classifyRental(await searchApi.fetchPricing(c.unitId), c.price)
+      cache[c.unitId] = mode
+      return mode
+    } catch {
+      return null
+    }
+  })
+  // Aucun tarif lisible alors que des annonces existent : c'est une panne, pas une absence de logements.
+  if (cards.length && modes.every(m => !m)) throw new Error('pricing unavailable')
+  const nuit: ListingCard[] = []
+  const mois: ListingCard[] = []
+  cards.forEach((c, i) => {
+    const m = modes[i]
+    if (!m) return
+    if (m.nightly !== null) nuit.push({ ...c, price: m.nightly })
+    if (m.monthly !== null) mois.push({ ...c, price: m.monthly })
+  })
+  rentalUnits.value = { nuit: nuit.sort((a, b) => a.price - b.price), mois: mois.sort((a, b) => a.price - b.price) }
+  if (!nuit.length && mois.length) activeRental.value = 'mois'
 }
 
 function rentalFrom(key: RentalKey): string {
@@ -253,9 +268,20 @@ function onRentalScroll() {
   })
 }
 
-onMounted(async () => {
-  const [c] = await Promise.all([refData.fetchCities(), loadCategories(), loadListings(), favorites.ensureLoaded()])
-  cities.value = c
+async function loadCities() {
+  try {
+    cities.value = await refData.fetchCities()
+  } catch {
+    // Sans référentiel : le menu « Ville » garde « Toutes », les raccourcis par ville se masquent.
+    cities.value = []
+  }
+}
+
+onMounted(() => {
+  loadCities()
+  loadCategories()
+  loadListings()
+  favorites.ensureLoaded()
 })
 
 onMounted(() => window.addEventListener('scroll', onRentalScroll, { passive: true }))
@@ -285,49 +311,38 @@ async function onFavorite(l: ListingCard) {
   if (!ok && !useApiAuth().isAuthenticated()) navigateTo({ path: '/connexion', query: { redirect: '/' } })
 }
 
-/* ---- Idées d'escapade — navigation par ville, pas des statistiques : chaque clic lance une vraie recherche ---- */
-const ESCAPE_TABS = [
-  { key: 'appartements', label: 'Appartements' },
-  { key: 'maisons', label: 'Maisons de vacances' },
-  { key: 'courte', label: 'Courte durée' },
-  { key: 'bord', label: 'Bord de mer' }
-] as const
-
-const ESCAPE_CITIES: Record<string, [string, string][]> = {
-  appartements: [
-    ['Cotonou', "Location d'appartements"], ['Porto-Novo', "Location d'appartements"], ['Calavi', 'Location de studios'], ['Parakou', "Location d'appartements"], ['Bohicon', 'Location de studios'],
-    ['Fidjrossè', "Location d'appartements"], ['Godomey', 'Location de studios'], ['Sèmè-Podji', "Location d'appartements"], ['Akpakpa', 'Location de studios'], ['Cadjéhoun', "Location d'appartements"]
-  ],
-  maisons: [
-    ['Ouidah', 'Maisons de vacances'], ['Grand-Popo', 'Maisons de vacances'], ['Abomey', 'Maisons de vacances'], ['Natitingou', 'Maisons de vacances'], ['Possotomè', 'Maisons de vacances'],
-    ['Cotonou', 'Maisons de vacances'], ['Porto-Novo', 'Maisons de vacances'], ['Dassa-Zoumè', 'Maisons de vacances'], ['Kandi', 'Maisons de vacances'], ['Djougou', 'Maisons de vacances']
-  ],
-  courte: [
-    ['Cotonou', 'Meublés courte durée'], ['Grand-Popo', 'Meublés courte durée'], ['Ouidah', 'Meublés courte durée'], ['Fidjrossè', 'Meublés courte durée'], ['Calavi', 'Meublés courte durée'],
-    ['Porto-Novo', 'Meublés courte durée'], ['Parakou', 'Meublés courte durée'], ['Possotomè', 'Meublés courte durée'], ['Abomey', 'Meublés courte durée'], ['Natitingou', 'Meublés courte durée']
-  ],
-  bord: [
-    ['Grand-Popo', 'Locations en bord de mer'], ['Ouidah', 'Locations en bord de mer'], ['Fidjrossè', 'Locations en bord de mer'], ['Sèmè-Podji', 'Locations en bord de mer'], ['Possotomè', 'Locations au bord du lac'],
-    ['Cotonou', 'Locations en bord de mer'], ['Avlékété', 'Locations en bord de mer'], ['Djègbadji', 'Locations en bord de mer'], ['Cocotomey', 'Locations en bord de mer'], ['PK10', 'Locations en bord de mer']
-  ]
+/*
+ * ---- Idées de location — chaque lien est une vraie recherche (ville du référentiel + mode ou type de
+ * logement), lue par /recherche. Avant : dix villes et sous-titres écrits en dur (« bord de mer »…),
+ * et un clic qui ne cherchait que le nom de la ville dans le texte des annonces.
+ */
+type IdeaKey = 'nuit' | 'mois' | 'studio' | 'maison'
+const IDEA_TABS: { value: IdeaKey; label: string; kind: string }[] = [
+  { value: 'nuit', label: 'À la nuit', kind: 'Logements à la nuit' },
+  { value: 'mois', label: 'Au mois', kind: 'Logements au mois' },
+  { value: 'studio', label: 'Studios', kind: 'Studios' },
+  { value: 'maison', label: 'Maisons', kind: 'Maisons' }
+]
+/** Les onglets « type » n'apparaissent que si le code existe dans le référentiel UNIT_TYPE. */
+const ideaTabs = computed(() => IDEA_TABS.filter(t => t.value === 'nuit' || t.value === 'mois' || !!unitTypeIds.value[t.value]))
+const ideaTab = ref<string>('nuit')
+const ideaKind = computed(() => IDEA_TABS.find(t => t.value === ideaTab.value)?.kind ?? '')
+function ideaLink(city: string) {
+  const t = ideaTab.value as IdeaKey
+  if (t === 'nuit' || t === 'mois') return { path: '/recherche', query: { city, mode: t } }
+  return { path: '/recherche', query: { city, unit_type_id: unitTypeIds.value[t] } }
 }
 
-const escapeTab = ref<(typeof ESCAPE_TABS)[number]['key']>('appartements')
-const escapeCities = computed(() => ESCAPE_CITIES[escapeTab.value]!.map(([name, kind]) => ({ name, kind })))
-function pickEscapeCity(name: string) {
-  navigateTo({ path: '/recherche', query: { q: name } })
-}
-
-/* ---- Confiance (contenu éditorial, aucune donnée à intégrer) ---- */
+/* ---- Confiance (contenu éditorial, aligné sur ce que l'application fait réellement) ---- */
 const TRUST_ITEMS = [
-  { tint: 'bg-green-50', ink: 'text-green-700', icon: '⛨', title: 'Caution séquestrée', text: "Immo conserve la caution jusqu'à l'état des lieux de sortie. Ni le bailleur ni vous ne pouvez y toucher." },
-  { tint: 'bg-clay-100', ink: 'text-clay-700', icon: '✓', title: 'État des lieux signé', text: 'Photos horodatées, signature des deux parties, document opposable envoyé à chacun.' },
-  { tint: 'bg-info-bg', ink: 'text-info-fg', icon: '☏', title: 'Mobile Money suivi', text: 'MTN et Moov acceptés ; chaque loyer laisse une trace consultable des deux côtés.' }
+  { tint: 'bg-green-50', ink: 'text-green-700', icon: ShieldCheck, title: 'Caution séquestrée', text: "La caution est versée à Immo, pas au propriétaire : ni lui ni vous ne pouvez y toucher pendant le bail. Son montant est visible des deux côtés." },
+  { tint: 'bg-clay-100', ink: 'text-clay-700', icon: ClipboardCheck, title: 'État des lieux signé', text: "Pièce par pièce, photos à l'appui, signé par le locataire et le propriétaire dans l'application." },
+  { tint: 'bg-info-bg', ink: 'text-info-fg', icon: Smartphone, title: 'Mobile Money suivi', text: 'MTN et Moov acceptés ; chaque paiement laisse une trace consultable des deux côtés.' }
 ]
 </script>
 
 <template>
-  <div class="animate-[im-fade_.35s_ease_both]">
+  <div class="animate-[im-fade_.35s_ease_backwards]">
     <!-- Héros -->
     <section class="mx-auto max-w-[1240px] px-[26px] pt-5">
       <div class="relative flex min-h-[430px] items-end overflow-hidden rounded-3xl">
@@ -338,16 +353,12 @@ const TRUST_ITEMS = [
           :style="{ backgroundImage: photos[idx], opacity: heroIndex === i ? 1 : 0 }"
         />
         <div class="absolute inset-0 bg-[image:linear-gradient(180deg,rgba(18,60,41,0)_32%,rgba(18,60,41,.74)_100%)]" />
-        <div class="absolute left-4 right-4 top-4 flex w-fit items-center gap-2 rounded-pill bg-white/[.92] px-3.5 py-2 text-[11.5px] font-bold leading-[1.3] text-green-900 sm:left-[30px] sm:right-auto sm:top-[26px] sm:px-[15px] sm:text-[12.5px]">
-          <span class="h-[7px] w-[7px] flex-none rounded-pill bg-green-600 shadow-[var(--ring-focus)]" />
-          Conforme à la Loi 2022-30 · caution plafonnée à 3 mois
-        </div>
         <div class="relative w-full p-6 pb-16 sm:p-10">
           <h1 class="m-0 max-w-[620px] text-balance font-display text-[38px] font-extrabold leading-[1.04] tracking-hero text-white sm:text-hero">
-            Louez en toute confiance à Cotonou.
+            Louez en toute confiance au Bénin.
           </h1>
           <p class="mb-0 mt-3.5 max-w-[500px] text-[15px] leading-[1.5] text-white/90 sm:text-[16.5px]">
-            Caution séquestrée par la plateforme, état des lieux signé des deux côtés, propriétaires vérifiés.
+            Caution séquestrée par Immo pendant le bail, état des lieux signé des deux côtés, propriétaires vérifiés.
           </p>
         </div>
         <div class="absolute bottom-[38px] right-6 z-[3] flex gap-2 sm:bottom-[34px] sm:right-[30px]">
@@ -366,7 +377,7 @@ const TRUST_ITEMS = [
         <div class="flex flex-col gap-1 rounded-2xl border border-[var(--border-subtle)] bg-white p-2.5 shadow-panel sm:flex-row sm:items-stretch sm:gap-0 sm:rounded-pill sm:py-2 sm:pl-2.5 sm:pr-2">
           <label class="flex flex-[1.6] cursor-text flex-col justify-center px-4 py-1.5 sm:px-5">
             <span class="text-[11px] font-black uppercase tracking-[.05em] text-[var(--text-faint)]">Où</span>
-            <input v-model="query" placeholder="Nom, description…" class="mt-0.5 w-full border-0 bg-transparent text-[15px] font-semibold text-[var(--text-primary)] outline-none">
+            <input v-model="query" placeholder="Nom, description…" class="mt-0.5 w-full border-0 bg-transparent text-[15px] font-semibold text-[var(--text-primary)] outline-none" @keydown.enter="runSearch">
           </label>
           <div class="mx-1 h-px w-auto bg-sand-300 sm:mx-0 sm:my-2 sm:h-auto sm:w-px" />
           <label class="relative flex flex-1 flex-col justify-center px-4 py-1.5 sm:px-5">
@@ -379,14 +390,17 @@ const TRUST_ITEMS = [
           <div class="mx-1 h-px w-auto bg-sand-300 sm:mx-0 sm:my-2 sm:h-auto sm:w-px" />
           <label class="flex flex-1 cursor-text flex-col justify-center px-4 py-1.5 sm:px-5">
             <span class="text-[11px] font-black uppercase tracking-[.05em] text-[var(--text-faint)]">Budget max</span>
-            <input v-model="budget" placeholder="Peu importe" class="mt-0.5 w-full border-0 bg-transparent text-[15px] font-semibold text-[var(--text-primary)] outline-none">
+            <span class="mt-0.5 flex items-baseline gap-1.5">
+              <input :value="budgetDisplay" inputmode="numeric" placeholder="Peu importe" aria-label="Budget maximum en FCFA" class="w-full min-w-0 border-0 bg-transparent font-mono text-[15px] font-semibold text-[var(--text-primary)] outline-none placeholder:font-body" @input="onBudgetInput" @keydown.enter="runSearch">
+              <span v-if="budget" class="text-[12px] font-bold text-[var(--text-muted)]">FCFA</span>
+            </span>
           </label>
           <button
             type="button"
             class="flex items-center justify-center gap-2.5 rounded-pill bg-[image:var(--action-primary)] px-7 py-3.5 text-[15px] font-bold text-white shadow-action transition-transform hover:scale-[1.03] sm:py-0"
             @click="runSearch"
           >
-            <span class="block h-[15px] w-[15px] flex-none rounded-pill border-[2.2px] border-white" />Rechercher
+            <Search class="h-[18px] w-[18px] flex-none" :stroke-width="2.2" />Rechercher
           </button>
         </div>
         <div v-if="popularChips.length" class="mt-4 flex flex-wrap items-center justify-center gap-2">
@@ -432,14 +446,15 @@ const TRUST_ITEMS = [
           </div>
           <span
             v-if="activeRental === key"
-            class="absolute right-4 top-4 rounded-pill bg-white px-3 py-1.5 text-[11.5px] font-black text-green-800"
-          >✓ Sélectionné</span>
+            class="absolute right-4 top-4 inline-flex items-center gap-1 rounded-pill bg-white px-3 py-1.5 text-[11.5px] font-black text-green-800"
+          ><Check class="h-3.5 w-3.5" :stroke-width="2.6" />Sélectionné</span>
           <div class="pointer-events-none absolute bottom-0 left-0 w-2/3 p-4 sm:p-6">
             <span class="inline-block rounded-pill bg-white/[.18] px-3 py-1 text-[11px] font-black uppercase tracking-[.06em] text-white backdrop-blur-[4px]">{{ RENTAL_META[key].eyebrow }}</span>
             <p class="mb-0 mt-2.5 font-display text-[28px] font-extrabold leading-none tracking-[-.03em] text-white sm:text-[34px]">{{ RENTAL_META[key].label }}</p>
             <p class="mb-0 mt-2 hidden max-w-[380px] text-[14px] leading-[1.5] text-white/[.86] sm:block">{{ RENTAL_META[key].tagline }}</p>
             <p class="mb-0 mt-3 text-[13px] font-bold text-white">
               <template v-if="rentalLoading">Chargement…</template>
+              <template v-else-if="listingsError">Logements indisponibles pour le moment</template>
               <template v-else>
                 {{ rentalCount(key) }}<template v-if="rentalFrom(key)"> · dès <span class="font-mono">{{ rentalFrom(key) }}</span> {{ RENTAL_META[key].suffix }}</template>
               </template>
@@ -455,13 +470,19 @@ const TRUST_ITEMS = [
           </div>
         </div>
         <div v-if="!rentalLoading && rentalUnits[activeRental].length" class="mb-3 flex justify-end">
-          <NuxtLink :to="{ path: '/recherche', query: { mode: activeRental } }" class="text-[13.5px] font-bold text-green-700 underline-offset-4 hover:underline">
-            Voir tous les logements {{ activeRental === 'nuit' ? 'à la nuit' : 'au mois' }} →
+          <NuxtLink :to="{ path: '/recherche', query: { mode: activeRental } }" class="inline-flex items-center gap-1.5 text-[13.5px] font-bold text-green-700 underline-offset-4 hover:underline">
+            Voir tous les logements {{ activeRental === 'nuit' ? 'à la nuit' : 'au mois' }}<ArrowRight class="h-4 w-4" :stroke-width="1.9" />
           </NuxtLink>
         </div>
-        <p v-if="!rentalLoading && !rentalUnits[activeRental].length" class="m-0 rounded-xl border border-dashed border-[var(--border-default)] bg-white px-5 py-6 text-center text-[14px] text-[var(--text-muted)]">
-          Aucun logement {{ activeRental === 'nuit' ? 'à la nuit' : 'au mois' }} publié pour l'instant.
-        </p>
+        <FeedbackAlertBanner v-if="!rentalLoading && listingsError" tone="danger">
+          Impossible de charger les logements pour le moment.
+          <button type="button" class="ml-2 font-bold underline" @click="loadListings">Réessayer</button>
+        </FeedbackAlertBanner>
+        <div v-else-if="!rentalLoading && !rentalUnits[activeRental].length" class="rounded-2xl border border-dashed border-[var(--border-default)] bg-white px-5 py-8 text-center">
+          <span class="mx-auto grid h-[46px] w-[46px] place-items-center rounded-pill bg-green-50 text-green-700"><Search class="h-5 w-5" :stroke-width="1.9" /></span>
+          <p class="mb-0 mt-3 text-[13.5px] text-[var(--text-muted)]">Aucun logement {{ activeRental === 'nuit' ? 'à la nuit' : 'au mois' }} parmi les annonces les plus récentes.</p>
+          <NuxtLink :to="{ path: '/recherche', query: { mode: activeRental } }" class="mt-3 inline-flex items-center gap-1.5 text-[13px] font-bold text-green-700">Chercher dans toutes les annonces<ArrowRight class="h-4 w-4" :stroke-width="1.9" /></NuxtLink>
+        </div>
         <div v-if="!rentalLoading && rentalUnits[activeRental].length" class="flex gap-[18px] overflow-x-auto pb-1" style="scrollbar-width: none">
           <div v-for="u in rentalUnits[activeRental]" :key="`${activeRental}-${u.unitId}`" class="w-[214px] flex-none">
             <SearchPropertyCard
@@ -481,8 +502,8 @@ const TRUST_ITEMS = [
       <div class="mb-5 flex items-center justify-between">
         <h2 class="m-0 font-display text-title-2 font-bold tracking-title-2">Trouvez le lieu qui vous correspond</h2>
         <div class="flex gap-2.5">
-          <button type="button" class="grid h-11 w-11 place-items-center rounded-pill border border-[var(--border-default)] bg-white text-base transition-all hover:border-green-600 hover:text-green-700" @click="scrollCat(-1)">‹</button>
-          <button type="button" class="grid h-11 w-11 place-items-center rounded-pill border border-[var(--border-default)] bg-white text-base transition-all hover:border-green-600 hover:text-green-700" @click="scrollCat(1)">›</button>
+          <button type="button" class="grid h-11 w-11 place-items-center rounded-pill border border-[var(--border-default)] bg-white text-base transition-all hover:border-green-600 hover:text-green-700" aria-label="Catégories précédentes" @click="scrollCat(-1)"><ChevronLeft class="h-[18px] w-[18px]" :stroke-width="1.9" /></button>
+          <button type="button" class="grid h-11 w-11 place-items-center rounded-pill border border-[var(--border-default)] bg-white text-base transition-all hover:border-green-600 hover:text-green-700" aria-label="Catégories suivantes" @click="scrollCat(1)"><ChevronRight class="h-[18px] w-[18px]" :stroke-width="1.9" /></button>
         </div>
       </div>
       <div v-if="categoriesLoading" class="flex gap-4 overflow-x-auto pb-1.5">
@@ -528,11 +549,11 @@ const TRUST_ITEMS = [
       <div class="mb-[18px] flex items-center justify-between">
         <div class="flex items-center gap-3">
           <h2 class="m-0 font-display text-[23px] font-bold tracking-[-.025em]">{{ group.name }}</h2>
-          <button type="button" class="grid h-[30px] w-[30px] place-items-center rounded-pill border border-[var(--border-default)] bg-white text-sm text-sand-900" @click="seeAllCity(group.name)">→</button>
+          <button type="button" class="grid h-[30px] w-[30px] place-items-center rounded-pill border border-[var(--border-default)] bg-white text-sm text-sand-900" :aria-label="`Tous les logements à ${group.name}`" @click="seeAllCity(group.name)"><ArrowRight class="h-4 w-4" :stroke-width="1.9" /></button>
         </div>
         <div class="flex gap-2.5">
-          <button type="button" class="grid h-9 w-9 place-items-center rounded-pill border border-[var(--border-default)] bg-white text-sm text-sand-900" @click="scrollCity(gi, -1)">‹</button>
-          <button type="button" class="grid h-9 w-9 place-items-center rounded-pill border border-[var(--border-default)] bg-white text-sm text-sand-900" @click="scrollCity(gi, 1)">›</button>
+          <button type="button" class="grid h-9 w-9 place-items-center rounded-pill border border-[var(--border-default)] bg-white text-sm text-sand-900" aria-label="Précédents" @click="scrollCity(gi, -1)"><ChevronLeft class="h-4 w-4" :stroke-width="1.9" /></button>
+          <button type="button" class="grid h-9 w-9 place-items-center rounded-pill border border-[var(--border-default)] bg-white text-sm text-sand-900" aria-label="Suivants" @click="scrollCity(gi, 1)"><ChevronRight class="h-4 w-4" :stroke-width="1.9" /></button>
         </div>
       </div>
       <div :ref="(el) => setCityRail(gi, el)" class="flex gap-[18px] overflow-x-auto pb-1" style="scrollbar-width: none">
@@ -567,8 +588,8 @@ const TRUST_ITEMS = [
             <h2 class="mb-0 mt-2 font-display text-[26px] font-bold tracking-[-.03em]">Vous cherchez plutôt {{ otherRental === 'nuit' ? 'à la nuit' : 'au mois' }} ?</h2>
             <p class="mb-0 mt-2 text-[14.5px] leading-[1.55] text-[var(--text-muted)]">{{ RENTAL_META[otherRental].tagline }}</p>
           </div>
-          <button type="button" class="whitespace-nowrap rounded-pill border border-[var(--border-default)] bg-white px-5 py-3 text-[13.5px] font-bold text-green-700 transition-colors hover:border-green-600" @click="switchToOther">
-            Afficher la page {{ otherRental === 'nuit' ? 'à la nuit' : 'au mois' }} ↑
+          <button type="button" class="inline-flex items-center gap-1.5 whitespace-nowrap rounded-pill border border-[var(--border-default)] bg-white px-5 py-3 text-[13.5px] font-bold text-green-700 transition-colors hover:border-green-600" @click="switchToOther">
+            Afficher la page {{ otherRental === 'nuit' ? 'à la nuit' : 'au mois' }}<ArrowUp class="h-4 w-4" :stroke-width="1.9" />
           </button>
         </div>
         <div class="flex gap-[18px] overflow-x-auto pb-1" style="scrollbar-width: none">
@@ -585,24 +606,25 @@ const TRUST_ITEMS = [
       </div>
     </section>
 
-    <!-- Idées d'escapade -->
-    <section class="mx-auto max-w-[1240px] px-[26px] pt-14">
+    <!-- Idées de location : villes du référentiel × mode ou type réel -->
+    <section v-if="cities.length" class="mx-auto max-w-[1240px] px-[26px] pt-14">
       <h2 class="m-0 font-display text-title-2 font-bold tracking-title-2">Des idées pour votre prochaine location</h2>
-      <div class="-mx-[26px] my-[18px] flex gap-[22px] overflow-x-auto px-[26px] shadow-[inset_0_-1px_0_var(--border-subtle)] [scrollbar-width:none] sm:mx-0 sm:gap-[26px] sm:px-0 [&::-webkit-scrollbar]:hidden">
-        <button
-          v-for="tab in ESCAPE_TABS"
-          :key="tab.key"
-          type="button"
-          class="flex-none whitespace-nowrap border-b-2 px-0.5 pb-3.5 text-[15px] font-bold transition-colors"
-          :class="escapeTab === tab.key ? 'border-[var(--text-primary)] text-[var(--text-primary)]' : 'border-transparent text-[var(--text-muted)]'"
-          @click="escapeTab = tab.key"
-        >{{ tab.label }}</button>
+      <div class="-mx-[26px] my-[18px] overflow-x-auto px-[26px] [scrollbar-width:none] sm:mx-0 sm:px-0 [&::-webkit-scrollbar]:hidden">
+        <FormsSegmentedControl v-model="ideaTab" :options="ideaTabs" size="sm" />
       </div>
-      <div class="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-5">
-        <div v-for="c in escapeCities" :key="c.name + c.kind" class="cursor-pointer py-0.5" @click="pickEscapeCity(c.name)">
-          <p class="m-0 text-[14.5px] font-bold text-[var(--text-primary)]">{{ c.name }}</p>
-          <p class="mb-0 mt-[3px] text-[13px] text-[var(--text-muted)]">{{ c.kind }}</p>
-        </div>
+      <div class="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
+        <NuxtLink
+          v-for="c in cities"
+          :key="`${ideaTab}-${c.id}`"
+          :to="ideaLink(c.name)"
+          class="group flex items-center gap-3 rounded-2xl border border-[var(--border-subtle)] bg-white px-4.5 py-3.5 transition-colors hover:border-[var(--border-default)]"
+        >
+          <span class="min-w-0 flex-1">
+            <span class="block truncate text-[14.5px] font-bold text-[var(--text-primary)]">{{ c.name }}</span>
+            <span class="mt-0.5 block truncate text-[13px] text-[var(--text-muted)]">{{ ideaKind }}</span>
+          </span>
+          <ArrowRight class="h-4 w-4 flex-none text-[var(--text-faint)] transition-transform group-hover:translate-x-0.5 group-hover:text-green-700" :stroke-width="1.9" />
+        </NuxtLink>
       </div>
     </section>
 
@@ -612,12 +634,12 @@ const TRUST_ITEMS = [
         <p class="m-0 text-[12.5px] font-black uppercase tracking-[.08em] text-clay-500">Pourquoi Immo</p>
         <h2 class="mb-0 mt-2.5 font-display text-[29px] font-bold tracking-[-.03em] text-clay-900">Louer, sans la peur de se faire avoir</h2>
         <p class="mb-0 mt-[11px] text-[15.5px] leading-[1.6] text-[var(--text-secondary)]">
-          Trois protections concrètes, pensées pour les histoires de caution jamais rendue et d'état des lieux contesté.
+          Trois protections concrètes contre la caution gardée par le bailleur et l'état des lieux contesté.
         </p>
       </div>
       <div class="grid grid-cols-1 gap-4.5 sm:grid-cols-3">
         <div v-for="t in TRUST_ITEMS" :key="t.title" class="rounded-2xl border border-clay-200 bg-white p-6">
-          <div class="grid h-11 w-11 place-items-center rounded-lg text-lg" :class="[t.tint, t.ink]">{{ t.icon }}</div>
+          <div class="grid h-11 w-11 place-items-center rounded-lg" :class="[t.tint, t.ink]"><component :is="t.icon" class="h-5 w-5" :stroke-width="1.9" /></div>
           <p class="mb-0 mt-4 font-display text-lg font-bold tracking-[-.02em] text-[var(--text-primary)]">{{ t.title }}</p>
           <p class="mb-0 mt-2 text-sm leading-[1.6] text-[var(--text-muted)]">{{ t.text }}</p>
         </div>
@@ -630,7 +652,7 @@ const TRUST_ITEMS = [
         <div>
           <h3 class="m-0 font-display text-[30px] font-bold tracking-[-.03em] text-white">Vous avez un bien à louer ?</h3>
           <p class="mb-0 mt-2.5 max-w-[520px] text-[15.5px] text-white/[.82]">
-            Publiez votre bien, encaissez par Mobile Money, caution séquestrée jusqu'à l'état des lieux de sortie.
+            Publiez votre bien, encaissez les loyers par Mobile Money, caution séquestrée par Immo pendant le bail.
           </p>
         </div>
         <NuxtLink
@@ -639,8 +661,6 @@ const TRUST_ITEMS = [
         >Publier une annonce</NuxtLink>
       </div>
     </section>
-
-    <HomeLaunchOfferModal v-if="showLaunchOffer" @close="dismissLaunchOffer" @explore="exploreFromLaunchOffer" />
 
     <!-- Rappel flottant du mode choisi (nuit/mois) — visible une fois les cartes de sélection scrollées hors écran.
          Teleport vers body : le wrapper de page a une animation d'entrée (`animate-[im-fade_...]`) qui, même
@@ -657,7 +677,7 @@ const TRUST_ITEMS = [
         >
           <span class="h-2.5 w-2.5 flex-none rounded-pill" :class="RENTAL_META[activeRental].swatch" />
           <span class="text-[13px] font-bold text-[var(--text-primary)]">{{ RENTAL_META[activeRental].label }}</span>
-          <span class="text-[11.5px] text-[var(--text-faint)]">changer ↑</span>
+          <span class="inline-flex items-center gap-0.5 text-[11.5px] text-[var(--text-faint)]">changer<ArrowUp class="h-3 w-3" :stroke-width="2" /></span>
         </button>
       </Transition>
     </Teleport>

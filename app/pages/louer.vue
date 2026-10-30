@@ -1,134 +1,157 @@
 <script setup lang="ts">
-const STATS = [
-  { value: '94 %', label: "des loyers encaissés dans les 5 jours de l'échéance" },
-  { value: '12 min', label: 'pour publier une première annonce' },
-  { value: '0 F', label: "tant que le bien n'est pas loué" }
-]
+import { ArrowRight, Banknote, BadgeCheck, ClipboardCheck, House, Lock, UserRound } from '@lucide/vue'
+import { ApiRequestError } from '~/utils/authenticatedFetcher'
+import { errorText } from '~/utils/apiErrors'
 
+/**
+ * Page « Louer votre bien ». Ne dit que ce que l'application fait : pas de chiffres ni de
+ * témoignages inventés, pas de taux de commission (l'API n'en publie aucun — GET /settings/public
+ * ne contient que la TVA et les frais de recouvrement), pas de délai de restitution de caution
+ * (restitution pas encore gérée, voir locataire/wallet.vue).
+ */
 const STEPS = [
-  { num: '1', title: 'Vous publiez', text: "Photos, loyer, conditions. Un agent Immo visite le bien avant mise en ligne et l'adresse exacte reste masquée jusqu'à l'acceptation d'une visite." },
-  { num: '2', title: 'Vous choisissez', text: "Les candidats arrivent avec un dossier déjà vérifié : pièce d'identité, justificatif de revenus, historique de paiement sur la plateforme." },
-  { num: '3', title: 'Vous êtes payé', text: 'Le loyer est prélevé automatiquement le 5. En cas de retard, la relance part sans que vous ayez à écrire.' }
+  { icon: BadgeCheck, title: 'Vous faites vérifier votre compte', text: "Pièce d'identité et justificatifs (titre de propriété recommandé). L'équipe Immo les examine : la publication s'ouvre une fois le compte validé." },
+  { icon: House, title: 'Vous publiez', text: 'Photos, loyer, caution et conditions de chaque logement, à louer au mois ou à la nuit. Votre vitrine publique regroupe vos annonces.' },
+  { icon: UserRound, title: 'Vous choisissez', text: "Demandes de visite et candidatures viennent de locataires dont l'identité a été vérifiée. Vous acceptez, proposez un autre horaire ou refusez." },
+  { icon: ClipboardCheck, title: 'Vous encaissez', text: 'Bail et état des lieux signés dans l\'application. Le loyer, payé depuis le wallet du locataire, arrive sur votre solde Immo, retirable vers Mobile Money.' }
 ]
 
+/** Exemple chiffré, étiqueté comme tel : caution de 2 mois (valeur par défaut d'une annonce) sur un loyer de 75 000 F. */
 const ESCROW_FLOW = [
-  { when: 'À la signature', amount: '150 000 F', text: 'Le locataire verse la caution. Elle entre en séquestre chez Immo.', tone: 'locked' as const },
-  { when: 'Pendant le bail', amount: '150 000 F', text: "Ni vous ni le locataire n'y avez accès. Le montant est visible des deux côtés.", tone: 'locked' as const },
-  { when: 'État des lieux de sortie', amount: '-18 000 F', text: 'Retenue justifiée par les écarts constatés, photos à l\'appui. Contestable 7 jours.', tone: 'danger' as const },
-  { when: 'Sous 7 jours', amount: '132 000 F', text: 'Le solde repart au locataire, la retenue vous est versée.', tone: 'ok' as const }
+  { when: "Paiement d'entrée", amount: '150 000 F', text: "Une fois le bail signé des deux côtés, le locataire règle l'entrée : la caution est versée à Immo, pas à vous.", locked: true },
+  { when: 'Pendant le bail', amount: '150 000 F', text: "Ni vous ni le locataire n'y avez accès. Le montant est visible des deux côtés.", locked: true },
+  { when: 'Fin du bail', amount: null, text: "La restitution n'est pas encore gérée dans l'application. Pour une fin de bail, écrivez-nous.", locked: false }
 ]
 
-const PRICING = [
-  { name: 'Publication', price: 'Gratuit', unit: "sans limite d'annonces", highlighted: false, tag: '',
-    features: ['Annonces illimitées', 'Visite de vérification incluse', 'Messagerie avec les candidats', 'Vitrine publique et QR code'] },
-  { name: 'Gestion du loyer', price: '5 %', unit: "du loyer encaissé, prélevé à l'encaissement", highlighted: true, tag: 'Le plus choisi',
-    features: ['Encaissement Mobile Money', 'Relances automatiques', 'Caution séquestrée', 'État des lieux signé et archivé'] },
-  { name: 'Mandat agence', price: '8 %', unit: 'du loyer encaissé, équipe illimitée', highlighted: false, tag: '',
-    features: ['Tout de la gestion du loyer', 'Comptes agents et mandats', 'Tableau de bord multi-bailleurs', 'Artisans partenaires'] }
-]
+/*
+ * Compte déjà connecté (#9) : `/connexion` est réservée aux visiteurs (middleware guest-only) et
+ * renvoyait un locataire dans son espace, sans moyen de publier. On lui propose d'ajouter le rôle
+ * propriétaire (POST /user/roles, idempotent) puis d'y basculer (POST /auth/switch-role).
+ */
+const auth = useAuthApi()
+const user = auth.user
+const PRO_ROLES = ['landlord', 'agent', 'agency']
+type CtaKind = 'signup' | 'space' | 'switch' | 'none'
+const ctaKind = computed<CtaKind>(() => {
+  const u = user.value
+  if (!u) return 'signup'
+  if (PRO_ROLES.includes(u.role)) return 'space'
+  if (u.role === 'admin') return 'none'
+  return 'switch'
+})
+const signupLink = { path: '/connexion', query: { role: 'bailleur' } }
 
-const TESTIMONIALS = [
-  { quote: 'Avant, je passais mes samedis à courir après trois locataires. Depuis un an je regarde le tableau de bord le 6 du mois et c\'est réglé.', author: 'Koffi Dossou', role: 'Propriétaire · 3 biens à Fidjrossè', initials: 'KD', color: 'var(--color-green-600)' },
-  { quote: "Le séquestre a changé les discussions de sortie. On ouvre l'état des lieux d'entrée, on compare, personne ne discute.", author: 'Amina Soglo', role: 'Agence Immo Cotonou · 12 biens', initials: 'AS', color: 'var(--color-clay-500)' }
-]
-
-const AMOUNT_TONE: Record<'locked' | 'danger' | 'ok', string> = {
-  locked: 'text-[var(--text-money-locked)]',
-  danger: 'text-danger-fg',
-  ok: 'text-ok-fg'
+const switching = ref(false)
+const switchError = ref('')
+async function becomeLandlord() {
+  if (switching.value) return
+  switching.value = true
+  switchError.value = ''
+  try {
+    await auth.addRole('landlord')
+    await auth.switchRole('landlord')
+    await navigateTo('/pro')
+  } catch (e) {
+    switchError.value = e instanceof ApiRequestError ? errorText(e.mapped, "L'espace propriétaire n'a pas pu être ouvert. Réessayez.") : "L'espace propriétaire n'a pas pu être ouvert. Réessayez."
+  } finally {
+    switching.value = false
+  }
 }
 </script>
 
 <template>
-  <div class="animate-[im-fade_.3s_ease_both]">
+  <div class="animate-[im-fade_.3s_ease_backwards]">
     <section class="mx-auto max-w-[1240px] px-[26px] pt-6">
       <div class="rounded-3xl bg-[image:var(--gradient-balance)] p-8 sm:p-[52px]">
         <h1 class="m-0 max-w-[660px] font-display text-[34px] font-extrabold leading-[1.06] tracking-[-.035em] text-white sm:text-[44px]">
-          Vos loyers arrivent. Sans relance, sans discussion.
+          Louez votre bien, encaissez en Mobile Money.
         </h1>
-        <p class="mb-0 mt-3.5 max-w-[540px] text-[16.5px] leading-[1.55] text-white/[.84]">
-          Immo publie votre bien, encaisse le loyer par Mobile Money et conserve la caution jusqu'à l'état des lieux de sortie.
+        <p class="mb-0 mt-3.5 max-w-[560px] text-[16.5px] leading-[1.55] text-white/[.84]">
+          Annonces, visites, bail et état des lieux signés en ligne, loyers suivis des deux côtés, caution séquestrée par Immo pendant le bail.
         </p>
-        <div class="mt-[30px] flex flex-wrap gap-8">
-          <div v-for="s in STATS" :key="s.label">
-            <p class="m-0 font-mono text-[30px] font-bold tracking-[-.02em] text-white">{{ s.value }}</p>
-            <p class="mb-0 mt-1.5 max-w-[180px] text-[13px] text-white/70">{{ s.label }}</p>
-          </div>
+
+        <div class="mt-[30px]">
+          <NuxtLink v-if="ctaKind === 'signup'" :to="signupLink" class="inline-flex items-center gap-2 rounded-md bg-clay-500 px-[30px] py-4 text-[15.5px] font-bold text-white shadow-accent">
+            Créer mon compte propriétaire<ArrowRight class="h-[18px] w-[18px]" :stroke-width="1.9" />
+          </NuxtLink>
+          <NuxtLink v-else-if="ctaKind === 'space'" to="/pro" class="inline-flex items-center gap-2 rounded-md bg-clay-500 px-[30px] py-4 text-[15.5px] font-bold text-white shadow-accent">
+            Aller à mon espace propriétaire<ArrowRight class="h-[18px] w-[18px]" :stroke-width="1.9" />
+          </NuxtLink>
+          <template v-else-if="ctaKind === 'switch'">
+            <button type="button" class="inline-flex items-center gap-2 rounded-md bg-clay-500 px-[30px] py-4 text-[15.5px] font-bold text-white shadow-accent disabled:opacity-60" :disabled="switching" @click="becomeLandlord">
+              {{ switching ? 'Ouverture de l\'espace…' : 'Passer en espace propriétaire' }}<ArrowRight v-if="!switching" class="h-[18px] w-[18px]" :stroke-width="1.9" />
+            </button>
+            <p class="mb-0 mt-3 max-w-[520px] text-[13px] leading-[1.5] text-white/75">
+              Le rôle propriétaire s'ajoute à votre compte : votre espace actuel reste disponible, vous passez de l'un à l'autre depuis le menu.
+            </p>
+            <p v-if="switchError" class="mb-0 mt-3 inline-block rounded-md bg-white px-3.5 py-2.5 text-[13px] font-semibold text-danger-fg">{{ switchError }}</p>
+          </template>
         </div>
-        <NuxtLink :to="{ path: '/connexion', query: { role: 'bailleur' } }" class="mt-[30px] inline-block rounded-md bg-clay-500 px-[30px] py-4 text-[15.5px] font-bold text-white shadow-accent">Créer mon compte propriétaire</NuxtLink>
       </div>
     </section>
 
     <section class="mx-auto max-w-[1240px] px-[26px] pt-11">
       <h2 class="mb-5 mt-0 font-display text-title-2 font-bold tracking-title-2">Comment ça marche</h2>
-      <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <div v-for="s in STEPS" :key="s.num" class="rounded-xl border border-[var(--border-subtle)] bg-white p-6">
-          <div class="grid h-8 w-8 place-items-center rounded-pill bg-green-900 text-[13px] font-black text-white">{{ s.num }}</div>
-          <p class="mb-0 mt-3.5 text-[16.5px] font-bold tracking-[-.015em]">{{ s.title }}</p>
-          <p class="mb-0 mt-1.5 text-[14.5px] leading-[1.55] text-[var(--text-muted)]">{{ s.text }}</p>
+      <div class="grid grid-cols-1 gap-4.5 sm:grid-cols-2 lg:grid-cols-4">
+        <div v-for="(s, i) in STEPS" :key="s.title" class="rounded-2xl border border-[var(--border-subtle)] bg-white p-5.5">
+          <div class="flex items-center justify-between">
+            <span class="grid h-[46px] w-[46px] place-items-center rounded-pill bg-green-50 text-green-700"><component :is="s.icon" class="h-5 w-5" :stroke-width="1.9" /></span>
+            <span class="font-mono text-xs font-bold text-[var(--text-faint)]">0{{ i + 1 }}</span>
+          </div>
+          <p class="mb-0 mt-4 text-[15px] font-bold">{{ s.title }}</p>
+          <p class="mb-0 mt-1.5 text-[13.5px] leading-[1.55] text-[var(--text-muted)]">{{ s.text }}</p>
         </div>
       </div>
     </section>
 
     <section class="mx-auto max-w-[1240px] px-[26px] pt-11">
-      <div class="rounded-2xl border border-[var(--border-escrow)] bg-[var(--surface-escrow)] p-6 sm:p-8">
-        <h2 class="m-0 font-display text-2xl font-bold tracking-[-.025em] text-clay-700">Où va l'argent, exactement</h2>
-        <p class="mb-6 mt-2 max-w-[640px] text-[14.5px] text-clay-900">Le séquestre est le cœur du service. Voici le trajet d'une caution de 150 000 FCFA sur un bail d'un an.</p>
-        <div class="flex flex-col gap-3 sm:flex-row sm:items-stretch">
-          <div v-for="(e, i) in ESCROW_FLOW" :key="e.when" class="flex flex-1 items-center gap-3">
-            <div class="flex-1 rounded-md border border-[var(--border-escrow)] bg-white p-[18px]">
-              <p class="m-0 text-[11px] font-black uppercase tracking-[.06em] text-[var(--text-faint)]">{{ e.when }}</p>
-              <p class="mb-0 mt-2 font-mono text-base font-bold" :class="AMOUNT_TONE[e.tone]">{{ e.amount }}</p>
-              <p class="mb-0 mt-1.5 text-[12.5px] leading-[1.45] text-[var(--text-muted)]">{{ e.text }}</p>
-            </div>
-            <span v-if="i < ESCROW_FLOW.length - 1" class="hidden shrink-0 text-base text-clay-300 sm:block">→</span>
+      <div class="rounded-2xl border border-[var(--border-escrow)] bg-[var(--surface-escrow)] p-5.5 sm:p-8">
+        <h2 class="m-0 font-display text-2xl font-bold tracking-[-.025em] text-clay-700">Où va la caution</h2>
+        <p class="mb-5.5 mt-2 max-w-[640px] text-[13.5px] leading-[1.55] text-clay-900">
+          <span class="font-bold">Exemple</span> : loyer de <span class="font-mono">75 000 F</span>, caution de 2 mois. Sur Immo, une annonce ne peut pas demander plus de 3 mois de caution.
+        </p>
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div v-for="e in ESCROW_FLOW" :key="e.when" class="rounded-2xl border border-[var(--border-escrow)] bg-white p-4.5">
+            <p class="m-0 text-label font-bold uppercase tracking-label text-[var(--text-faint)]">{{ e.when }}</p>
+            <p v-if="e.amount" class="mb-0 mt-2 inline-flex items-center gap-1.5 font-mono text-xl font-bold text-[var(--text-money-locked)]">
+              <Lock class="h-4 w-4" :stroke-width="1.9" />{{ e.amount }}
+            </p>
+            <p v-else class="mb-0 mt-2 text-[15px] font-bold text-[var(--text-secondary)]">Restitution</p>
+            <p class="mb-0 mt-1.5 text-[13px] leading-[1.5] text-[var(--text-muted)]">
+              {{ e.text }}
+              <NuxtLink v-if="!e.locked" :to="{ path: '/contact', query: { sujet: 'Caution ou état des lieux' } }" class="font-bold text-green-700">Nous contacter</NuxtLink>
+            </p>
           </div>
         </div>
       </div>
     </section>
 
-    <section class="mx-auto max-w-[1240px] px-[26px] pt-11">
-      <h2 class="mb-5 mt-0 font-display text-title-2 font-bold tracking-title-2">Tarifs</h2>
-      <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <div
-          v-for="p in PRICING"
-          :key="p.name"
-          class="relative rounded-xl border bg-white p-[26px]"
-          :class="p.highlighted ? 'border-2 border-green-600' : 'border-[var(--border-subtle)]'"
-        >
-          <span v-if="p.tag" class="absolute -top-[11px] left-[26px] rounded-pill bg-green-600 px-3 py-[5px] text-[11px] font-black text-white">{{ p.tag }}</span>
-          <p class="m-0 text-[16.5px] font-bold">{{ p.name }}</p>
-          <p class="mb-0 mt-3 font-mono text-[30px] font-bold tracking-[-.02em] text-green-900">{{ p.price }}</p>
-          <p class="mb-[18px] mt-1.5 text-[13px] text-[var(--text-muted)]">{{ p.unit }}</p>
-          <div v-for="f in p.features" :key="f" class="flex gap-2.5 py-[7px] text-[13.5px] text-[var(--text-secondary)]">
-            <span class="font-bold text-green-600">✓</span><span>{{ f }}</span>
-          </div>
+    <section id="tarifs" class="mx-auto max-w-[1240px] scroll-mt-[94px] px-[26px] pt-11">
+      <div class="flex flex-col gap-4 rounded-2xl border border-[var(--border-subtle)] bg-white p-5.5 sm:flex-row sm:items-center">
+        <span class="grid h-[46px] w-[46px] flex-none place-items-center rounded-pill bg-green-50 text-green-700"><Banknote class="h-5 w-5" :stroke-width="1.9" /></span>
+        <div class="flex-1">
+          <h2 class="m-0 text-[15px] font-bold">Tarifs</h2>
+          <p class="mb-0 mt-1 text-[13.5px] leading-[1.55] text-[var(--text-muted)]">Les conditions tarifaires pour les propriétaires ne sont pas encore publiées sur le site. Écrivez-nous pour les connaître avant de publier.</p>
         </div>
+        <NuxtLink :to="{ path: '/contact', query: { sujet: 'Publier un bien sur Immo' } }" class="inline-flex flex-none items-center justify-center gap-1.5 rounded-pill border border-[var(--border-default)] bg-white px-4 py-[9px] text-[13px] font-bold text-sand-900 hover:border-green-600">
+          Demander les tarifs<ArrowRight class="h-4 w-4" :stroke-width="1.9" />
+        </NuxtLink>
       </div>
     </section>
 
-    <section class="mx-auto max-w-[1240px] px-[26px] pt-11">
-      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div v-for="t in TESTIMONIALS" :key="t.author" class="rounded-xl border border-[var(--border-subtle)] bg-white p-[26px]">
-          <p class="m-0 text-[15.5px] leading-[1.65] text-[var(--text-secondary)]">« {{ t.quote }} »</p>
-          <div class="mt-4.5 flex items-center gap-2.5">
-            <div class="grid h-[38px] w-[38px] place-items-center rounded-pill text-[12.5px] font-bold text-white" :style="{ background: t.color }">{{ t.initials }}</div>
-            <div>
-              <p class="m-0 text-sm font-bold">{{ t.author }}</p>
-              <p class="mb-0 mt-px text-[12.5px] text-[var(--text-faint)]">{{ t.role }}</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <section class="mx-auto max-w-[1240px] px-[26px] pb-4 pt-11">
-      <div class="flex flex-col items-start gap-6 rounded-2xl bg-green-900 p-9 sm:flex-row sm:items-center sm:justify-between">
+    <section v-if="ctaKind !== 'none'" class="mx-auto max-w-[1240px] px-[26px] pb-4 pt-11">
+      <div class="flex flex-col items-start gap-6 rounded-2xl bg-green-900 p-8 sm:flex-row sm:items-center sm:justify-between sm:p-9">
         <div>
-          <h3 class="m-0 font-display text-2xl font-bold tracking-[-.025em] text-white">Publier votre premier bien prend 12 minutes</h3>
-          <p class="mb-0 mt-2 text-[15px] text-white/[.78]">Aucun frais tant que le bien n'est pas loué.</p>
+          <h3 class="m-0 font-display text-2xl font-bold tracking-[-.025em] text-white">Prêt à publier votre premier bien ?</h3>
+          <p class="mb-0 mt-2 text-[15px] text-white/[.78]">
+            {{ ctaKind === 'signup' ? 'Créez votre compte, faites-le vérifier, puis publiez.' : ctaKind === 'space' ? 'Vos biens et vos annonces se gèrent depuis votre espace propriétaire.' : 'Ajoutez l\'espace propriétaire à votre compte en un clic.' }}
+          </p>
         </div>
-        <NuxtLink :to="{ path: '/connexion', query: { role: 'bailleur' } }" class="whitespace-nowrap rounded-md bg-white px-7 py-[15px] text-[15px] font-bold text-green-900">Commencer</NuxtLink>
+        <NuxtLink v-if="ctaKind === 'signup'" :to="signupLink" class="whitespace-nowrap rounded-md bg-white px-7 py-[15px] text-[15px] font-bold text-green-900">Commencer</NuxtLink>
+        <NuxtLink v-else-if="ctaKind === 'space'" to="/pro" class="whitespace-nowrap rounded-md bg-white px-7 py-[15px] text-[15px] font-bold text-green-900">Mon espace propriétaire</NuxtLink>
+        <button v-else type="button" class="whitespace-nowrap rounded-md bg-white px-7 py-[15px] text-[15px] font-bold text-green-900 disabled:opacity-60" :disabled="switching" @click="becomeLandlord">
+          {{ switching ? 'Ouverture…' : 'Passer en espace propriétaire' }}
+        </button>
       </div>
     </section>
   </div>

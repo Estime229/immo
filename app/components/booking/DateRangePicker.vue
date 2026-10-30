@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ChevronLeft, ChevronRight, X } from '@lucide/vue'
 import type { AvailabilityBlock } from '~/types/property'
 import { dayState, formatDayLong, formatDayNumeric, localTodayIso, monthGrid, monthIndex, monthOf, monthTitle, pickDay, rangeSummary, shiftMonth, WEEKDAY_INITIALS, type MonthRef } from '~/utils/dateRangeCalendar'
 
@@ -123,21 +124,21 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
                 <p class="m-0 text-[10.5px] font-black uppercase tracking-[.06em]">Arrivée</p>
                 <p class="m-0 text-[14px]" :class="checkIn ? '' : 'text-[var(--text-faint)]'">{{ checkIn ? formatDayNumeric(checkIn) : 'JJ/MM/AAAA' }}</p>
               </div>
-              <button v-if="checkIn" type="button" class="grid h-7 w-7 place-items-center rounded-pill text-[13px] hover:bg-sand-100" aria-label="Effacer l'arrivée" @click="clearAll">✕</button>
+              <button v-if="checkIn" type="button" class="grid h-7 w-7 place-items-center rounded-pill text-[13px] hover:bg-sand-100" aria-label="Effacer l'arrivée" @click="clearAll"><X class="h-3.5 w-3.5" :stroke-width="2.2" /></button>
             </div>
             <div class="flex min-w-[170px] items-center gap-2 rounded-xl px-3.5 py-2" :class="pickingEnd ? 'ring-2 ring-inset ring-sand-900' : ''">
               <div class="flex-1">
                 <p class="m-0 text-[10.5px] font-black uppercase tracking-[.06em]">Départ</p>
                 <p class="m-0 text-[14px]" :class="checkOut ? '' : 'text-[var(--text-faint)]'">{{ checkOut ? formatDayNumeric(checkOut) : 'JJ/MM/AAAA' }}</p>
               </div>
-              <button v-if="checkOut" type="button" class="grid h-7 w-7 place-items-center rounded-pill text-[13px] hover:bg-sand-100" aria-label="Effacer le départ" @click="clearOut">✕</button>
+              <button v-if="checkOut" type="button" class="grid h-7 w-7 place-items-center rounded-pill text-[13px] hover:bg-sand-100" aria-label="Effacer le départ" @click="clearOut"><X class="h-3.5 w-3.5" :stroke-width="2.2" /></button>
             </div>
           </div>
         </div>
 
         <div class="relative mt-6 grid grid-cols-1 gap-10 md:grid-cols-2">
-          <button type="button" class="absolute left-0 top-0 grid h-8 w-8 place-items-center rounded-pill text-lg transition-colors hover:bg-sand-100 disabled:opacity-25" :disabled="!canPrev" aria-label="Mois précédent" @click="base = shiftMonth(base, -1)">‹</button>
-          <button type="button" class="absolute right-0 top-0 grid h-8 w-8 place-items-center rounded-pill text-lg transition-colors hover:bg-sand-100 disabled:opacity-25" :disabled="!canNext" aria-label="Mois suivant" @click="base = shiftMonth(base, 1)">›</button>
+          <button type="button" class="absolute left-0 top-0 grid h-8 w-8 place-items-center rounded-pill text-lg transition-colors hover:bg-sand-100 disabled:opacity-25" :disabled="!canPrev" aria-label="Mois précédent" @click="base = shiftMonth(base, -1)"><ChevronLeft class="h-5 w-5" :stroke-width="2" /></button>
+          <button type="button" class="absolute right-0 top-0 grid h-8 w-8 place-items-center rounded-pill text-lg transition-colors hover:bg-sand-100 disabled:opacity-25" :disabled="!canNext" aria-label="Mois suivant" @click="base = shiftMonth(base, 1)"><ChevronRight class="h-5 w-5" :stroke-width="2" /></button>
           <div v-for="(m, i) in months" :key="`${m.ref.year}-${m.ref.month}`" :class="i === 1 ? 'hidden md:block' : ''">
             <p class="m-0 text-center text-[15.5px] font-bold" data-testid="month-title">{{ m.title }}</p>
             <div class="mt-4 grid grid-cols-7 text-center text-[11.5px] font-bold text-[var(--text-muted)]">
