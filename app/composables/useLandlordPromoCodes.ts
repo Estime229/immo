@@ -32,7 +32,8 @@ export function useLandlordPromoCodes() {
     state.value = 'loading'
     try {
       items.value = await promoApi.fetchMine()
-      state.value = deriveFetchState({ loading: false, errored: false, itemCount: items.value.length })
+      const derived = deriveFetchState({ loading: false, errored: false, itemCount: items.value.length })
+      state.value = derived === 'empty-filtered' ? 'empty' : derived
     } catch {
       state.value = 'error'
     }

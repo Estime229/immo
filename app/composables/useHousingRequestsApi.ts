@@ -50,7 +50,7 @@ export function useHousingRequestsApi() {
 
   /** Vitrine publique (IP5) — aucune authentification requise, mais utile côté propriétaire pour parcourir avant de répondre. */
   async function fetchOpen(filters: OpenHousingRequestsFilters = {}) {
-    return api.get<PaginatedResult<HousingRequestOpenItem>>('/housing-requests/open', filters)
+    return api.get<PaginatedResult<HousingRequestOpenItem>>('/housing-requests/open', { ...filters })
   }
 
   /** Propose une unité déjà possédée par le propriétaire connecté — 403 si l'unité ne lui appartient pas, 400 si déjà proposée ou demande fermée. */

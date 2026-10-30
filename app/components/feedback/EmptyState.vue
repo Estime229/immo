@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { CircleAlert } from '@lucide/vue'
+
 /** État vide ou erreur — RÈGLE : une erreur ne doit jamais ressembler à un vide. */
 interface EmptyStateProps {
   title: string
@@ -18,10 +20,15 @@ const emit = defineEmits<{ action: [] }>()
     class="rounded-2xl p-12 text-center font-body"
     :class="props.variant === 'error' ? 'border border-danger-border bg-danger-bg' : 'border border-dashed border-[var(--border-default)] bg-white'"
   >
+    <!-- Vide : pictogramme facultatif dans une pastille (slot `icon`, ex. une icône lucide). -->
+    <div
+      v-if="props.variant === 'empty' && $slots.icon"
+      class="mx-auto mb-4 grid h-[46px] w-[46px] place-items-center rounded-pill bg-green-50 text-green-700"
+    ><slot name="icon" /></div>
     <div
       v-if="props.variant === 'error'"
       class="mx-auto grid h-[46px] w-[46px] place-items-center rounded-pill bg-danger-tint text-xl font-black text-danger-fg"
-    >!</div>
+    ><CircleAlert class="h-[22px] w-[22px]" /></div>
     <p
       class="text-lg font-bold"
       :class="props.variant === 'error' ? 'mb-0 mt-4 text-danger-fg' : 'm-0 text-[var(--text-primary)]'"

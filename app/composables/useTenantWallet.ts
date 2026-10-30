@@ -39,7 +39,8 @@ export function useTenantWallet() {
     state.value = 'loading'
     try {
       wallet.value = await walletApi.fetchMe()
-      state.value = deriveFetchState({ loading: false, errored: false, itemCount: 1 })
+      const derived = deriveFetchState({ loading: false, errored: false, itemCount: 1 })
+      state.value = derived === 'empty-filtered' ? 'empty' : derived
     } catch {
       state.value = 'error'
     }

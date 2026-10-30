@@ -47,7 +47,8 @@ export interface CreateUnitPayload {
   name: string
   price: number
   description?: Record<string, string>
-  unit_status?: 'available' | 'occupied' | 'notice_given'
+  /** Le swagger n'énumère que les trois premiers, mais l'API accepte aussi maintenance / coming_soon (vérifié en direct, BACKEND-ISSUES.md #6). */
+  unit_status?: 'available' | 'occupied' | 'notice_given' | 'maintenance' | 'coming_soon'
   /** Obligatoire si unit_status = 'notice_given' (ISO date) — vérifié sur CreateUnitCommand. */
   available_from?: string
   bedrooms_count?: number

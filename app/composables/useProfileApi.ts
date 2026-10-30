@@ -8,7 +8,7 @@ export function useProfileApi() {
     return api.get<ProfileMe>('/profile/me')
   }
 
-  /** Toute mise à jour repasse kyc_status à 'pending' côté serveur — reflété dans la réponse. */
+  /** Met à jour le profil ; le statut KYC éventuellement modifié par le serveur est reflété dans la réponse. */
   async function update(payload: UpdateProfilePayload) {
     return api.patch<UpdateProfileResult>('/profile/me', payload)
   }

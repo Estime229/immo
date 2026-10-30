@@ -1,23 +1,21 @@
+import type { ArtisanRequestSummary } from '~/types/artisan'
+import { BookOpen, Hammer, Handshake, LayoutGrid, ListChecks, MessageSquare, Receipt, Star, UserRound } from '@lucide/vue'
+
 export const ARTISAN_NAV_ITEMS = [
-  { key: 'apercu', to: '/artisan', icon: '◧', label: 'Aperçu', count: '' },
-  { key: 'missions', to: '/artisan/missions', icon: '⚒', label: 'Mes missions', count: '' },
-  { key: 'planning', to: '/artisan/planning', icon: '◷', label: 'Planning', count: '' },
-  { key: 'facturation', to: '/artisan/facturation', icon: '⎈', label: 'Facturation', count: '' },
-  { key: 'messages', to: '/artisan/messages', icon: '✉', label: 'Messages', count: '' },
-  { key: 'partenaires', to: '/artisan/partenaires', icon: '⚇', label: 'Agences partenaires', count: '' },
-  { key: 'historique', to: '/artisan/historique', icon: '★', label: 'Historique', count: '' },
-  { key: 'profil', to: '/artisan/profil', icon: '☺', label: 'Profil', count: '' },
-  { key: 'guide', to: '/artisan/guide', icon: '?', label: 'Guide', count: '' }
+  { key: 'apercu', to: '/artisan', icon: LayoutGrid, label: 'Aperçu', count: '' },
+  { key: 'missions', to: '/artisan/missions', icon: Hammer, label: 'Mes missions', count: '' },
+  { key: 'planning', to: '/artisan/planning', icon: ListChecks, label: 'À faire', count: '' },
+  { key: 'facturation', to: '/artisan/facturation', icon: Receipt, label: 'Facturation', count: '' },
+  { key: 'messages', to: '/artisan/messages', icon: MessageSquare, label: 'Messages', count: '' },
+  { key: 'partenaires', to: '/artisan/partenaires', icon: Handshake, label: 'Agences partenaires', count: '' },
+  { key: 'historique', to: '/artisan/historique', icon: Star, label: 'Avis', count: '' },
+  { key: 'profil', to: '/artisan/profil', icon: UserRound, label: 'Profil', count: '' },
+  { key: 'guide', to: '/artisan/guide', icon: BookOpen, label: 'Guide', count: '' }
 ] as const
 
 export const ARTISAN_PAGE_TITLES: Record<string, string> = {
-  apercu: 'Aperçu', missions: 'Mes missions', planning: 'Planning', facturation: 'Facturation',
-  partenaires: 'Agences partenaires', historique: 'Historique et avis', profil: 'Profil', guide: 'Guide', messages: 'Messages'
-}
-
-/* ---- Disponibilité (local uniquement — aucun endpoint ne le persiste) ---- */
-export function useArtisanDispo() {
-  return useState('artisanDispo', () => true)
+  apercu: 'Aperçu', missions: 'Mes missions', planning: 'À faire', facturation: 'Facturation',
+  partenaires: 'Agences partenaires', historique: 'Avis reçus', profil: 'Profil', guide: 'Guide', messages: 'Messages'
 }
 
 /* ---- Modales ---- */
@@ -30,17 +28,7 @@ export function useArtisanModalTarget() {
   return useState<string | null>('artisanModalTargetId', () => null)
 }
 
-export function useArtisanFlashModal() {
-  const open = useState('artisanFlashOpen', () => false)
-  const title = useState('artisanFlashTitle', () => '')
-  const body = useState('artisanFlashBody', () => '')
-  function flash(t: string, b: string) {
-    title.value = t
-    body.value = b
-    open.value = true
-  }
-  function close() {
-    open.value = false
-  }
-  return { open, title, body, flash, close }
+/** Instantané de la demande ciblée, pour que la modale « Marquer terminée » rappelle la part retenue sans refetch. */
+export function useArtisanModalRequest() {
+  return useState<ArtisanRequestSummary | null>('artisanModalRequest', () => null)
 }

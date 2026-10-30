@@ -13,12 +13,25 @@ interface InputProps {
 
 withDefaults(defineProps<InputProps>(), { invalid: false, mono: false, type: 'text' })
 defineEmits<{ 'update:modelValue': [value: string] }>()
+
+/**
+ * `class`/`style` restent sur le conteneur (mise en page) ; les autres attributs (`inputmode`,
+ * `min`, `maxlength`, `autocomplete`, `required`, écouteurs…) vont au champ lui-même.
+ */
+defineOptions({ inheritAttrs: false })
+const attrs = useAttrs()
+const rootAttrs = computed(() => ({ class: attrs.class, style: attrs.style }))
+const inputAttrs = computed(() => {
+  const { class: _class, style: _style, ...rest } = attrs
+  return rest
+})
 </script>
 
 <template>
-  <label class="block font-body">
+  <label class="block font-body" v-bind="rootAttrs">
     <span v-if="label" class="mb-[7px] block text-[12.5px] font-bold">{{ label }}</span>
     <input
+      v-bind="inputAttrs"
       :type="type"
       :placeholder="placeholder"
       :value="modelValue"

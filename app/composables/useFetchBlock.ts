@@ -16,7 +16,9 @@ export function useFetchBlock<T>(fetcher: () => Promise<T[]>) {
     state.value = 'loading'
     try {
       items.value = await fetcher()
-      state.value = deriveFetchState({ loading: false, errored: false, itemCount: items.value.length })
+      // Sans filtre, deriveFetchState ne renvoie jamais 'empty-filtered' : on le ramène à 'empty' pour le type.
+      const derived = deriveFetchState({ loading: false, errored: false, itemCount: items.value.length })
+      state.value = derived === 'empty-filtered' ? 'empty' : derived
     } catch {
       state.value = 'error'
     }

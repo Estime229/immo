@@ -23,13 +23,20 @@ const roleLabel = computed(() => {
 
 /** Sous-pages (`/pro/biens/ajouter`, `/pro/biens/fiche`…) rattachées à leur rubrique — avant, tout s'affichait « Aperçu ». */
 const currentKey = computed(() => {
-  const items = NAV_GROUPS.flatMap(g => g.items)
+  const items: ReadonlyArray<{ key: string; to: string }> = NAV_GROUPS.flatMap(g => [...g.items])
   const exact = items.find(n => n.to === route.path)
   if (exact) return exact.key
   const parent = items.filter(n => n.to !== '/pro' && route.path.startsWith(`${n.to}/`)).sort((a, b) => b.to.length - a.to.length)[0]
   return parent?.key ?? 'apercu'
 })
-const pageTitle = computed(() => PAGE_TITLES[currentKey.value] ?? '')
+/** Sous-pages qui ont leur propre titre (avant : « Créer un bail » s'affichait « Baux »). */
+const SUB_PAGE_TITLES: Array<[RegExp, string]> = [
+  [/^\/pro\/biens\/ajouter$/, PAGE_TITLES.addBien!],
+  [/^\/pro\/biens\/fiche/, PAGE_TITLES.bienFiche!],
+  [/^\/pro\/baux\/nouveau$/, PAGE_TITLES.newBail!],
+  [/^\/pro\/baux\/[^/]+$/, 'Bail']
+]
+const pageTitle = computed(() => SUB_PAGE_TITLES.find(([re]) => re.test(route.path))?.[1] ?? PAGE_TITLES[currentKey.value] ?? '')
 /** Titre d'onglet (Lot 56) : l'intitulé de la page, sinon celui de l'espace. */
 useHead({ title: computed(() => pageTitle.value || 'Espace pro') })
 
@@ -146,9 +153,9 @@ const mobileTabs = computed<MobileTab[]>(() => {
           :key="n.key"
           :to="n.to"
           class="flex w-full items-center gap-2.5 rounded-sm px-3 py-2.5 text-left text-[13.5px] font-semibold transition-all"
-          :class="currentKey === n.key ? 'bg-green-50 text-green-800' : 'bg-transparent text-[var(--text-secondary)]'"
+          :class="currentKey === n.key ? 'bg-green-50 text-green-800' : 'bg-transparent text-[var(--text-secondary)] hover:bg-sand-50'"
         >
-          <span class="w-[17px] flex-none text-center text-sm">{{ n.icon }}</span>
+          <component :is="n.icon" class="h-[17px] w-[17px] flex-none" :stroke-width="1.9" aria-hidden="true" />
           <span class="flex-1">{{ n.label }}</span>
           <CoreLockIcon v-if="!identityVerified && LOCKED_NAV.has(n.key)" :size="12" class="text-[var(--text-faint)]" />
           <span v-if="liveCount(n.key)" class="rounded-pill bg-clay-500 px-[7px] py-0.5 text-[10px] font-black text-white">{{ liveCount(n.key) }}</span>
@@ -177,11 +184,8 @@ const mobileTabs = computed<MobileTab[]>(() => {
     <LayoutMobileTabBar :items="mobileTabs" @select="drawerOpen = !drawerOpen" />
 
     <ProRetraitModal />
-    <ProQrModal />
-    <ProFlashModal />
     <ProPromoModal />
     <ProArtisanReqModal />
-    <ProTarifModal />
     <ProPayInterventionModal />
   </div>
 </template>
