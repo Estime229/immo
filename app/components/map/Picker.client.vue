@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { Map as LeafletMap, Marker } from 'leaflet'
 import 'leaflet/dist/leaflet.css'
+import { LocateFixed } from '@lucide/vue'
 import { cityCenter, DEFAULT_MAP_CENTER, formatCoords, isInBenin, MAP_TILE_ATTRIBUTION, MAP_TILE_URL, roundCoords, type GeoPoint } from '~/utils/geo'
 
 /**
@@ -131,8 +132,8 @@ watch(() => props.cityName, centerOnCity)
         <span class="font-mono font-bold text-[var(--text-primary)]">{{ formatCoords(modelValue) }}</span> · faites glisser le repère pour ajuster
       </p>
       <p v-else class="m-0 flex-1 text-[12.5px] text-[var(--text-muted)]">Sans position, les locataires ne voient qu'une zone approximative autour de la ville.</p>
-      <button type="button" class="rounded-pill border border-[var(--border-default)] bg-white px-3.5 py-2 text-[12.5px] font-bold disabled:opacity-60" :disabled="locating" @click="useMyPosition">
-        {{ locating ? 'Localisation…' : '◎ Utiliser ma position' }}
+      <button type="button" class="inline-flex items-center gap-1.5 rounded-pill border border-[var(--border-default)] bg-white px-3.5 py-2 text-[12.5px] font-bold disabled:opacity-60" :disabled="locating" @click="useMyPosition">
+        <LocateFixed class="h-3.5 w-3.5" :stroke-width="2" />{{ locating ? 'Localisation…' : 'Utiliser ma position' }}
       </button>
       <button v-if="modelValue && clearable" type="button" class="rounded-pill px-3 py-2 text-[12.5px] font-bold text-[var(--text-muted)] underline" @click="emit('update:modelValue', null)">Retirer</button>
     </div>

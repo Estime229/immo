@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ArrowLeft, Check, Hammer, House, KeyRound } from '@lucide/vue'
 import type { SessionOutcome } from '~/utils/sessionOutcome'
 import { ApiRequestError } from '~/utils/authenticatedFetcher'
 import { errorText } from '~/utils/apiErrors'
@@ -31,7 +32,14 @@ function setHero(i: number) {
 }
 onMounted(startHeroTimer)
 
-onUnmounted(() => { if (heroTimer) clearInterval(heroTimer) })
+onUnmounted(() => {
+  if (heroTimer) clearInterval(heroTimer)
+  if (resendTimer) clearInterval(resendTimer)
+})
+
+/** Mêmes classes que `FormsInput` : les champs natifs gardent `autocomplete` (gestionnaires de mots de passe). */
+const INPUT_CLASS = 'h-[46px] w-full rounded-md border bg-[var(--surface-input)] px-[15px] text-[14.5px] text-[var(--text-primary)] outline-none focus:border-green-600'
+const LABEL_CLASS = 'mb-[7px] block text-[12.5px] font-bold'
 
 const step = ref<AuthStep>('email')
 const email = ref('')
@@ -44,7 +52,7 @@ function handleOutcome(outcome: SessionOutcome) {
     authError.value = outcome.message
     return
   }
-  if (outcome.kind === 'pending' || (outcome.kind !== 'banned' && outcome.isNewUser)) {
+  if (outcome.kind === 'pending' || outcome.isNewUser) {
     step.value = 'signup'
     return
   }
@@ -154,20 +162,119 @@ function setCodeInput(i: number, el: Element | null) {
   codeInputs.value[i] = el as HTMLInputElement | null
 }
 
-function onCodeInput(i: number, e: Event) {
-  const val = (e.target as HTMLInputElement).value.replace(/\D/g, '').slice(-1)
-  codeDigits.value[i] = val
+/**
+ * Saisie du code : une case par chiffre, mais un collage (ou le remplissage automatique du
+ * téléphone, qui met les 6 chiffres dans la première case) se répartit sur les cases suivantes.
+ * Le 6e chiffre envoie le code sans attendre « Vérifier ».
+ */
+function fillDigits(from: number, digits: string) {
+  const chars = digits.replace(/\D/g, '').slice(0, 6 - from).split('')
+  chars.forEach((d, k) => { codeDigits.value[from + k] = d })
   codeError.value = false
-  if (val && i < 5) codeInputs.value[i + 1]?.focus()
+  authError.value = ''
+  const next = Math.min(from + chars.length, 5)
+  codeInputs.value[next]?.focus()
+  if (codeDigits.value.every(d => d)) verifyCode()
+}
+
+function onCodeInput(i: number, e: Event) {
+  const input = e.target as HTMLInputElement
+  const digits = input.value.replace(/\D/g, '')
+  if (digits.length > 1) {
+    input.value = codeDigits.value[i] ?? ''
+    fillDigits(i, digits)
+    return
+  }
+  codeDigits.value[i] = digits
+  input.value = digits
+  codeError.value = false
+  authError.value = ''
+  if (!digits) return
+  if (i < 5) codeInputs.value[i + 1]?.focus()
+  if (codeDigits.value.every(d => d)) verifyCode()
+}
+
+function onCodePaste(i: number, e: ClipboardEvent) {
+  const text = e.clipboardData?.getData('text') ?? ''
+  if (!/\d/.test(text)) return
+  e.preventDefault()
+  fillDigits(/^\D*\d{6}/.test(text) ? 0 : i, text)
+}
+
+/** Retour arrière dans une case vide : on recule d'une case et on l'efface ; flèches pour se déplacer. */
+function onCodeKeydown(i: number, e: KeyboardEvent) {
+  if (e.key === 'Backspace' && !codeDigits.value[i] && i > 0) {
+    e.preventDefault()
+    codeDigits.value[i - 1] = ''
+    codeInputs.value[i - 1]?.focus()
+  } else if (e.key === 'ArrowLeft' && i > 0) {
+    e.preventDefault()
+    codeInputs.value[i - 1]?.focus()
+  } else if (e.key === 'ArrowRight' && i < 5) {
+    e.preventDefault()
+    codeInputs.value[i + 1]?.focus()
+  } else if (e.key === 'Enter') {
+    verifyCode()
+  }
+}
+
+/* ---- Renvoyer le code (compte à rebours, et délai imposé par l'API s'il y en a un) ---- */
+const RESEND_DELAY = 30
+const resendIn = ref(0)
+const resending = ref(false)
+const resendInfo = ref('')
+let resendTimer: ReturnType<typeof setInterval> | null = null
+
+function startResendCountdown(seconds = RESEND_DELAY) {
+  if (resendTimer) clearInterval(resendTimer)
+  resendIn.value = seconds
+  resendTimer = setInterval(() => {
+    resendIn.value -= 1
+    if (resendIn.value <= 0 && resendTimer) {
+      clearInterval(resendTimer)
+      resendTimer = null
+    }
+  }, 1000)
+}
+
+// Chaque arrivée sur l'étape « code » suit un envoi réussi : le compte à rebours part, la 1re case prend le focus.
+watch(step, s => {
+  if (s !== 'code') return
+  resendInfo.value = ''
+  startResendCountdown()
+  nextTick(() => codeInputs.value[0]?.focus())
+})
+
+async function resendCode() {
+  if (resendIn.value > 0 || resending.value) return
+  resending.value = true
+  authError.value = ''
+  codeError.value = false
+  resendInfo.value = ''
+  try {
+    if (codeContext.value === 'reset') await auth.forgotPassword(email.value)
+    else await auth.requestOtp(email.value)
+    codeDigits.value = ['', '', '', '', '', '']
+    resendInfo.value = `Nouveau code envoyé à ${email.value}. Le précédent n'est plus valable.`
+    startResendCountdown()
+    nextTick(() => codeInputs.value[0]?.focus())
+  } catch (e) {
+    if (e instanceof ApiRequestError && e.mapped.kind === 'rate_limited') startResendCountdown(e.mapped.retryAfterSeconds ?? RESEND_DELAY * 2)
+    authError.value = e instanceof ApiRequestError ? errorText(e.mapped, "Le code n'a pas pu être renvoyé.") : "Le code n'a pas pu être renvoyé."
+  } finally {
+    resending.value = false
+  }
 }
 
 async function verifyCode() {
+  if (loading.value) return
   const code = codeDigits.value.join('')
   if (code.length < 6) {
     codeError.value = true
     return
   }
   authError.value = ''
+  resendInfo.value = ''
 
   if (codeContext.value === 'reset') {
     // Le code n'est vérifié qu'au moment de POST /auth/reset-password, avec le
@@ -204,9 +311,9 @@ const signupError = ref('')
 watch([firstName, lastName], () => { signupError.value = '' })
 
 const ROLES = [
-  { id: 'locataire', label: 'Je cherche un logement', hint: 'Réserver, payer mon loyer, suivre ma caution', icon: '⌂', tint: 'bg-green-50' },
-  { id: 'bailleur', label: 'Je loue mes biens', hint: 'Publier, encaisser, gérer mes baux', icon: '⚿', tint: 'bg-clay-100' },
-  { id: 'artisan', label: 'Je suis artisan', hint: "Recevoir des missions d'entretien et de réparation", icon: '⚒', tint: 'bg-info-bg' }
+  { id: 'locataire', label: 'Je cherche un logement', hint: 'Réserver, payer mon loyer, suivre ma caution', icon: House, tint: 'bg-green-50 text-green-700' },
+  { id: 'bailleur', label: 'Je loue mes biens', hint: 'Publier, encaisser, gérer mes baux', icon: KeyRound, tint: 'bg-clay-100 text-clay-700' },
+  { id: 'artisan', label: 'Je suis artisan', hint: "Recevoir des missions d'entretien et de réparation", icon: Hammer, tint: 'bg-info-bg text-info-fg' }
 ] as const
 
 const role = useAuthRole()
@@ -306,7 +413,7 @@ async function submitReset() {
           La caution du locataire ne dort jamais chez le bailleur.
         </p>
         <p class="mb-0 mt-3.5 max-w-[400px] text-[15px] text-white/[.82]">
-          Elle est séquestrée par Immo et restituée sous 7 jours après l'état des lieux de sortie.
+          Elle est versée à Immo, pas au bailleur, et reste séquestrée pendant tout le bail.
         </p>
       </div>
       <div class="absolute bottom-11 right-11 z-10 flex gap-1.5">
@@ -322,43 +429,43 @@ async function submitReset() {
     </div>
 
     <div class="flex flex-col justify-center overflow-y-auto bg-white px-6 py-11 sm:px-[52px]">
-      <div class="animate-[im-fade_.3s_ease_both]">
+      <!-- Mobile : le panneau photo est masqué, la marque (et le retour à l'accueil) passe en tête du formulaire. -->
+      <NuxtLink to="/" class="mb-9 flex w-fit items-center gap-2.5 lg:hidden" aria-label="Accueil Immo">
+        <img src="/images/logo.png" alt="" class="h-8 w-8 rounded-[9px]" width="32" height="32">
+        <span class="font-display text-[22px] font-extrabold tracking-[-.025em] text-green-900">Immo</span>
+      </NuxtLink>
+      <div class="animate-[im-fade_.3s_ease_backwards]">
         <template v-if="step === 'email'">
           <h1 class="m-0 font-display text-[29px] font-bold tracking-[-.03em]">Entrer sur Immo</h1>
           <p class="mb-6 mt-2.5 text-[14.5px] text-[var(--text-muted)]">Saisissez votre email : nous vous dirons ensuite s'il faut un mot de passe ou un code.</p>
           <label class="block">
-            <span class="mb-2 block text-[12.5px] font-bold">Adresse email</span>
+            <span :class="LABEL_CLASS">Adresse email</span>
             <input
               v-model="email"
               type="email"
+              autocomplete="email"
+              inputmode="email"
               placeholder="vous@exemple.bj"
-              class="h-[50px] w-full rounded-md border bg-[var(--surface-input)] px-4 text-[15px] outline-none"
-              :class="emailError ? 'border-danger-border' : 'border-[var(--border-default)]'"
+              :class="[INPUT_CLASS, emailError ? 'border-danger-border' : 'border-[var(--border-default)]']"
               @input="onEmailInput"
               @keydown.enter="goPassword"
             >
           </label>
-          <p v-if="emailError" class="mb-0 mt-2.5 text-[13px] font-semibold text-danger-fg">Adresse email invalide. Vérifiez l'orthographe ou créez un compte.</p>
-          <p v-if="authError" class="mb-0 mt-2.5 text-[13px] font-semibold text-danger-fg">{{ authError }}</p>
+          <p v-if="emailError" class="mb-0 mt-[7px] text-[12.5px] font-semibold text-danger-fg">Adresse email invalide. Vérifiez l'orthographe ou créez un compte.</p>
+          <p v-if="authError" class="mb-0 mt-[7px] text-[12.5px] font-semibold text-danger-fg">{{ authError }}</p>
           <CoreButton size="lg" full-width class="mt-4.5" :disabled="loading" @click="goPassword">{{ loading ? 'Un instant…' : 'Continuer' }}</CoreButton>
-          <div class="my-5.5 flex items-center gap-3.5">
-            <span class="h-px flex-1 bg-sand-300" /><span class="text-[12.5px] text-[var(--text-faint)]">ou</span><span class="h-px flex-1 bg-sand-300" />
-          </div>
-          <button type="button" title="Nécessite la configuration Firebase du projet — non branché dans ce lot" class="flex w-full cursor-not-allowed items-center justify-center gap-2.5 rounded-md border border-[var(--border-default)] bg-white py-[15px] text-[14.5px] font-semibold text-sand-900 opacity-60">
-            <span class="h-[18px] w-[18px] rounded-pill" style="background: conic-gradient(#ea4335 0 25%, #fbbc05 0 50%, #34a853 0 75%, #4285f4 0)" />
-            Continuer avec Google
-          </button>
+          <p class="mb-0 mt-4 text-xs leading-[1.5] text-[var(--text-faint)]">Pas encore de compte ? Saisissez votre email : un code vous permettra d'en créer un.</p>
         </template>
 
         <template v-else-if="step === 'password'">
-          <button type="button" class="mb-4.5 text-[13.5px] font-semibold text-[var(--text-muted)]" @click="backToEmail">← Changer d'email</button>
+<button type="button" class="mb-4.5 inline-flex items-center gap-1.5 text-[13px] font-bold text-[var(--text-muted)] hover:text-green-700" @click="backToEmail"><ArrowLeft class="h-4 w-4" :stroke-width="1.9" />Changer d'email</button>
           <h1 class="m-0 font-display text-[29px] font-bold tracking-[-.03em]">Votre mot de passe</h1>
           <p class="mb-6 mt-2.5 text-[14.5px] text-[var(--text-muted)]">Compte <strong class="text-[var(--text-primary)]">{{ email }}</strong></p>
           <label class="block">
-            <span class="mb-2 block text-[12.5px] font-bold">Mot de passe</span>
-            <input v-model="password" type="password" placeholder="••••••••••" class="h-[50px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-4 text-[15px] outline-none" @keydown.enter="submitPassword">
+            <span :class="LABEL_CLASS">Mot de passe</span>
+            <input v-model="password" type="password" autocomplete="current-password" placeholder="••••••••••" :class="[INPUT_CLASS, 'border-[var(--border-default)]']" @keydown.enter="submitPassword">
           </label>
-          <p v-if="authError" class="mb-0 mt-2.5 text-[13px] font-semibold text-danger-fg">{{ authError }}</p>
+          <p v-if="authError" class="mb-0 mt-[7px] text-[12.5px] font-semibold text-danger-fg">{{ authError }}</p>
           <CoreButton size="lg" full-width class="mt-4.5" :disabled="loading" @click="submitPassword">{{ loading ? 'Connexion…' : 'Se connecter' }}</CoreButton>
           <div class="mt-5 flex flex-col gap-2.5">
             <button type="button" class="text-left text-[13.5px] font-semibold text-green-700" @click="toCodeFromPassword">Recevoir plutôt un code par email</button>
@@ -367,29 +474,38 @@ async function submitReset() {
         </template>
 
         <template v-else-if="step === 'code'">
-          <button type="button" class="mb-4.5 text-[13.5px] font-semibold text-[var(--text-muted)]" @click="backToEmail">← Retour</button>
+          <button type="button" class="mb-4.5 inline-flex items-center gap-1.5 text-[13px] font-bold text-[var(--text-muted)] hover:text-green-700" @click="backToEmail"><ArrowLeft class="h-4 w-4" :stroke-width="1.9" />Retour</button>
           <h1 class="m-0 font-display text-[29px] font-bold tracking-[-.03em]">Votre code à 6 chiffres</h1>
           <p class="mb-6 mt-2.5 text-[14.5px] leading-[1.5] text-[var(--text-muted)]">
             Nous l'avons envoyé <strong class="text-[var(--text-primary)]">par email</strong> à {{ email || 'votre adresse' }}. Il n'arrive pas par SMS.
           </p>
-          <div class="flex gap-2.5">
+          <div class="flex gap-2 sm:gap-2.5" role="group" aria-label="Code à 6 chiffres">
             <input
               v-for="(d, i) in codeDigits"
               :key="i"
               :ref="(el) => setCodeInput(i, el as Element)"
               :value="d"
               inputmode="numeric"
-              maxlength="1"
-              class="h-[60px] w-full rounded-md border bg-[var(--surface-input)] text-center font-mono text-[22px] font-bold outline-none"
+              pattern="[0-9]*"
+              :autocomplete="i === 0 ? 'one-time-code' : 'off'"
+              :aria-label="`Chiffre ${i + 1} sur 6`"
+              class="h-14 w-full min-w-0 rounded-md border bg-[var(--surface-input)] text-center font-mono text-[22px] font-bold outline-none focus:border-green-600 sm:h-[60px]"
               :class="codeError ? 'border-danger-border text-danger-fg' : d ? 'border-green-600 text-[var(--text-primary)]' : 'border-[var(--border-default)] text-[var(--text-primary)]'"
               @input="onCodeInput(i, $event)"
+              @paste="onCodePaste(i, $event)"
+              @keydown="onCodeKeydown(i, $event)"
+              @focus="($event.target as HTMLInputElement).select()"
             >
           </div>
-          <div v-if="codeError || authError" class="mt-3.5 rounded-sm border border-danger-border bg-danger-bg px-[15px] py-3.5">
-            <p class="m-0 text-[13.5px] font-semibold text-danger-fg-deep">{{ authError || 'Code incomplet.' }}</p>
-          </div>
+          <p v-if="codeError || authError" class="mb-0 mt-[7px] text-[12.5px] font-semibold text-danger-fg">{{ authError || 'Code incomplet : saisissez les 6 chiffres.' }}</p>
+          <p v-else-if="resendInfo" class="mb-0 mt-3.5 rounded-md border border-ok-border bg-ok-bg px-3.5 py-2.5 text-[13px] font-semibold text-green-900">{{ resendInfo }}</p>
           <CoreButton size="lg" full-width class="mt-4.5" :disabled="loading" @click="verifyCode">{{ loading ? 'Vérification…' : 'Vérifier' }}</CoreButton>
-          <button v-if="codeContext === 'reset'" type="button" class="mt-3 text-[13.5px] font-semibold text-green-700" @click="toRecovery">J'utilise un code de récupération</button>
+          <div class="mt-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+            <p v-if="resendIn > 0" class="m-0 text-[13px] text-[var(--text-muted)]">Renvoyer le code dans <span class="font-mono font-bold">{{ resendIn }} s</span></p>
+            <button v-else type="button" class="text-[13px] font-bold text-green-700 disabled:opacity-50" :disabled="resending" @click="resendCode">{{ resending ? 'Envoi…' : 'Renvoyer le code' }}</button>
+            <button v-if="codeContext === 'reset'" type="button" class="text-[13px] font-bold text-[var(--text-muted)] hover:text-green-700" @click="toRecovery">J'utilise un code de récupération</button>
+          </div>
+          <p class="mb-0 mt-3 text-xs text-[var(--text-faint)]">Rien reçu ? Vérifiez vos indésirables avant de demander un nouveau code.</p>
         </template>
 
         <template v-else-if="step === 'signup'">
@@ -400,52 +516,56 @@ async function submitReset() {
             <FormsInput v-model="lastName" label="Nom" placeholder="Aholou" />
           </div>
           <p class="mb-2.5 mt-5.5 text-[12.5px] font-bold">Vous venez sur Immo pour…</p>
-          <div class="flex flex-col gap-2.5">
-            <div
+          <div class="flex flex-col gap-2.5" role="radiogroup" aria-label="Votre profil">
+            <button
               v-for="r in ROLES"
               :key="r.id"
-              class="flex cursor-pointer items-center gap-3.5 rounded-md p-3.5 transition-all"
+              type="button"
+              role="radio"
+              :aria-checked="role === r.id"
+              class="flex w-full cursor-pointer items-center gap-3.5 rounded-md p-3.5 text-left transition-all"
               :class="role === r.id ? 'border-2 border-green-600 bg-green-50' : 'border border-[var(--border-default)] bg-white'"
               @click="role = r.id"
             >
-              <div class="grid h-10 w-10 flex-none place-items-center rounded-sm text-[17px]" :class="r.tint">{{ r.icon }}</div>
+              <div class="grid h-10 w-10 flex-none place-items-center rounded-sm" :class="r.tint"><component :is="r.icon" class="h-[18px] w-[18px]" :stroke-width="1.9" /></div>
               <div class="flex-1">
                 <p class="m-0 text-[14.5px] font-bold">{{ r.label }}</p>
                 <p class="mb-0 mt-[3px] text-[12.5px] text-[var(--text-muted)]">{{ r.hint }}</p>
               </div>
               <span
-                class="grid h-5 w-5 place-items-center rounded-pill text-[11px] text-white"
+                class="grid h-5 w-5 flex-none place-items-center rounded-pill text-white"
                 :class="role === r.id ? 'bg-green-600' : 'border-2 border-[var(--border-default)] bg-transparent'"
-              >{{ role === r.id ? '✓' : '' }}</span>
-            </div>
+              ><Check v-if="role === r.id" class="h-3 w-3" :stroke-width="3" /></span>
+            </button>
           </div>
-          <p v-if="signupError" class="mb-0 mt-3.5 rounded-sm border border-danger-border bg-danger-bg px-[15px] py-3 text-[13.5px] font-semibold text-danger-fg-deep">{{ signupError }}</p>
+          <p v-if="signupError" class="mb-0 mt-3.5 text-[12.5px] font-semibold text-danger-fg">{{ signupError }}</p>
           <CoreButton size="lg" full-width class="mt-5" :disabled="loading" @click="createAccount">{{ loading ? 'Création du compte…' : 'Créer mon compte' }}</CoreButton>
           <p class="mb-0 mt-3.5 text-[12.5px] leading-[1.5] text-[var(--text-faint)]">
-            En continuant, vous acceptez les <NuxtLink to="/legal" class="font-semibold text-green-700">conditions d'utilisation</NuxtLink>
-            et la <NuxtLink to="/legal" class="font-semibold text-green-700">politique de confidentialité</NuxtLink>.
+            En continuant, vous acceptez les <NuxtLink :to="{ path: '/legal', query: { doc: 'conditions' } }" class="font-semibold text-green-700">conditions d'utilisation</NuxtLink>
+            et la <NuxtLink :to="{ path: '/legal', query: { doc: 'confidentialite' } }" class="font-semibold text-green-700">politique de confidentialité</NuxtLink>.
           </p>
         </template>
 
         <template v-else-if="step === 'forgot'">
-          <button type="button" class="mb-4.5 text-[13.5px] font-semibold text-[var(--text-muted)]" @click="backToEmail">← Retour</button>
+          <button type="button" class="mb-4.5 inline-flex items-center gap-1.5 text-[13px] font-bold text-[var(--text-muted)] hover:text-green-700" @click="backToEmail"><ArrowLeft class="h-4 w-4" :stroke-width="1.9" />Retour</button>
           <h1 class="m-0 font-display text-[29px] font-bold tracking-[-.03em]">Nouveau mot de passe</h1>
           <p class="mb-6 mt-2.5 text-[14.5px] text-[var(--text-muted)]">
             {{ resetMethod === 'otp' ? 'Code vérifié.' : 'Utilisez un de vos codes de récupération.' }} Choisissez un mot de passe d'au moins 8 caractères.
           </p>
           <label v-if="resetMethod === 'recovery'" class="mb-3 block">
-            <span class="mb-2 block text-[12.5px] font-bold">Code de récupération</span>
-            <input v-model="recoveryCode" placeholder="a1b2c3d4" class="h-[50px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-4 font-mono text-[15px] outline-none">
+            <span :class="LABEL_CLASS">Code de récupération</span>
+            <input v-model="recoveryCode" placeholder="a1b2c3d4" autocomplete="off" :class="[INPUT_CLASS, 'border-[var(--border-default)] font-mono']">
           </label>
           <label class="block">
-            <span class="mb-2 block text-[12.5px] font-bold">Nouveau mot de passe</span>
-            <input v-model="newPassword" type="password" placeholder="••••••••••" class="h-[50px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-4 text-[15px] outline-none">
+            <span :class="LABEL_CLASS">Nouveau mot de passe</span>
+            <input v-model="newPassword" type="password" autocomplete="new-password" placeholder="••••••••••" :class="[INPUT_CLASS, 'border-[var(--border-default)]']">
+            <span class="mt-[7px] block text-[12.5px] text-[var(--text-faint)]">8 caractères au moins.</span>
           </label>
           <label class="mt-3 block">
-            <span class="mb-2 block text-[12.5px] font-bold">Confirmer</span>
-            <input v-model="confirmPassword" type="password" placeholder="••••••••••" class="h-[50px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-4 text-[15px] outline-none" @keydown.enter="submitReset">
+            <span :class="LABEL_CLASS">Confirmer le mot de passe</span>
+            <input v-model="confirmPassword" type="password" autocomplete="new-password" placeholder="••••••••••" :class="[INPUT_CLASS, 'border-[var(--border-default)]']" @keydown.enter="submitReset">
           </label>
-          <p v-if="resetError" class="mb-0 mt-2.5 text-[13px] font-semibold text-danger-fg">{{ resetError }}</p>
+          <p v-if="resetError" class="mb-0 mt-[7px] text-[12.5px] font-semibold text-danger-fg">{{ resetError }}</p>
           <CoreButton size="lg" full-width class="mt-4.5" :disabled="loading" @click="submitReset">{{ loading ? 'Enregistrement…' : 'Enregistrer et me connecter' }}</CoreButton>
         </template>
       </div>

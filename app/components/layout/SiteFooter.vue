@@ -1,4 +1,12 @@
 <script setup lang="ts">
+import { Mail, ShieldCheck } from '@lucide/vue'
+import { IMMO_CONTACT } from '~/utils/contact'
+
+/**
+ * Pied de page public. Adresse et email viennent de `IMMO_CONTACT` (même source que /contact :
+ * le pied de page affichait une autre adresse). Retirés : icônes « Nous suivre » sans lien et
+ * badge « Loi 2022-30 » sans source. Les liens légaux ouvrent le bon onglet (`?doc=`).
+ */
 const FOOTER_COLUMNS = [
   {
     title: 'Louer',
@@ -13,7 +21,7 @@ const FOOTER_COLUMNS = [
     title: 'Propriétaires',
     links: [
       { to: '/louer', label: 'Louer votre bien' },
-      { to: '/louer', label: 'Tarifs' },
+      { to: { path: '/louer', hash: '#tarifs' }, label: 'Tarifs' },
       { to: '/kyc', label: 'Vérification du compte' }
     ]
   },
@@ -21,12 +29,14 @@ const FOOTER_COLUMNS = [
     title: 'Immo',
     links: [
       { to: '/contact', label: 'Nous contacter' },
-      { to: '/legal', label: "Conditions d'utilisation" },
-      { to: '/legal', label: 'Confidentialité' },
-      { to: '/legal', label: 'Mentions légales' }
+      { to: { path: '/legal', query: { doc: 'conditions' } }, label: "Conditions d'utilisation" },
+      { to: { path: '/legal', query: { doc: 'confidentialite' } }, label: 'Confidentialité' },
+      { to: { path: '/legal', query: { doc: 'mentions' } }, label: 'Mentions légales' }
     ]
   }
 ]
+
+const year = new Date().getFullYear()
 </script>
 
 <template>
@@ -45,17 +55,16 @@ const FOOTER_COLUMNS = [
           <span class="font-display text-2xl font-extrabold tracking-[-.03em] text-white">Immo</span>
         </div>
         <p class="mb-0 mt-4 font-display text-[19px] font-bold tracking-[-.02em] text-white">Louez sans vous faire avoir</p>
-        <p class="mb-0 mt-[26px] text-[12.5px] font-black tracking-[.04em] text-white/50">ADRESSE</p>
-        <p class="mb-0 mt-[9px] text-sm leading-[1.6] text-white/[.82]">Boulevard de la Marina<br>Cotonou, Bénin</p>
-        <div class="mt-[26px] flex items-center gap-3.5">
-          <div class="flex items-center gap-2 rounded-md border border-white/[.22] px-3.5 py-2.5">
-            <span class="text-[15px] text-white/90">⛨</span>
-            <span class="text-[11.5px] font-black leading-[1.15] tracking-[.02em] text-white/90">CAUTION<br>SÉQUESTRÉE</span>
-          </div>
-          <div class="flex items-center gap-2 rounded-md border border-white/[.22] px-3.5 py-2.5">
-            <span class="text-[15px] text-white/90">§</span>
-            <span class="text-[11.5px] font-black leading-[1.15] tracking-[.02em] text-white/90">LOI<br>2022-30</span>
-          </div>
+        <p class="mb-0 mt-[26px] text-label font-black uppercase tracking-label text-white/50">Adresse</p>
+        <p class="mb-0 mt-[9px] text-sm leading-[1.6] text-white/[.82]">
+          <template v-for="(line, i) in IMMO_CONTACT.addressLines" :key="line">{{ line }}<br v-if="i < IMMO_CONTACT.addressLines.length - 1"></template>
+        </p>
+        <a :href="`mailto:${IMMO_CONTACT.email}`" class="mt-2.5 inline-flex items-center gap-2 text-sm text-white/[.82] transition-colors hover:text-white">
+          <Mail class="h-4 w-4" :stroke-width="1.9" />{{ IMMO_CONTACT.email }}
+        </a>
+        <div class="mt-[26px] flex w-fit items-center gap-2 rounded-md border border-white/[.22] px-3.5 py-2.5">
+          <ShieldCheck class="h-4 w-4 text-white/90" :stroke-width="1.9" />
+          <span class="text-[11.5px] font-black leading-[1.15] tracking-[.02em] text-white/90">CAUTION<br>SÉQUESTRÉE</span>
         </div>
       </div>
 
@@ -71,15 +80,10 @@ const FOOTER_COLUMNS = [
     </div>
 
     <div class="relative mx-auto mt-10 flex max-w-[1240px] flex-wrap items-center justify-between gap-[18px] px-8 pb-[30px] pt-10">
-      <p class="m-0 font-display text-[15px] font-bold text-white/90">Immo © 2026</p>
+      <p class="m-0 font-display text-[15px] font-bold text-white/90">Immo © {{ year }}</p>
       <div class="flex flex-wrap items-center gap-6">
-        <div class="flex items-center gap-3">
-          <span class="text-[13.5px] text-white/[.72]">Nous suivre :</span>
-          <span class="grid h-[34px] w-[34px] cursor-pointer place-items-center rounded-sm bg-white/[.12] text-sm text-white">✉</span>
-          <span class="grid h-[34px] w-[34px] cursor-pointer place-items-center rounded-sm bg-white/[.12] text-[13px] font-black text-white">in</span>
-        </div>
-        <NuxtLink to="/legal" class="text-sm text-white/[.72] transition-colors hover:text-white">Centre de confiance</NuxtLink>
-        <NuxtLink to="/legal" class="text-sm text-white/[.72] transition-colors hover:text-white">Confidentialité</NuxtLink>
+        <NuxtLink :to="{ path: '/legal', query: { doc: 'mentions' } }" class="text-sm text-white/[.72] transition-colors hover:text-white">Mentions légales</NuxtLink>
+        <NuxtLink :to="{ path: '/legal', query: { doc: 'confidentialite' } }" class="text-sm text-white/[.72] transition-colors hover:text-white">Confidentialité</NuxtLink>
       </div>
     </div>
   </footer>

@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { buildSearchQuery, digitsOnly, draftFromQuery, type SearchRentalMode, type SearchDraft } from '~/utils/searchPill'
+import { ChevronDown } from '@lucide/vue'
+import { buildSearchQuery, digitsOnly, draftFromQuery, mergeSearchQuery, type SearchRentalMode, type SearchDraft } from '~/utils/searchPill'
 
 /**
  * Recherche plein écran ouverte depuis la pilule de l'en-tête mobile. Mène à
  * `/recherche` avec les mêmes paramètres que la barre de l'accueil (q, city,
- * budget) plus `mode` (nuit/mois), déjà lu par cette page.
+ * budget) plus `mode` (nuit/mois), déjà lu par cette page. Depuis /recherche,
+ * les autres critères en cours (chambres, eau, tri, vue…) sont gardés.
  */
 const open = defineModel<boolean>('open', { required: true })
 
@@ -44,7 +46,7 @@ function reset() {
 
 function submit() {
   open.value = false
-  navigateTo({ path: '/recherche', query: buildSearchQuery(draft) })
+  navigateTo({ path: '/recherche', query: route.path === '/recherche' ? mergeSearchQuery(route.query, draft) : buildSearchQuery(draft) })
 }
 </script>
 
@@ -75,7 +77,7 @@ function submit() {
           <option value="">Toutes les villes</option>
           <option v-for="c in cities" :key="c.id" :value="c.name">{{ c.name }}</option>
         </select>
-        <span class="pointer-events-none absolute bottom-3.5 right-4 text-[12px] text-[var(--text-faint)]">▾</span>
+        <ChevronDown class="pointer-events-none absolute bottom-3.5 right-4 h-4 w-4 text-[var(--text-faint)]" :stroke-width="1.9" />
       </label>
 
       <label class="block rounded-2xl border border-[var(--border-subtle)] bg-white px-4 py-3 shadow-hairline transition-colors focus-within:border-green-600">

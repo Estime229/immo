@@ -85,3 +85,21 @@ export function flattenSearchResults(items: (PropertySearchResult | UnitSearchRe
 
   return out
 }
+
+/**
+ * Libellé public de l'état d'un logement, sur une carte d'annonce — vide pour
+ * un logement libre. Un code inconnu n'est jamais affiché tel quel (« coming_soon »
+ * apparaissait dans les favoris) : repli sur « Indisponible ».
+ */
+const LISTING_STATUS_LABEL: Record<UnitSearchResult['unit_status'], string> = {
+  available: '',
+  notice_given: 'Disponible bientôt',
+  coming_soon: 'Bientôt disponible',
+  occupied: 'Déjà loué',
+  maintenance: 'En travaux'
+}
+
+export function listingStatusLabel(status: string | null | undefined): string {
+  if (!status) return ''
+  return status in LISTING_STATUS_LABEL ? LISTING_STATUS_LABEL[status as UnitSearchResult['unit_status']] : 'Indisponible'
+}
