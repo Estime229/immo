@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { Bell } from '@lucide/vue'
 import { localizeNotification } from '~/composables/useNotificationsApi'
 import { notificationTarget } from '~/utils/housingRequest'
 
@@ -62,8 +63,8 @@ onUnmounted(() => document.removeEventListener('click', onDocClick))
 
 <template>
   <div ref="root" class="relative">
-    <button type="button" class="relative grid h-[38px] w-[38px] place-items-center rounded-pill border border-[var(--border-default)] bg-white text-[15px]" @click="toggle">
-      🔔
+    <button type="button" aria-label="Notifications" class="relative grid h-[38px] w-[38px] place-items-center rounded-pill border border-[var(--border-default)] bg-white text-[var(--text-secondary)]" @click="toggle">
+      <Bell class="h-[17px] w-[17px]" :stroke-width="1.9" />
       <span v-if="unreadCount" class="absolute -right-[3px] -top-[3px] grid h-4 w-4 place-items-center rounded-pill border-2 border-[var(--surface-page)] bg-clay-500 text-[9.5px] font-black text-white">{{ unreadCount > 9 ? '9+' : unreadCount }}</span>
     </button>
 

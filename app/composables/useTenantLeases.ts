@@ -41,7 +41,8 @@ export function useTenantLeases() {
       if (!activeLeaseId.value || !leases.value.some(l => l.id === activeLeaseId.value)) {
         activeLeaseId.value = pickDefaultLease(leases.value)?.id ?? null
       }
-      state.value = deriveFetchState({ loading: false, errored: false, itemCount: leases.value.length })
+      const derived = deriveFetchState({ loading: false, errored: false, itemCount: leases.value.length })
+      state.value = derived === 'empty-filtered' ? 'empty' : derived
     } catch {
       state.value = 'error'
     }

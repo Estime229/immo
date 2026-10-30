@@ -128,17 +128,20 @@ const mobileTabs = computed<MobileTab[]>(() => {
       </div>
       <LayoutVerificationCard space="locataire" />
 
+      <template v-for="g in NAV_SECTIONS" :key="g.header || 'main'">
+      <p v-if="g.header" class="mb-1 ml-2.5 mt-3 text-[10px] font-black uppercase tracking-[.07em] text-[var(--text-faint)]">{{ g.header }}</p>
       <NuxtLink
-        v-for="n in NAV_ITEMS"
+        v-for="n in g.items"
         :key="n.key"
         :to="n.to"
         class="flex w-full items-center gap-3 rounded-sm px-3 py-2.5 text-left text-sm font-semibold transition-all"
-        :class="currentKey === n.key ? 'bg-green-50 text-green-800' : 'bg-transparent text-[var(--text-secondary)]'"
+        :class="currentKey === n.key ? 'bg-green-50 text-green-800' : 'bg-transparent text-[var(--text-secondary)] hover:bg-sand-50'"
       >
-        <span class="w-[18px] flex-none text-center text-[15px]">{{ n.icon }}</span>
+        <component :is="n.icon" class="h-[17px] w-[17px] flex-none" :stroke-width="1.9" aria-hidden="true" />
         <span class="flex-1">{{ n.label }}</span>
         <span v-if="navCount(n)" class="rounded-pill bg-clay-500 px-2 py-0.5 text-[10.5px] font-black text-white">{{ navCount(n) }}</span>
       </NuxtLink>
+      </template>
       </div>
     </aside>
 

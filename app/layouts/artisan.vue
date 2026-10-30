@@ -1,14 +1,9 @@
 <script setup lang="ts">
 import type { MobileTab } from '~/utils/mobileNav'
-import type { ArtisanProfile } from '~/types/artisan'
-import type { RefEntry } from '~/types/reference'
 
 const route = useRoute()
-const dispo = useArtisanDispo()
 const drawerOpen = ref(false)
 const currentUser = useAuthUser()
-const profileApi = useArtisanProfileApi()
-const refData = useReferenceData()
 
 /* Messages non lus (Lot 55) : sondé toutes les 60 s, remis à jour dès qu'une conversation est lue. */
 const unread = useUnreadMessages()
@@ -63,25 +58,16 @@ const displayName = computed(() => {
   return `${u.first_name ?? ''} ${u.last_name ?? ''}`.trim() || u.email
 })
 
-const profile = ref<ArtisanProfile | null>(null)
-onMounted(async () => {
-  try {
-    profile.value = await profileApi.fetchMine()
-  } catch {
-    profile.value = null
-  }
+/** Même cache que les pages (useArtisanProfile) : le sous-titre suit un métier modifié dans le profil. */
+const { profile, trades, ensureLoaded, ensureTrades } = useArtisanProfile()
+onMounted(() => {
+  ensureLoaded()
+  ensureTrades()
 })
-const trades = ref<RefEntry[]>([])
-onMounted(async () => {
-  try {
-    trades.value = await refData.fetchRef('ARTISAN_TRADE')
-  } catch {
-    trades.value = []
-  }
-})
+
 const identitySubtitle = computed(() => {
   const trade = trades.value.find(t => t.id === profile.value?.trade_reference_id)?.labels.fr
-  const rating = profile.value?.reputation_score != null ? `★ ${profile.value.reputation_score.toFixed(1)}` : null
+  const rating = profile.value?.reputation_score != null ? `${profile.value.reputation_score.toFixed(1)} / 5` : null
   return [trade, rating].filter(Boolean).join(' · ') || 'Artisan'
 })
 </script>
@@ -118,9 +104,9 @@ const identitySubtitle = computed(() => {
         :key="n.key"
         :to="n.to"
         class="flex w-full items-center gap-3 rounded-sm px-3 py-2.5 text-left text-sm font-semibold transition-all"
-        :class="currentKey === n.key ? 'bg-green-50 text-green-800' : 'bg-transparent text-[var(--text-secondary)]'"
+        :class="currentKey === n.key ? 'bg-green-50 text-green-800' : 'bg-transparent text-[var(--text-secondary)] hover:bg-sand-50'"
       >
-        <span class="w-[18px] flex-none text-center text-[15px]">{{ n.icon }}</span>
+        <component :is="n.icon" class="h-[17px] w-[17px] flex-none" :stroke-width="1.9" aria-hidden="true" />
         <span class="flex-1">{{ n.label }}</span>
         <span v-if="navCount(n)" class="rounded-pill bg-clay-500 px-2 py-0.5 text-[10.5px] font-black text-white">{{ navCount(n) }}</span>
       </NuxtLink>
@@ -134,17 +120,6 @@ const identitySubtitle = computed(() => {
           <h1 class="m-0 truncate font-display text-[19px] font-bold tracking-[-.025em] sm:text-[22px]">{{ pageTitle }}</h1>
         </div>
         <div class="flex flex-none items-center gap-2.5 sm:gap-4">
-          <label
-            class="flex cursor-pointer items-center gap-2 rounded-pill border px-2.5 py-2 sm:gap-2.5 sm:px-3.5"
-            :class="dispo ? 'border-green-200 bg-green-50' : 'border-[var(--border-default)] bg-white'"
-            @click="dispo = !dispo"
-          >
-            <span class="h-2 w-2 flex-none rounded-pill" :class="dispo ? 'bg-ok-fg' : 'bg-[var(--text-faint)]'" />
-            <span class="hidden text-[13px] font-bold sm:inline" :class="dispo ? 'text-green-800' : 'text-[var(--text-muted)]'">{{ dispo ? 'Disponible' : 'Indisponible' }}</span>
-            <span class="h-6 w-[42px] flex-none rounded-pill p-[3px] transition-colors" :class="dispo ? 'bg-green-600' : 'bg-[var(--border-default)]'">
-              <span class="block h-[18px] w-[18px] rounded-pill bg-white shadow-[0_1px_3px_rgba(0,0,0,.2)] transition-transform" :class="dispo ? 'translate-x-[18px]' : 'translate-x-0'" />
-            </span>
-          </label>
           <LayoutAccountMenu :name="displayName || 'Artisan'" :size="38" color="var(--color-green-700)" />
         </div>
       </header>
@@ -159,6 +134,5 @@ const identitySubtitle = computed(() => {
     <ArtisanOffreModal />
     <ArtisanTerminerModal />
     <ArtisanRetraitModal />
-    <ArtisanFlashModal />
   </div>
 </template>

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { Check } from '@lucide/vue'
+
 /** Fil d'avancement d'un dossier (bail, réservation, signalement). */
 interface StepperProps {
   /** Libellés courts, 3 à 5 étapes */
@@ -17,7 +19,7 @@ withDefaults(defineProps<StepperProps>(), { current: 1 })
         <div
           class="grid h-[26px] w-[26px] place-items-center rounded-pill text-xs font-black"
           :class="current > index + 1 ? 'bg-green-600 text-white' : current === index + 1 ? 'bg-green-900 text-white' : 'bg-[var(--border-subtle)] text-[var(--text-faint)]'"
-        >{{ current > index + 1 ? '✓' : index + 1 }}</div>
+        ><Check v-if="current > index + 1" class="h-3.5 w-3.5" :stroke-width="3" /><template v-else>{{ index + 1 }}</template></div>
         <span
           class="whitespace-nowrap text-[11.5px] font-bold"
           :class="current === index + 1 ? 'text-[var(--text-primary)]' : 'text-[var(--text-faint)]'"

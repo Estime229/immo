@@ -14,10 +14,12 @@ export function usePublicApi() {
 
   async function call<T = unknown>(url: string, opts: RequestInitLike = {}): Promise<T> {
     try {
-      return (await $fetch(url, {
+      // Sans le typage de routes Nuxt de $fetch : l'URL vise l'API distante, et ce typage fait
+      // dépasser à TypeScript sa profondeur de comparaison (TS2321), comme dans useApi.
+      return (await ($fetch as (request: string, options?: Record<string, unknown>) => Promise<unknown>)(url, {
         baseURL: config.public.apiProxyBase,
         ...opts
-      } as Parameters<typeof $fetch>[1])) as T
+      })) as T
     } catch (err) {
       const httpErr = toHttpError(err)
       throw new ApiRequestError(mapApiError(httpErr?.data ?? null, httpErr?.status ?? null), httpErr?.status ?? null)

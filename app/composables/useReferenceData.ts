@@ -9,7 +9,14 @@ import type { City, Neighborhood, RefEntry } from '~/types/reference'
 const cache = new Map<string, Promise<unknown>>()
 
 function cached<T>(key: string, fetcher: () => Promise<T>): Promise<T> {
-  if (!cache.has(key)) cache.set(key, fetcher())
+  if (!cache.has(key)) {
+    // Un échec ne reste pas en cache : sinon le référentiel restait vide jusqu'au rechargement de la page.
+    const pending = fetcher().catch((err) => {
+      cache.delete(key)
+      throw err
+    })
+    cache.set(key, pending)
+  }
   return cache.get(key) as Promise<T>
 }
 
