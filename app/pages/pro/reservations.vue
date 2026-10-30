@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { CalendarCheck, ClipboardCheck, MessageSquare, Plus, Ticket } from '@lucide/vue'
 import type { PropertySearchResult } from '~/types/property'
 import type { LandlordBookingSummary, PromoCodeSummary } from '~/types/landlordBookings'
 import { ApiRequestError } from '~/utils/authenticatedFetcher'
@@ -12,7 +13,14 @@ const bookingsApi = useLandlordBookingsApi()
 const promoList = useLandlordPromoCodes()
 const landlordPropertiesApi = useLandlordPropertiesApi()
 
-const tab = ref<'liste' | 'promo'>('liste')
+/* ---- Onglets, gardés dans l'URL (?onglet=promo, ?vue=…) ---- */
+const route = useRoute()
+const router = useRouter()
+const tab = ref<'liste' | 'promo'>(route.query.onglet === 'promo' ? 'promo' : 'liste')
+const MAIN_TABS = [{ value: 'liste', label: 'Réservations' }, { value: 'promo', label: 'Codes promo' }]
+const tabModel = computed({ get: () => tab.value as string, set: (v: string) => { tab.value = v === 'promo' ? 'promo' : 'liste' } })
+watch(tab, t => router.replace({ query: { ...route.query, onglet: t === 'promo' ? 'promo' : undefined } }))
+watch(() => route.query.onglet, v => { tab.value = v === 'promo' ? 'promo' : 'liste' })
 
 const reservationsBadge = useLandlordReservationsBadge()
 const bookingsBlock = useFetchBlock(() => bookingsApi.fetchMine())
@@ -34,7 +42,12 @@ const BOOKING_TABS: { key: BookingTab; label: string; phases: BookingPhase[]; em
   { key: 'past', label: 'Terminées', phases: ['past'], empty: 'Aucun séjour terminé.' },
   { key: 'cancelled', label: 'Annulées / expirées', phases: ['cancelled', 'hold_expired'], empty: 'Aucune réservation annulée.' }
 ]
-const bookingTab = ref<BookingTab>('upcoming')
+function bookingTabFrom(v: unknown): BookingTab {
+  return BOOKING_TABS.some(t => t.key === v) ? (v as BookingTab) : 'upcoming'
+}
+const bookingTab = ref<BookingTab>(bookingTabFrom(route.query.vue))
+watch(bookingTab, t => router.replace({ query: { ...route.query, vue: t === 'upcoming' ? undefined : t } }))
+const bookingTabModel = computed({ get: () => bookingTab.value as string, set: (v: string) => { bookingTab.value = bookingTabFrom(v) } })
 const now = new Date()
 const phaseOf = (b: LandlordBookingSummary) => bookingPhase(b, now)
 const bookingCounts = computed(() => Object.fromEntries(BOOKING_TABS.map(t => [t.key, bookingsBlock.items.value.filter(b => t.phases.includes(phaseOf(b))).length])) as Record<BookingTab, number>)
@@ -47,14 +60,20 @@ const bookingRows = computed(() => {
       return bookingTab.value === 'upcoming' || bookingTab.value === 'hold' ? d : -d
     })
 })
-const highlighted = ref(String(useRoute().query.booking ?? ''))
-watch(() => bookingsBlock.state.value, st => {
-  if (st !== 'success' && st !== 'empty') return
+const bookingTabOptions = computed(() => BOOKING_TABS.map(t => ({ value: t.key, label: bookingCounts.value[t.key] && t.key !== 'cancelled' ? `${t.label} · ${bookingCounts.value[t.key]}` : t.label })))
+/** Lien profond (?booking=, notification) : onglet de la réservation, carte mise en avant — suivi même si l'on est déjà sur la page. */
+const highlighted = ref(String(route.query.booking ?? ''))
+function focusBooking() {
   const target = bookingsBlock.items.value.find(b => b.id === highlighted.value)
-  if (target) {
-    bookingTab.value = BOOKING_TABS.find(t => t.phases.includes(phaseOf(target)))?.key ?? 'upcoming'
-    nextTick(() => document.getElementById(`booking-${target.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }))
-  }
+  if (!target) return
+  tab.value = 'liste'
+  bookingTab.value = BOOKING_TABS.find(t => t.phases.includes(phaseOf(target)))?.key ?? 'upcoming'
+  nextTick(() => document.getElementById(`booking-${target.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }))
+}
+watch(() => bookingsBlock.state.value, st => { if (st === 'success') focusBooking() })
+watch(() => route.query.booking, v => {
+  highlighted.value = String(v ?? '')
+  if (highlighted.value) focusBooking()
 })
 function nightsOf(b: LandlordBookingSummary) {
   return b.nights ?? Math.round((new Date(b.check_out).getTime() - new Date(b.check_in).getTime()) / 86400000)
@@ -114,14 +133,23 @@ function rewardLabel(p: PromoCodeSummary) {
   return p.referrer_reward_type === 'percentage' ? `+${Number(p.referrer_reward_value)}% parrain` : `+${fmtFcfa(p.referrer_reward_value)} parrain`
 }
 
-/* ---- Activer / désactiver ---- */
+/* ---- Activer / désactiver : la désactivation se confirme (le code cesse aussitôt de s'appliquer) ---- */
 const togglingId = ref<string | null>(null)
 const promoError = ref('')
+const promoFlash = ref('')
+const confirmPromoId = ref<string | null>(null)
+function onPromoToggle(p: PromoCodeSummary, next: boolean) {
+  promoFlash.value = ''
+  if (!next) confirmPromoId.value = p.id
+  else toggleActive(p)
+}
 async function toggleActive(p: PromoCodeSummary) {
   togglingId.value = p.id
   promoError.value = ''
   try {
     await usePromoCodesApi().update(p.id, { is_active: !p.is_active })
+    confirmPromoId.value = null
+    promoFlash.value = `Code ${p.code ?? 'auto-appliqué'} ${p.is_active ? 'désactivé : il ne s\'applique plus aux nouvelles réservations' : 'réactivé'}.`
     await promoList.reload()
   } catch (e) {
     promoError.value = e instanceof ApiRequestError ? errorText(e.mapped, 'La modification du code a échoué.') : 'La modification du code a échoué.'
@@ -132,11 +160,8 @@ async function toggleActive(p: PromoCodeSummary) {
 </script>
 
 <template>
-  <div class="animate-[im-fade_.3s_ease_both]">
-    <div class="mb-5 flex w-fit gap-[5px] rounded-pill bg-sand-200 p-1">
-      <button type="button" class="rounded-pill px-5 py-2.5 text-[13px] font-bold transition-all" :class="tab === 'liste' ? 'bg-white text-green-900 shadow-card' : 'bg-transparent text-[var(--text-secondary)]'" @click="tab = 'liste'">Réservations</button>
-      <button type="button" class="rounded-pill px-5 py-2.5 text-[13px] font-bold transition-all" :class="tab === 'promo' ? 'bg-white text-green-900 shadow-card' : 'bg-transparent text-[var(--text-secondary)]'" @click="tab = 'promo'">Codes promo</button>
-    </div>
+  <div class="animate-[im-fade_.3s_ease_backwards]">
+    <FormsSegmentedControl v-model="tabModel" :options="MAIN_TABS" class="mb-5.5" />
 
     <template v-if="tab === 'liste'">
       <div v-if="bookingsBlock.state.value === 'loading'" class="flex flex-col gap-3.5">
@@ -146,60 +171,62 @@ async function toggleActive(p: PromoCodeSummary) {
         Impossible de charger vos réservations pour le moment.
         <button type="button" class="ml-2 font-bold underline" @click="bookingsBlock.load">Réessayer</button>
       </FeedbackAlertBanner>
-      <p v-else-if="bookingsBlock.state.value === 'empty'" class="rounded-md border border-dashed border-[var(--border-default)] bg-white px-4 py-10 text-center text-[13.5px] text-[var(--text-muted)]">
-        Aucune réservation courte durée reçue pour l'instant.
-      </p>
+      <ProEmptyPanel v-else-if="bookingsBlock.state.value === 'empty'" :icon="CalendarCheck" title="Aucune réservation pour l'instant" text="Les séjours à la nuit réservés en ligne apparaissent ici. Il faut un tarif « À la nuit » actif sur le logement pour ouvrir la réservation.">
+        <NuxtLink to="/pro/tarifs" class="inline-flex items-center rounded-md border border-[var(--border-default)] bg-white px-5 py-3 text-[14px] font-bold text-sand-900">Tarifs et disponibilités</NuxtLink>
+      </ProEmptyPanel>
       <template v-else>
-        <div class="mb-4 flex flex-wrap gap-1.5">
-          <button
-            v-for="t in BOOKING_TABS"
-            :key="t.key"
-            type="button"
-            class="rounded-pill border px-3.5 py-2 text-[12.5px] font-bold"
-            :class="bookingTab === t.key ? 'border-green-900 bg-green-900 text-white' : 'border-[var(--border-default)] bg-white text-[var(--text-secondary)]'"
-            @click="bookingTab = t.key"
-          >{{ t.label }}<span v-if="bookingCounts[t.key] && t.key !== 'cancelled'" class="ml-1.5">({{ bookingCounts[t.key] }})</span></button>
+        <div class="mb-4.5 max-w-full overflow-x-auto">
+          <FormsSegmentedControl v-model="bookingTabModel" :options="bookingTabOptions" size="sm" class="whitespace-nowrap" />
         </div>
-        <p v-if="bookingError" class="mb-3.5 rounded-md border border-danger-border bg-danger-bg px-3.5 py-2.5 text-[13px] font-semibold text-danger-fg">{{ bookingError }}</p>
+        <p v-if="bookingError" class="mb-3.5 text-[13px] font-semibold text-danger-fg">{{ bookingError }}</p>
         <p v-if="!bookingRows.length" class="rounded-md border border-dashed border-[var(--border-default)] bg-white px-4 py-10 text-center text-[13.5px] text-[var(--text-muted)]">{{ BOOKING_TABS.find(t => t.key === bookingTab)?.empty }}</p>
-        <div
+        <article
           v-for="b in bookingRows"
           :id="`booking-${b.id}`"
           :key="b.id"
-          class="mb-3.5 rounded-2xl border bg-white p-5"
-          :class="highlighted === b.id ? 'border-green-600 shadow-raised' : 'border-[var(--border-subtle)]'"
+          class="mb-3.5 rounded-2xl border bg-white p-5.5"
+          :class="highlighted === b.id ? 'border-green-600 ring-2 ring-green-100' : 'border-[var(--border-subtle)]'"
+          data-testid="booking-card"
         >
           <div class="flex flex-wrap items-start gap-3">
+            <CoreAvatar :name="tenantName(b)" :size="40" />
             <div class="min-w-0 flex-1">
-              <div class="flex flex-wrap items-center gap-2.5">
-                <p class="m-0 text-[15.5px] font-bold">{{ b.unit?.name ?? 'Logement supprimé' }}</p>
+              <div class="flex flex-wrap items-center gap-2">
+                <p class="m-0 text-[15px] font-bold">{{ b.unit?.name ?? 'Logement supprimé' }}</p>
                 <CoreBadge :tone="PHASE_TONE[phaseOf(b)]">{{ PHASE_LABEL[phaseOf(b)] }}</CoreBadge>
-                <CoreBadge v-if="b.extended_from_booking_id" tone="neutral">Prolongation</CoreBadge>
+                <CoreBadge v-if="b.extended_from_booking_id" tone="info">Prolongation</CoreBadge>
               </div>
-              <p class="mb-0 mt-1 text-[13px] text-[var(--text-secondary)]">{{ tenantName(b) }} · {{ fmtDate(b.check_in) }} → {{ fmtDate(b.check_out) }} · {{ nightsOf(b) }} nuit{{ nightsOf(b) > 1 ? 's' : '' }}</p>
+              <p class="mb-0 mt-1 text-xs text-[var(--text-faint)]">{{ tenantName(b) }} · <span class="font-mono">{{ fmtDate(b.check_in) }}</span> au <span class="font-mono">{{ fmtDate(b.check_out) }}</span> · {{ nightsOf(b) }} nuit{{ nightsOf(b) > 1 ? 's' : '' }}</p>
             </div>
-            <CoreButton v-if="phaseOf(b) !== 'cancelled' && phaseOf(b) !== 'hold_expired' && phaseOf(b) !== 'past'" size="sm" tone="ghost" :disabled="contactingId === b.id" @click="contactGuest(b)">Écrire au voyageur</CoreButton>
+            <CoreButton v-if="phaseOf(b) !== 'cancelled' && phaseOf(b) !== 'hold_expired' && phaseOf(b) !== 'past'" size="sm" tone="secondary" class="inline-flex items-center gap-1.5" :disabled="contactingId === b.id" @click="contactGuest(b)">
+              <MessageSquare class="h-3.5 w-3.5" :stroke-width="1.9" />{{ contactingId === b.id ? 'Ouverture…' : 'Écrire au voyageur' }}
+            </CoreButton>
           </div>
-          <div v-if="b.status === 'confirmed'" class="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <div class="rounded-md bg-[var(--surface-page)] px-3 py-2"><p class="m-0 text-[11px] font-bold uppercase text-[var(--text-faint)]">Payé</p><p class="m-0 font-mono text-[14px] font-bold">{{ formatFcfaShort(hostAmounts(b).paid) }}</p></div>
-            <div v-if="Number(b.discount_amount ?? 0) > 0" class="rounded-md bg-[var(--surface-page)] px-3 py-2"><p class="m-0 text-[11px] font-bold uppercase text-[var(--text-faint)]">Réduction</p><p class="m-0 font-mono text-[14px] font-bold">−{{ formatFcfaShort(Number(b.discount_amount)) }}</p></div>
-            <div class="rounded-md bg-ok-bg px-3 py-2"><p class="m-0 text-[11px] font-bold uppercase text-ok-fg">Reçu</p><p class="m-0 font-mono text-[14px] font-bold text-green-900">{{ formatFcfaShort(hostAmounts(b).received) }}</p></div>
-            <div v-if="hostAmounts(b).retained > 0" class="rounded-md bg-[var(--surface-escrow)] px-3 py-2"><p class="m-0 text-[11px] font-bold uppercase text-clay-900">{{ hostAmounts(b).released ? 'Retenue versée' : 'Retenu jusqu\'au départ' }}</p><p class="m-0 font-mono text-[14px] font-bold text-clay-900">{{ formatFcfaShort(hostAmounts(b).retained) }}</p></div>
+          <div v-if="b.status === 'confirmed'" class="mt-3.5 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+            <div class="rounded-lg border border-[var(--border-subtle)] bg-white p-3.5"><p class="m-0 font-mono text-base font-bold text-green-900">{{ formatFcfaShort(hostAmounts(b).paid) }}</p><p class="mb-0 mt-1 text-[11.5px] text-[var(--text-muted)]">payé par le voyageur</p></div>
+            <div v-if="Number(b.discount_amount ?? 0) > 0" class="rounded-lg border border-[var(--border-subtle)] bg-white p-3.5"><p class="m-0 font-mono text-base font-bold text-green-900">−{{ formatFcfaShort(Number(b.discount_amount)) }}</p><p class="mb-0 mt-1 text-[11.5px] text-[var(--text-muted)]">réduction</p></div>
+            <div class="rounded-lg border border-ok-border bg-ok-bg p-3.5"><p class="m-0 font-mono text-base font-bold text-green-900">{{ formatFcfaShort(hostAmounts(b).received) }}</p><p class="mb-0 mt-1 text-[11.5px] text-ok-fg">reçu sur votre wallet</p></div>
+            <div v-if="hostAmounts(b).retained > 0" class="rounded-lg border border-[var(--border-escrow)] bg-[var(--surface-escrow)] p-3.5"><p class="m-0 font-mono text-base font-bold text-clay-900">{{ formatFcfaShort(hostAmounts(b).retained) }}</p><p class="mb-0 mt-1 text-[11.5px] text-clay-900">{{ hostAmounts(b).released ? 'retenue versée' : 'retenu jusqu\'au départ' }}</p></div>
           </div>
-          <p v-else class="mb-0 mt-2 font-mono text-[14px] font-bold text-[var(--text-muted)]">{{ fmtFcfa(b.total_price) }}<span v-if="phaseOf(b) === 'hold'" class="ml-2 font-body text-[12px] font-semibold">— le voyageur a 15 min pour payer, rien n'est encore bloqué.</span></p>
-          <p v-if="b.status === 'confirmed' && b.unit?.requires_booking_inventory && !b.retention_released_at" class="mb-0 mt-3 rounded-md bg-warn-bg px-3.5 py-2.5 text-[12.5px] text-warn-fg">
-            État des lieux exigé pour ce logement : la retenue n'est versée qu'une fois l'état des lieux d'arrivée fait. <NuxtLink to="/pro/edl" class="font-bold underline">Faire l'état des lieux</NuxtLink>
-          </p>
-        </div>
+          <p v-else class="mb-0 mt-3 text-[13px] text-[var(--text-muted)]"><span class="font-mono font-bold">{{ fmtFcfa(b.total_price) }}</span><template v-if="phaseOf(b) === 'hold'"> · le voyageur a 15 min pour payer, rien n'est encore bloqué.</template></p>
+          <div v-if="b.status === 'confirmed' && b.unit?.requires_booking_inventory && !b.retention_released_at" class="mt-3.5 flex flex-wrap items-center gap-2.5 rounded-md border border-warn-border bg-warn-bg px-3.5 py-2.5">
+            <p class="m-0 min-w-0 flex-1 text-[12.5px] text-warn-fg">État des lieux exigé pour ce logement : la retenue n'est versée qu'une fois l'état des lieux d'arrivée fait.</p>
+            <NuxtLink :to="{ path: '/pro/edl', query: { booking: b.id } }" class="inline-flex items-center gap-1.5 rounded-pill border border-warn-border bg-white px-3.5 py-2 text-xs font-bold text-warn-fg-deep">
+              <ClipboardCheck class="h-3.5 w-3.5" :stroke-width="1.9" />Faire l'état des lieux
+            </NuxtLink>
+          </div>
+        </article>
       </template>
     </template>
 
     <template v-else>
-      <div class="mb-3.5 flex justify-end">
-        <CoreButton size="sm" @click="modal = 'promo'">+ Créer un code</CoreButton>
+      <div class="mb-4.5 flex flex-wrap items-center gap-3">
+        <p class="m-0 min-w-0 flex-1 text-[13.5px] text-[var(--text-muted)]">Une réduction pour le voyageur, une récompense pour qui partage le code. Un code désactivé ne s'applique plus aux nouvelles réservations.</p>
+        <CoreButton size="sm" class="inline-flex items-center gap-1.5" @click="modal = 'promo'"><Plus class="h-4 w-4" :stroke-width="1.9" />Créer un code</CoreButton>
       </div>
 
-      <p v-if="promoError" class="mb-3 rounded-md border border-danger-border bg-danger-bg px-3.5 py-2.5 text-[13px] font-semibold text-danger-fg">{{ promoError }}</p>
+      <p v-if="promoFlash" class="mb-3.5 rounded-md border border-ok-border bg-ok-bg px-3.5 py-2.5 text-[13px] font-semibold text-green-900">{{ promoFlash }}</p>
+      <p v-if="promoError" class="mb-3.5 text-[13px] font-semibold text-danger-fg">{{ promoError }}</p>
       <div v-if="promoList.state.value === 'loading'" class="flex flex-col gap-3">
         <DataSkeletonCard v-for="i in 2" :key="i" :height="60" :lines="1" />
       </div>
@@ -207,28 +234,40 @@ async function toggleActive(p: PromoCodeSummary) {
         Impossible de charger vos codes promo pour le moment.
         <button type="button" class="ml-2 font-bold underline" @click="promoList.reload">Réessayer</button>
       </FeedbackAlertBanner>
-      <p v-else-if="promoList.state.value === 'empty'" class="rounded-md border border-dashed border-[var(--border-default)] bg-white px-4 py-10 text-center text-[13.5px] text-[var(--text-muted)]">
-        Aucun code promo créé pour l'instant.
-      </p>
-      <div v-else class="rounded-2xl border border-[var(--border-subtle)] bg-white p-2">
-        <div v-for="p in promoList.items.value" :key="p.id" class="grid grid-cols-2 items-center gap-3.5 border-b border-sand-200 p-3.5 last:border-b-0 sm:grid-cols-[1.1fr_1.3fr_1.2fr_0.7fr_auto]">
-          <span class="font-mono text-sm font-bold text-green-900">{{ p.code ?? 'Auto-appliqué' }}</span>
-          <span class="text-[13px] text-[var(--text-secondary)]">{{ scopeLabel(p) }}</span>
-          <span class="text-[13px] font-semibold">
-            <template v-if="discountLabel(p)">{{ discountLabel(p) }}</template>
-            <template v-if="discountLabel(p) && rewardLabel(p)"> · </template>
-            <template v-if="rewardLabel(p)">{{ rewardLabel(p) }}</template>
-          </span>
-          <span class="text-xs text-[var(--text-faint)]">{{ p.uses_count }} usage{{ p.uses_count > 1 ? 's' : '' }}</span>
-          <button
-            type="button"
-            class="justify-self-end rounded-pill px-3 py-1.5 text-xs font-bold"
-            :class="p.is_active ? 'bg-green-50 text-green-700' : 'bg-sand-200 text-[var(--text-muted)]'"
-            :disabled="togglingId === p.id"
-            @click="toggleActive(p)"
-          >{{ p.is_active ? 'Actif' : 'Désactivé' }}</button>
+      <ProEmptyPanel v-else-if="promoList.state.value === 'empty'" :icon="Ticket" title="Aucun code promo" text="Créez un code pour offrir une réduction sur vos séjours, sur tout votre portefeuille, un bien ou un seul logement.">
+        <CoreButton class="inline-flex items-center gap-1.5" @click="modal = 'promo'"><Plus class="h-4 w-4" :stroke-width="1.9" />Créer un code</CoreButton>
+      </ProEmptyPanel>
+      <section v-else class="rounded-2xl border border-[var(--border-subtle)] bg-white px-5.5 py-2">
+        <div v-for="p in promoList.items.value" :key="p.id" class="border-b border-sand-200 py-3.5 last:border-b-0">
+          <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <div class="min-w-0 flex-1">
+              <div class="flex flex-wrap items-center gap-2">
+                <p class="m-0 font-mono text-sm font-bold text-green-900">{{ p.code ?? 'Auto-appliqué' }}</p>
+                <CoreBadge :tone="p.is_active ? 'ok' : 'neutral'">{{ p.is_active ? 'Actif' : 'Désactivé' }}</CoreBadge>
+              </div>
+              <p class="mb-0 mt-0.5 text-xs text-[var(--text-faint)]">{{ scopeLabel(p) }} · {{ p.uses_count }} utilisation{{ p.uses_count > 1 ? 's' : '' }}</p>
+            </div>
+            <p class="m-0 text-[13px] font-semibold">
+              <template v-if="discountLabel(p)">{{ discountLabel(p) }}</template>
+              <template v-if="discountLabel(p) && rewardLabel(p)"> · </template>
+              <template v-if="rewardLabel(p)">{{ rewardLabel(p) }}</template>
+            </p>
+            <div class="w-[46px] flex-none" :class="togglingId === p.id ? 'pointer-events-none opacity-50' : ''">
+              <FormsToggle :model-value="p.is_active" :aria-label="p.is_active ? 'Désactiver le code' : 'Activer le code'" @update:model-value="onPromoToggle(p, $event)" />
+            </div>
+          </div>
+          <CoreInlineConfirm
+            v-if="confirmPromoId === p.id"
+            class="mt-2.5"
+            tone="warning"
+            :message="`Désactiver le code ${p.code ?? 'auto-appliqué'} ? Il cesse aussitôt de s'appliquer aux nouvelles réservations.`"
+            confirm-label="Désactiver"
+            :loading="togglingId === p.id"
+            @confirm="toggleActive(p)"
+            @cancel="confirmPromoId = null"
+          />
         </div>
-      </div>
+      </section>
     </template>
   </div>
 </template>

@@ -1,11 +1,15 @@
 <script setup lang="ts">
+import { BadgeCheck, Camera, ExternalLink, FileCheck, LoaderCircle, Store } from '@lucide/vue'
 import type { NotificationChannel, NotificationPreferences, ProfileMe } from '~/types/profile'
 import { ApiRequestError } from '~/utils/authenticatedFetcher'
 import { errorText } from '~/utils/apiErrors'
+import { deriveVerificationNotice, verificationLink } from '~/utils/kycStatus'
 import { validateIfu, validateRccm } from '~/utils/onboarding'
 import { prepareAvatarUpload } from '~/utils/uploadFile'
 
 definePageMeta({ layout: 'pro' })
+
+/** Profil pro. Onglet dans l'URL (`?tab=securite`), suivi si l'on y revient par un lien. */
 
 const currentUser = useAuthUser()
 const authApi = useAuthApi()
@@ -13,15 +17,21 @@ const profileApi = useProfileApi()
 const settingsApi = useSettingsApi()
 const userApi = useUserApi()
 
-const tab = ref<'identite' | 'vitrine' | 'securite' | 'verification' | 'prefs' | 'notifications'>('identite')
-const TABS = [
-  { key: 'identite' as const, label: 'Identité' },
-  { key: 'vitrine' as const, label: 'Vitrine' },
-  { key: 'securite' as const, label: 'Sécurité' },
-  { key: 'verification' as const, label: 'Vérification' },
-  { key: 'prefs' as const, label: 'Préférences' },
-  { key: 'notifications' as const, label: 'Notifications' }
+type Tab = 'identite' | 'vitrine' | 'securite' | 'verification' | 'notifications'
+const TABS: { value: Tab; label: string }[] = [
+  { value: 'identite', label: 'Identité' },
+  { value: 'vitrine', label: 'Vitrine' },
+  { value: 'securite', label: 'Sécurité' },
+  { value: 'verification', label: 'Vérification' },
+  { value: 'notifications', label: 'Notifications' }
 ]
+const route = useRoute()
+const router = useRouter()
+const tab = computed<Tab>(() => (TABS.some(t => t.value === route.query.tab) ? route.query.tab as Tab : 'identite'))
+function setTab(v: string) {
+  const { tab: _, ...rest } = route.query
+  router.replace({ query: v === 'identite' ? rest : { ...rest, tab: v } })
+}
 
 /* ---- Identité (profil pro) ---- */
 const profile = ref<ProfileMe | null>(null)
@@ -37,9 +47,6 @@ async function loadProfile() {
 }
 onMounted(loadProfile)
 
-function maskedStatus(v: string | null) {
-  return v ? 'Renseigné' : 'Non renseigné'
-}
 
 const displayName = computed(() => {
   const u = currentUser.value
@@ -58,7 +65,7 @@ async function onAvatarSelected(e: Event) {
   avatarError.value = ''
   try {
     const ready = await prepareAvatarUpload(file)
-    if (ready.error) { avatarError.value = ready.error; return }
+    if (ready.error || !ready.file) { avatarError.value = ready.error || "Cette image n'a pas pu être préparée."; return }
     await userApi.uploadAvatar(ready.file)
     await authApi.fetchMe()
   } catch (err) {
@@ -102,7 +109,27 @@ async function saveProfile() {
   }
 }
 
-const KYB_LABEL: Record<string, string> = { pending: 'En cours de vérification', approved: 'Vérifiée', rejected: 'Rejetée' }
+const KYB: Record<string, { label: string; tone: 'ok' | 'warn' | 'danger' | 'info' }> = {
+  pending: { label: "En cours d'examen", tone: 'info' },
+  approved: { label: 'Vérifiée', tone: 'ok' },
+  rejected: { label: 'Refusée', tone: 'danger' }
+}
+
+/**
+ * Vérification d'identité : même étape que les bandeaux de l'espace
+ * (`useVerification`, fondée sur `is_verified`) — `kyc_status` seul repasse à
+ * `pending` à chaque modification du profil (#7) et ne dit pas si un dossier existe.
+ */
+const verification = useVerification()
+onMounted(() => { void verification.refreshSubmitted() })
+const KYC_STAGE: Record<string, { label: string; tone: 'ok' | 'warn' | 'danger' | 'info' }> = {
+  verified: { label: 'Vérifiée', tone: 'ok' },
+  review: { label: "En cours d'examen", tone: 'info' },
+  rejected: { label: 'Refusée', tone: 'danger' },
+  todo: { label: 'À faire', tone: 'warn' }
+}
+const kycNotice = computed(() => deriveVerificationNotice(verification.stage.value, 'pro'))
+const kycLink = verificationLink('/pro/profil?tab=verification')
 
 /* ---- Sécurité : mot de passe ---- */
 const pwStep = ref<'form' | 'done'>('form')
@@ -144,6 +171,15 @@ async function confirmDelete() {
   }
 }
 
+const profileRows = computed(() => profile.value
+  ? [
+      { label: "Nom légal (pièce d'identité)", value: profile.value.full_name_masked },
+      { label: 'Raison sociale', value: profile.value.company_masked },
+      { label: 'IFU', value: profile.value.ifu_masked },
+      { label: 'RCCM', value: profile.value.rccm_masked }
+    ]
+  : [])
+
 /* ---- Notifications ---- */
 const notifPrefs = ref<NotificationPreferences | null>(null)
 const notifState = ref<'idle' | 'loading' | 'success' | 'error'>('idle')
@@ -163,15 +199,19 @@ const CHANNEL_DEFS: { key: NotificationChannel; label: string; hint: string }[] 
   { key: 'push', label: 'Notifications push', hint: 'Sur cet appareil, en temps réel' }
 ]
 const togglingChannel = ref<NotificationChannel | null>(null)
+/** Échec du basculement : dit sous la ligne concernée, l'interrupteur reste à son état réel. */
+const channelError = ref<{ channel: NotificationChannel; message: string } | null>(null)
 async function toggleChannel(channel: NotificationChannel) {
   if (!notifPrefs.value || togglingChannel.value) return
   const next = !notifPrefs.value[channel]
   togglingChannel.value = channel
+  channelError.value = null
   try {
     await settingsApi.toggleNotificationChannel(channel, next)
     notifPrefs.value[channel] = next
-  } catch {
-    // état inchangé
+  } catch (e) {
+    const fallback = next ? "Ce canal n'a pas pu être activé. Réessayez." : "Ce canal n'a pas pu être désactivé. Réessayez."
+    channelError.value = { channel, message: e instanceof ApiRequestError ? errorText(e.mapped, fallback) : fallback }
   } finally {
     togglingChannel.value = null
   }
@@ -179,181 +219,165 @@ async function toggleChannel(channel: NotificationChannel) {
 </script>
 
 <template>
-  <div class="animate-[im-fade_.3s_ease_both]">
-    <div class="mb-5 flex flex-wrap gap-1.5">
-      <button
-        v-for="t in TABS"
-        :key="t.key"
-        type="button"
-        class="rounded-pill border px-4 py-2.5 text-[13px] font-bold transition-all"
-        :class="tab === t.key ? 'border-green-900 bg-green-900 text-white' : 'border-[var(--border-default)] bg-white text-[var(--text-secondary)]'"
-        @click="tab = t.key"
-      >{{ t.label }}</button>
+  <div class="animate-[im-fade_.3s_ease_backwards]">
+    <div class="mb-4.5 max-w-full overflow-x-auto [&_button]:whitespace-nowrap">
+      <FormsSegmentedControl :options="TABS" :model-value="tab" size="sm" @update:model-value="setTab" />
     </div>
 
-    <template v-if="tab === 'identite'">
-      <LayoutAccountNameForm class="mb-4.5 max-w-[640px]" />
-      <div class="max-w-[640px] rounded-2xl border border-[var(--border-subtle)] bg-white p-6">
-        <div class="mb-4.5 flex items-center gap-4">
+    <!-- ===== Identité ===== -->
+    <div v-if="tab === 'identite'" class="flex max-w-[680px] flex-col gap-4.5">
+      <section class="rounded-2xl border border-[var(--border-subtle)] bg-white p-5.5">
+        <div class="flex items-center gap-4">
           <div class="relative flex-none">
             <CoreAvatar :name="displayName" :avatar-url="currentUser?.avatar_url" :size="64" color="var(--color-green-700)" />
-            <label class="absolute -bottom-1 -right-1 grid h-7 w-7 cursor-pointer place-items-center rounded-pill border-2 border-white bg-green-600 text-[12px] text-white shadow-card" :class="{ 'pointer-events-none opacity-60': avatarUploading }">
-              {{ avatarUploading ? '…' : '✎' }}
+            <label class="absolute -bottom-1 -right-1 grid h-7 w-7 cursor-pointer place-items-center rounded-pill border-2 border-white bg-green-600 text-white shadow-card" :class="{ 'pointer-events-none opacity-60': avatarUploading }" aria-label="Changer la photo de profil">
+              <LoaderCircle v-if="avatarUploading" class="h-3.5 w-3.5 animate-spin" :stroke-width="2" />
+              <Camera v-else class="h-3.5 w-3.5" :stroke-width="2" />
               <input ref="avatarInput" type="file" accept="image/*" class="hidden" :disabled="avatarUploading" @change="onAvatarSelected">
             </label>
           </div>
-          <div>
+          <div class="min-w-0">
             <p class="m-0 font-display text-lg font-bold">{{ displayName }}</p>
-            <p v-if="avatarError" class="mb-0 mt-1 text-[12px] font-semibold text-danger-fg">{{ avatarError }}</p>
+            <p class="mb-0 mt-0.5 text-xs text-[var(--text-faint)]">Photo visible sur votre vitrine et dans vos conversations.</p>
+            <p v-if="avatarError" class="mb-0 mt-1 text-[13px] font-semibold text-danger-fg">{{ avatarError }}</p>
           </div>
         </div>
-        <p class="mb-4 mt-0 text-[15px] font-bold">Identité</p>
-        <div class="flex justify-between border-b border-sand-200 py-3.5">
-          <span class="text-[13.5px] text-[var(--text-faint)]">E-mail</span>
-          <span class="text-sm font-semibold">{{ currentUser?.email }}</span>
+
+        <h2 class="mb-1 mt-5 text-[15px] font-bold">Coordonnées</h2>
+        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-sand-200 py-3">
+          <span class="text-[13.5px] text-[var(--text-muted)]">E-mail</span>
+          <span class="text-sm font-semibold [overflow-wrap:anywhere]">{{ currentUser?.email }}</span>
         </div>
-        <div class="flex justify-between border-b border-sand-200 py-3.5">
-          <span class="text-[13.5px] text-[var(--text-faint)]">Téléphone</span>
-          <span class="text-sm font-semibold">{{ currentUser?.phone_number || 'Non renseigné' }}</span>
+        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-sand-200 py-3 last:border-b-0">
+          <span class="text-[13.5px] text-[var(--text-muted)]">Téléphone</span>
+          <span class="font-mono text-sm font-semibold">{{ currentUser?.phone_number || 'Non renseigné' }}</span>
         </div>
         <template v-if="profile">
-          <div class="flex justify-between border-b border-sand-200 py-3.5">
-            <span class="text-[13.5px] text-[var(--text-faint)]">Nom légal (pièce d'identité)</span>
-            <span class="text-sm font-semibold">{{ maskedStatus(profile.full_name_masked) }}</span>
-          </div>
-          <div class="flex justify-between border-b border-sand-200 py-3.5">
-            <span class="text-[13.5px] text-[var(--text-faint)]">Raison sociale</span>
-            <span class="text-sm font-semibold">{{ maskedStatus(profile.company_masked) }}</span>
-          </div>
-          <div class="flex justify-between border-b border-sand-200 py-3.5">
-            <span class="text-[13.5px] text-[var(--text-faint)]">IFU</span>
-            <span class="text-sm font-semibold">{{ maskedStatus(profile.ifu_masked) }}</span>
-          </div>
-          <div class="flex justify-between py-3.5">
-            <span class="text-[13.5px] text-[var(--text-faint)]">RCCM</span>
-            <span class="text-sm font-semibold">{{ maskedStatus(profile.rccm_masked) }}</span>
+          <div v-for="row in profileRows" :key="row.label" class="flex flex-wrap items-center justify-between gap-2 border-b border-sand-200 py-3 last:border-b-0">
+            <span class="text-[13.5px] text-[var(--text-muted)]">{{ row.label }}</span>
+            <CoreBadge :tone="row.value ? 'ok' : 'neutral'">{{ row.value ? 'Renseigné' : 'Non renseigné' }}</CoreBadge>
           </div>
         </template>
-      </div>
+        <p v-else-if="profileState === 'error'" class="mb-0 mt-3 text-[13px] font-semibold text-danger-fg">
+          Votre identité professionnelle n'a pas pu être chargée. <button type="button" class="font-bold underline" @click="loadProfile">Réessayer</button>
+        </p>
+      </section>
 
-      <div class="mt-4.5 max-w-[640px] rounded-2xl border border-[var(--border-subtle)] bg-white p-6">
-        <p class="m-0 text-base font-bold">Modifier mon identité pro</p>
-        <p class="mb-4 mt-1 text-[13px] text-[var(--text-muted)]">Ces informations sont chiffrées côté serveur — jamais réaffichées en clair.</p>
+      <LayoutAccountNameForm />
+
+      <section class="rounded-2xl border border-[var(--border-subtle)] bg-white p-5.5">
+        <h2 class="m-0 text-[15px] font-bold">Modifier mon identité pro</h2>
+        <p class="mb-4 mt-1 text-[13.5px] text-[var(--text-muted)]">Ces informations sont chiffrées et ne sont jamais réaffichées en clair. Ne remplissez que ce que vous voulez changer.</p>
         <div class="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
-          <div class="sm:col-span-2">
-            <label class="mb-1.5 block text-[12.5px] font-bold text-[var(--text-muted)]">Nom légal (pièce d'identité)</label>
-            <input v-model="fullName" placeholder="Ex. Koffi Dossou" class="h-11 w-full rounded-sm border border-[var(--border-default)] bg-white px-3.5 text-[13.5px] outline-none">
-          </div>
-          <div class="sm:col-span-2">
-            <label class="mb-1.5 block text-[12.5px] font-bold text-[var(--text-muted)]">Raison sociale</label>
-            <input v-model="company" placeholder="Ex. Agence Immo Cotonou" class="h-11 w-full rounded-sm border border-[var(--border-default)] bg-white px-3.5 text-[13.5px] outline-none">
-          </div>
-          <div>
-            <label class="mb-1.5 block text-[12.5px] font-bold text-[var(--text-muted)]">IFU</label>
-            <input v-model="ifu" placeholder="13 chiffres" class="h-11 w-full rounded-sm border border-[var(--border-default)] bg-white px-3.5 text-[13.5px] outline-none">
-          </div>
-          <div>
-            <label class="mb-1.5 block text-[12.5px] font-bold text-[var(--text-muted)]">RCCM</label>
-            <input v-model="rccm" placeholder="Ex. RB/COT/25 A 1234" class="h-11 w-full rounded-sm border border-[var(--border-default)] bg-white px-3.5 text-[13.5px] outline-none">
-          </div>
+          <FormsInput v-model="fullName" class="sm:col-span-2" label="Nom légal (pièce d'identité)" placeholder="ex. Koffi Dossou" />
+          <FormsInput v-model="company" class="sm:col-span-2" label="Raison sociale" placeholder="ex. Agence Immo Cotonou" />
+          <FormsInput v-model="ifu" label="IFU" placeholder="13 chiffres" mono />
+          <FormsInput v-model="rccm" label="RCCM" placeholder="ex. RB/COT/25 A 1234" mono />
         </div>
         <p v-if="profileSaveError" class="mb-0 mt-3.5 text-[13px] font-semibold text-danger-fg">{{ profileSaveError }}</p>
-        <p v-if="profileSaved" class="mb-0 mt-3.5 text-[13px] font-semibold text-ok-fg">Profil mis à jour.</p>
+        <p v-if="profileSaved" class="mb-0 mt-3.5 rounded-md border border-ok-border bg-ok-bg px-3.5 py-2.5 text-[13px] font-semibold text-green-900">Identité pro mise à jour.</p>
         <CoreButton class="mt-4" :disabled="savingProfile" @click="saveProfile">{{ savingProfile ? 'Enregistrement…' : 'Enregistrer' }}</CoreButton>
+      </section>
+    </div>
+
+    <!-- ===== Vitrine ===== -->
+    <section v-else-if="tab === 'vitrine'" class="flex max-w-[680px] flex-wrap items-center gap-4 rounded-2xl border border-[var(--border-subtle)] bg-white p-5.5">
+      <span class="grid h-[46px] w-[46px] flex-none place-items-center rounded-pill bg-green-50 text-green-700"><Store class="h-5 w-5" :stroke-width="1.9" /></span>
+      <div class="min-w-0 flex-[1_1_260px]">
+        <h2 class="m-0 text-[15px] font-bold">Votre vitrine publique</h2>
+        <p class="mb-0 mt-1 text-[13.5px] leading-[1.55] text-[var(--text-muted)]">Visible par toute personne qui consulte un de vos biens publiés : votre nom, vos biens publiés et vos avis.</p>
       </div>
-    </template>
+      <NuxtLink v-if="currentUser" :to="`/vitrine/${currentUser.id}`" target="_blank" class="inline-flex items-center gap-1.5 rounded-md bg-[image:var(--action-primary)] px-5 py-3 text-[14px] font-bold text-white shadow-action">
+        Voir ma vitrine <ExternalLink class="h-4 w-4" :stroke-width="1.9" />
+      </NuxtLink>
+    </section>
 
-    <template v-else-if="tab === 'vitrine'">
-      <div class="max-w-[640px] rounded-2xl border border-[var(--border-subtle)] bg-white p-6 text-center">
-        <p class="mb-2 mt-0 text-[15px] font-bold">Votre vitrine publique</p>
-        <p class="mx-auto mb-4 mt-0 max-w-[440px] text-[13.5px] leading-[1.6] text-[var(--text-muted)]">
-          Visible par toute personne consultant un de vos biens listés publiquement — nom, biens publiés, avis.
-        </p>
-        <NuxtLink v-if="currentUser" :to="`/vitrine/${currentUser.id}`" target="_blank" class="inline-block rounded-md bg-[image:var(--action-primary)] px-6 py-3 text-[13.5px] font-bold text-white shadow-action">Voir ma vitrine</NuxtLink>
-      </div>
-    </template>
-
-    <template v-else-if="tab === 'securite'">
-      <div class="flex max-w-[640px] flex-col gap-3.5">
-        <div class="rounded-xl border border-[var(--border-subtle)] bg-white p-5.5">
-          <template v-if="pwStep === 'form'">
-            <p class="m-0 text-[15px] font-bold">{{ currentUser?.has_password ? 'Changer mon mot de passe' : 'Créer un mot de passe' }}</p>
-            <p class="mb-3.5 mt-1.5 text-[13.5px] leading-[1.55] text-[var(--text-muted)]">{{ currentUser?.has_password ? 'Modifiez votre mot de passe actuel.' : "Votre compte a été créé par code email. Définissez un mot de passe pour ne plus dépendre d'un aller-retour à chaque connexion." }}</p>
-            <div class="flex flex-col gap-2.5">
-              <input v-if="currentUser?.has_password" v-model="currentPassword" type="password" placeholder="Mot de passe actuel" class="h-11 w-full rounded-sm border border-[var(--border-default)] bg-white px-3.5 text-[13.5px] outline-none">
-              <input v-model="newPassword" type="password" placeholder="Nouveau mot de passe (8 caractères min.)" class="h-11 w-full rounded-sm border border-[var(--border-default)] bg-white px-3.5 text-[13.5px] outline-none">
-              <input v-model="confirmPassword" type="password" placeholder="Confirmer le mot de passe" class="h-11 w-full rounded-sm border border-[var(--border-default)] bg-white px-3.5 text-[13.5px] outline-none">
-            </div>
-            <p v-if="pwError" class="mb-0 mt-3 text-[13px] font-semibold text-danger-fg">{{ pwError }}</p>
-            <CoreButton class="mt-3.5" :disabled="pwLoading || !newPassword" @click="submitPassword">{{ pwLoading ? 'Enregistrement…' : 'Enregistrer' }}</CoreButton>
-          </template>
-          <template v-else>
-            <p class="m-0 text-[15px] font-bold text-ok-fg">Mot de passe enregistré</p>
-            <template v-if="recoveryCodes">
-              <p class="mb-3 mt-1.5 text-[13.5px] leading-[1.55] text-[var(--text-muted)]">Conservez ces codes de récupération dans un endroit sûr — ils ne seront plus jamais affichés.</p>
-              <div class="grid grid-cols-2 gap-2 rounded-md border border-[var(--border-default)] bg-[var(--surface-page)] p-3.5 font-mono text-[13px] font-bold">
-                <span v-for="c in recoveryCodes" :key="c">{{ c }}</span>
-              </div>
-            </template>
-            <p v-else class="mb-0 mt-1.5 text-[13.5px] text-[var(--text-muted)]">Votre mot de passe a bien été mis à jour.</p>
-          </template>
-        </div>
-
-        <div class="rounded-xl border border-danger-border bg-danger-bg p-5.5">
-          <p class="m-0 text-[15px] font-bold text-danger-fg">Supprimer mon compte</p>
-          <p class="mb-3.5 mt-1.5 text-[13.5px] leading-[1.55] text-danger-fg-deep">Vos biens actifs et vos baux en cours doivent d'abord être clôturés. La suppression est définitive.</p>
-          <p v-if="deleteError" class="mb-3 mt-0 text-[13px] font-semibold text-danger-fg">{{ deleteError }}</p>
-          <button v-if="deleteStep === 'idle'" type="button" class="rounded-md border border-danger-border bg-white px-4.5 py-2.5 text-[13px] font-bold text-danger-fg" @click="deleteStep = 'confirm'">Supprimer le compte</button>
-          <div v-else class="flex items-center gap-2.5">
-            <span class="text-[13px] font-bold text-danger-fg-deep">Confirmer la suppression définitive ?</span>
-            <button type="button" class="rounded-md bg-danger-fg px-4 py-2.5 text-[13px] font-bold text-white disabled:opacity-60" :disabled="deleteStep === 'loading'" @click="confirmDelete">{{ deleteStep === 'loading' ? '…' : 'Oui, supprimer' }}</button>
-            <button type="button" class="rounded-md border border-danger-border bg-white px-4 py-2.5 text-[13px] font-bold text-danger-fg" @click="deleteStep = 'idle'">Annuler</button>
+    <!-- ===== Sécurité ===== -->
+    <div v-else-if="tab === 'securite'" class="flex max-w-[680px] flex-col gap-4.5">
+      <section class="rounded-2xl border border-[var(--border-subtle)] bg-white p-5.5">
+        <template v-if="pwStep === 'form'">
+          <h2 class="m-0 text-[15px] font-bold">{{ currentUser?.has_password ? 'Changer mon mot de passe' : 'Créer un mot de passe' }}</h2>
+          <p class="mb-4 mt-1 text-[13.5px] leading-[1.55] text-[var(--text-muted)]">{{ currentUser?.has_password ? 'Saisissez votre mot de passe actuel, puis le nouveau.' : "Votre compte a été créé par code e-mail. Un mot de passe vous évite d'attendre un code à chaque connexion." }}</p>
+          <div class="flex flex-col gap-3">
+            <FormsInput v-if="currentUser?.has_password" v-model="currentPassword" type="password" label="Mot de passe actuel" />
+            <FormsInput v-model="newPassword" type="password" label="Nouveau mot de passe" hint="8 caractères minimum." />
+            <FormsInput v-model="confirmPassword" type="password" label="Confirmer le mot de passe" />
           </div>
-        </div>
-      </div>
-    </template>
-
-    <template v-else-if="tab === 'verification'">
-      <div class="max-w-[640px] rounded-2xl border border-[var(--border-subtle)] bg-white p-6">
-        <p class="mb-1 mt-0 text-[15px] font-bold">Statut de vérification</p>
-        <p class="mb-4 mt-0 text-[13px] text-[var(--text-muted)]">Publier un bien exige un compte vérifié.</p>
-        <div class="flex items-center justify-between border-b border-sand-200 py-3.5">
-          <span class="text-[13.5px] text-[var(--text-faint)]">Identité (KYC)</span>
-          <CoreBadge :tone="profile?.kyc_status === 'verified' ? 'ok' : 'warn'">{{ profile?.kyc_status === 'verified' ? 'Vérifiée' : (profile?.kyc_status ?? 'inconnu') }}</CoreBadge>
-        </div>
-        <div class="flex items-center justify-between py-3.5">
-          <span class="text-[13.5px] text-[var(--text-faint)]">Activité professionnelle (KYB)</span>
-          <CoreBadge :tone="profile?.landlord_kyb_status === 'approved' ? 'ok' : 'warn'">{{ profile?.landlord_kyb_status ? (KYB_LABEL[profile.landlord_kyb_status] ?? profile.landlord_kyb_status) : 'Non commencée' }}</CoreBadge>
-        </div>
-        <NuxtLink to="/kyc" class="mt-4 inline-block rounded-md bg-[image:var(--action-primary)] px-5.5 py-3 text-[13.5px] font-bold text-white shadow-action">Déposer mes documents</NuxtLink>
-      </div>
-    </template>
-
-    <template v-else-if="tab === 'prefs'">
-      <div class="max-w-[640px] rounded-xl border border-dashed border-[var(--border-default)] bg-white p-10 text-center text-sm text-[var(--text-muted)]">
-        Il n'existe pas de préférences globales par compte côté API pour l'instant — la relance, le prélèvement automatique, la retenue de garantie et l'exigence d'état des lieux se règlent bail par bail ou logement par logement, pas ici.
-      </div>
-    </template>
-
-    <template v-else>
-      <div class="max-w-[640px] rounded-2xl border border-[var(--border-subtle)] bg-white p-6">
-        <p v-if="notifState === 'loading'" class="m-0 text-[13px] text-[var(--text-muted)]">Chargement…</p>
-        <p v-else-if="notifState === 'error'" class="m-0 text-[13px] text-danger-fg">Impossible de charger vos préférences.</p>
-        <template v-else-if="notifPrefs">
-          <label v-for="c in CHANNEL_DEFS" :key="c.key" class="flex cursor-pointer items-center justify-between gap-4 border-b border-sand-200 py-3.5 last:border-b-0" @click.prevent="toggleChannel(c.key)">
-            <div>
-              <p class="m-0 text-[14.5px] font-semibold">{{ c.label }}</p>
-              <p class="mb-0 mt-1 text-xs text-[var(--text-faint)]">{{ c.hint }}</p>
-            </div>
-            <span
-              class="block h-[27px] w-[46px] flex-none rounded-pill p-[3px] transition-colors"
-              :class="[notifPrefs[c.key] ? 'bg-green-600' : 'bg-[var(--border-default)]', togglingChannel === c.key ? 'opacity-60' : '']"
-            >
-              <span class="block h-[21px] w-[21px] rounded-pill bg-white shadow-[0_1px_3px_rgba(0,0,0,.2)] transition-transform" :style="{ transform: notifPrefs[c.key] ? 'translateX(19px)' : 'translateX(0)' }" />
-            </span>
-          </label>
+          <p v-if="pwError" class="mb-0 mt-3 text-[13px] font-semibold text-danger-fg">{{ pwError }}</p>
+          <CoreButton class="mt-4" :disabled="pwLoading || !newPassword" @click="submitPassword">{{ pwLoading ? 'Enregistrement…' : 'Enregistrer' }}</CoreButton>
         </template>
+        <template v-else>
+          <p class="m-0 rounded-md border border-ok-border bg-ok-bg px-3.5 py-2.5 text-[13px] font-semibold text-green-900">Mot de passe enregistré.</p>
+          <template v-if="recoveryCodes">
+            <p class="mb-3 mt-3.5 text-[13.5px] leading-[1.55] text-[var(--text-muted)]">Conservez ces codes de récupération dans un endroit sûr : ils ne seront plus jamais affichés.</p>
+            <div class="grid grid-cols-2 gap-2 rounded-md border border-[var(--border-default)] bg-[var(--surface-page)] p-3.5 font-mono text-[13px] font-bold">
+              <span v-for="c in recoveryCodes" :key="c">{{ c }}</span>
+            </div>
+          </template>
+        </template>
+      </section>
+
+      <section class="rounded-2xl border border-danger-border bg-white p-5.5">
+        <h2 class="m-0 text-[15px] font-bold text-danger-fg">Supprimer mon compte</h2>
+        <p class="mb-3.5 mt-1 text-[13.5px] leading-[1.55] text-[var(--text-muted)]">Vos biens actifs et vos baux en cours doivent d'abord être clôturés. La suppression est définitive.</p>
+        <CoreInlineConfirm
+          v-if="deleteStep !== 'idle'"
+          tone="danger"
+          message="Supprimer définitivement votre compte ? Vous serez déconnecté et ne pourrez plus y accéder."
+          confirm-label="Supprimer"
+          :loading="deleteStep === 'loading'"
+          @confirm="confirmDelete"
+          @cancel="deleteStep = 'idle'; deleteError = ''"
+        />
+        <CoreButton v-else size="sm" tone="secondary" @click="deleteStep = 'confirm'">Supprimer le compte</CoreButton>
+        <p v-if="deleteError" class="mb-0 mt-2.5 text-[13px] font-semibold text-danger-fg">{{ deleteError }}</p>
+      </section>
+    </div>
+
+    <!-- ===== Vérification ===== -->
+    <section v-else-if="tab === 'verification'" class="max-w-[680px] rounded-2xl border border-[var(--border-subtle)] bg-white p-5.5">
+      <h2 class="m-0 text-[15px] font-bold">Statut de vérification</h2>
+      <p class="mb-3 mt-1 text-[13.5px] text-[var(--text-muted)]">Publier ou modifier un bien, et demander un artisan, exigent une identité vérifiée.</p>
+      <div class="flex flex-wrap items-center justify-between gap-2 border-b border-sand-200 py-3">
+        <span class="inline-flex items-center gap-2 text-[13.5px] text-[var(--text-secondary)]"><BadgeCheck class="h-4 w-4 text-[var(--text-faint)]" :stroke-width="1.9" />Identité (KYC)</span>
+        <CoreBadge :tone="KYC_STAGE[verification.stage.value]?.tone ?? 'neutral'">{{ KYC_STAGE[verification.stage.value]?.label ?? 'Inconnu' }}</CoreBadge>
       </div>
-    </template>
+      <div class="flex flex-wrap items-center justify-between gap-2 py-3">
+        <span class="inline-flex items-center gap-2 text-[13.5px] text-[var(--text-secondary)]"><FileCheck class="h-4 w-4 text-[var(--text-faint)]" :stroke-width="1.9" />Activité professionnelle (KYB)</span>
+        <CoreBadge v-if="profileState === 'loading'" tone="neutral">Chargement…</CoreBadge>
+        <CoreBadge v-else-if="profileState === 'error'" tone="neutral">Indisponible</CoreBadge>
+        <CoreBadge v-else :tone="KYB[profile?.landlord_kyb_status ?? '']?.tone ?? 'neutral'">{{ KYB[profile?.landlord_kyb_status ?? '']?.label ?? 'Non commencée' }}</CoreBadge>
+      </div>
+
+      <div v-if="kycNotice" class="mt-3 rounded-md border p-3.5" :class="kycNotice.tone === 'danger' ? 'border-danger-border bg-danger-bg' : kycNotice.tone === 'info' ? 'border-info-border bg-info-bg' : 'border-warn-border bg-warn-bg'">
+        <p class="m-0 text-[13px] leading-[1.55]" :class="kycNotice.tone === 'danger' ? 'text-danger-fg-deep' : kycNotice.tone === 'info' ? 'text-info-fg-deep' : 'text-warn-fg-deep'">{{ kycNotice.text }}</p>
+        <NuxtLink
+          :to="kycLink"
+          class="mt-3 inline-flex items-center rounded-md px-5 py-3 text-[14px] font-bold"
+          :class="verification.stage.value === 'review' ? 'border border-[var(--border-default)] bg-white text-sand-900' : 'bg-[image:var(--action-primary)] text-white shadow-action'"
+        >{{ kycNotice.cta }}</NuxtLink>
+      </div>
+      <p v-else class="mb-0 mt-3 text-[13px] text-[var(--text-muted)]">
+        Votre identité est vérifiée. <NuxtLink :to="kycLink" class="font-bold text-green-700">Voir mes documents</NuxtLink>
+      </p>
+    </section>
+
+    <!-- ===== Notifications ===== -->
+    <section v-else class="max-w-[680px] rounded-2xl border border-[var(--border-subtle)] bg-white p-5.5">
+      <h2 class="m-0 text-[15px] font-bold">Canaux de notification</h2>
+      <p class="mb-2 mt-1 text-[13.5px] text-[var(--text-muted)]">Chaque réglage s'applique tout de suite.</p>
+      <div v-if="notifState === 'loading' || notifState === 'idle'" class="flex flex-col gap-2.5 pt-2">
+        <DataSkeletonCard v-for="i in 3" :key="i" :height="44" :lines="0" />
+      </div>
+      <p v-else-if="notifState === 'error'" class="m-0 py-3 text-[13px] font-semibold text-danger-fg">
+        Impossible de charger vos préférences. <button type="button" class="font-bold underline" @click="loadNotifPrefs">Réessayer</button>
+      </p>
+      <template v-else-if="notifPrefs">
+        <div v-for="c in CHANNEL_DEFS" :key="c.key" class="border-b border-sand-200 py-3.5 last:border-b-0" :class="togglingChannel === c.key ? 'opacity-60' : ''">
+          <FormsToggle :model-value="notifPrefs[c.key]" :label="c.label" :hint="c.hint" @update:model-value="toggleChannel(c.key)" />
+          <p v-if="channelError?.channel === c.key" class="mb-0 mt-2 text-[13px] font-semibold text-danger-fg">{{ channelError.message }}</p>
+        </div>
+      </template>
+    </section>
   </div>
 </template>

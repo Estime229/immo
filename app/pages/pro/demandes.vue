@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ArrowRight, Check, SearchX } from '@lucide/vue'
 import type { HousingRequestOpenItem } from '~/types/tenant'
 import type { PropertySearchResult } from '~/types/property'
 import { REQUEST_FREQUENCY_LABEL, daysAgoLabel, requestBudgetLabel, type AnsweredEntry } from '~/utils/housingRequest'
@@ -10,9 +11,22 @@ const landlordPropertiesApi = useLandlordPropertiesApi()
 const refData = useReferenceData()
 const currentUser = useAuthUser()
 
-/* ---- Filtres réellement appliqués par l'API (ville, type de location) + pagination ---- */
-const cityId = ref('')
-const frequency = ref('')
+/* ---- Filtres réellement appliqués par l'API (ville, type de location), dans l'URL (`?ville=`, `?type=`) + pagination ---- */
+const route = useRoute()
+const router = useRouter()
+const FREQUENCIES = [{ value: '', label: 'Tout' }, { value: 'monthly', label: 'Au mois' }, { value: 'daily', label: 'À la nuit' }]
+const cityId = computed(() => (typeof route.query.ville === 'string' ? route.query.ville : ''))
+const frequency = computed(() => (route.query.type === 'monthly' || route.query.type === 'daily' ? route.query.type : ''))
+function setFilter(key: 'ville' | 'type', value: string) {
+  const query = { ...route.query }
+  if (value) query[key] = value
+  else delete query[key]
+  router.replace({ query })
+}
+function resetFilters() {
+  const { ville: _, type: __, ...rest } = route.query
+  router.replace({ query: rest })
+}
 const cities = ref<{ id: string; name: string }[]>([])
 const items = ref<HousingRequestOpenItem[]>([])
 const total = ref(0)
@@ -112,31 +126,22 @@ function criteriaLine(r: HousingRequestOpenItem) {
 </script>
 
 <template>
-  <div class="animate-[im-fade_.3s_ease_both]">
-    <p class="mb-4 mt-0 text-[13.5px] leading-[1.55] text-[var(--text-muted)]">
+  <div class="animate-[im-fade_.3s_ease_backwards]">
+    <p class="mb-4.5 mt-0 max-w-[720px] text-[13.5px] leading-[1.55] text-[var(--text-muted)]">
       Recherches publiées par des locataires. Proposez un de vos logements libres : une conversation s'ouvre avec le locataire, qui est notifié.
     </p>
 
     <div class="mb-4.5 flex flex-wrap items-center gap-2.5">
-      <select v-model="cityId" aria-label="Ville" class="h-10 rounded-pill border border-[var(--border-default)] bg-white px-3.5 text-[13px] font-semibold text-sand-900">
+      <select :value="cityId" aria-label="Ville" class="h-[42px] rounded-pill border border-[var(--border-default)] bg-white px-3.5 text-[13px] font-semibold text-sand-900" @change="setFilter('ville', ($event.target as HTMLSelectElement).value)">
         <option value="">Toutes les villes</option>
         <option v-for="c in cities" :key="c.id" :value="c.id">{{ c.name }}</option>
       </select>
-      <div class="flex gap-1 rounded-pill bg-sand-200 p-1">
-        <button
-          v-for="f in [{ v: '', l: 'Tout' }, { v: 'monthly', l: 'Au mois' }, { v: 'daily', l: 'À la nuit' }]"
-          :key="f.v"
-          type="button"
-          class="rounded-pill px-3.5 py-1.5 text-[12.5px] font-bold"
-          :class="frequency === f.v ? 'bg-white text-green-900 shadow-card' : 'text-[var(--text-secondary)]'"
-          @click="frequency = f.v"
-        >{{ f.l }}</button>
-      </div>
-      <span v-if="state === 'success'" class="text-[12.5px] text-[var(--text-muted)]">{{ total }} demande{{ total > 1 ? 's' : '' }} ouverte{{ total > 1 ? 's' : '' }}</span>
+      <FormsSegmentedControl :options="FREQUENCIES" :model-value="frequency" size="sm" @update:model-value="v => setFilter('type', v)" />
+      <span v-if="state === 'success'" class="text-[12.5px] text-[var(--text-muted)]"><span class="font-mono font-bold text-[var(--text-primary)]">{{ total }}</span> demande{{ total > 1 ? 's' : '' }} ouverte{{ total > 1 ? 's' : '' }}</span>
     </div>
-    <p v-if="cityId || frequency" class="-mt-2 mb-4 text-[12px] text-[var(--text-faint)]">Les demandes sans ville ou sans type de location précisés n'apparaissent pas avec ce filtre.</p>
+    <p v-if="cityId || frequency" class="-mt-2 mb-4.5 text-xs text-[var(--text-faint)]">Les demandes sans ville ou sans type de location précisés n'apparaissent pas avec ce filtre.</p>
 
-    <div v-if="state === 'loading'" class="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
+    <div v-if="state === 'loading'" class="grid grid-cols-1 gap-4.5 sm:grid-cols-2 lg:grid-cols-3">
       <DataSkeletonCard v-for="i in 3" :key="i" :height="150" :lines="2" />
     </div>
 
@@ -145,38 +150,42 @@ function criteriaLine(r: HousingRequestOpenItem) {
       <button type="button" class="ml-2 font-bold underline" @click="load(true)">Réessayer</button>
     </FeedbackAlertBanner>
 
-    <p v-else-if="!items.length" class="rounded-md border border-dashed border-[var(--border-default)] bg-white px-4 py-10 text-center text-[13.5px] text-[var(--text-muted)]">
-      {{ cityId || frequency ? 'Aucune demande ouverte pour ces critères.' : 'Aucune demande ouverte pour l\'instant.' }}
-    </p>
+    <div v-else-if="!items.length" class="flex flex-col items-center rounded-2xl border border-dashed border-[var(--border-default)] bg-white px-4 py-10 text-center">
+      <span class="grid h-[46px] w-[46px] place-items-center rounded-pill bg-green-50 text-green-700"><SearchX class="h-5 w-5" :stroke-width="1.9" /></span>
+      <p class="mb-0 mt-3 max-w-[400px] text-[13.5px] text-[var(--text-muted)]">
+        {{ cityId || frequency ? 'Aucune demande ouverte pour ces critères.' : "Aucune demande ouverte pour l'instant. Vous êtes prévenu quand une nouvelle demande correspond à vos biens." }}
+      </p>
+      <CoreButton v-if="cityId || frequency" size="sm" tone="secondary" class="mt-4" @click="resetFilters">Voir toutes les demandes</CoreButton>
+    </div>
 
     <template v-else>
-      <div class="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
+      <div class="grid grid-cols-1 gap-4.5 sm:grid-cols-2 lg:grid-cols-3">
         <button
           v-for="r in items"
           :key="r.id"
           type="button"
-          class="flex flex-col rounded-2xl border border-[var(--border-subtle)] bg-white p-4.5 text-left transition-[transform,box-shadow] duration-[var(--duration-base)] hover:-translate-y-0.5 hover:shadow-raised"
+          class="group flex flex-col rounded-2xl border border-[var(--border-subtle)] bg-white p-5.5 text-left transition-[transform,box-shadow] duration-[var(--duration-base)] hover:-translate-y-0.5 hover:shadow-raised"
           @click="selected = r"
         >
-          <div class="flex items-center gap-3">
+          <div class="flex w-full items-center gap-3">
             <CoreAvatar :name="requesterName(r)" :size="38" color="var(--color-info-fg)" />
             <div class="min-w-0 flex-1">
-              <p class="m-0 truncate text-[14.5px] font-bold">{{ requesterName(r) }}</p>
+              <p class="m-0 truncate text-sm font-bold">{{ requesterName(r) }}</p>
               <p class="mb-0 mt-0.5 font-mono text-[12.5px] text-[var(--text-muted)]">{{ requestBudgetLabel(r) ?? 'Budget non précisé' }}</p>
             </div>
-            <span class="flex-none text-[11.5px] text-[var(--text-faint)]">{{ daysAgoLabel(r.created_at) }}</span>
+            <span class="flex-none text-xs text-[var(--text-faint)]">{{ daysAgoLabel(r.created_at) }}</span>
           </div>
-          <p v-if="criteriaLine(r)" class="mb-0 mt-2.5 text-[12.5px] font-semibold text-[var(--text-secondary)]">{{ criteriaLine(r) }}</p>
-          <p class="mb-0 mt-2 line-clamp-3 flex-1 text-[13.5px] leading-[1.55] text-[var(--text-secondary)] [overflow-wrap:anywhere]">« {{ r.description }} »</p>
-          <div class="mt-3.5 flex items-center justify-between border-t border-sand-200 pt-3">
-            <CoreBadge v-if="answered[r.id]" tone="ok">✓ Déjà proposé</CoreBadge>
+          <p v-if="criteriaLine(r)" class="mb-0 mt-3 text-[13px] font-semibold text-[var(--text-secondary)]">{{ criteriaLine(r) }}</p>
+          <p class="mb-0 mt-1.5 line-clamp-3 flex-1 text-[13.5px] leading-[1.55] text-[var(--text-secondary)] [overflow-wrap:anywhere]">« {{ r.description }} »</p>
+          <div class="mt-3.5 flex w-full items-center justify-between gap-2 border-t border-sand-200 pt-3">
+            <CoreBadge v-if="answered[r.id]" tone="ok"><Check class="h-3.5 w-3.5" :stroke-width="2.2" />Déjà proposé</CoreBadge>
             <CoreBadge v-else tone="neutral">Recherche ouverte</CoreBadge>
-            <span class="text-[12.5px] font-bold text-green-700">Voir le détail →</span>
+            <span class="inline-flex items-center gap-1 text-[12.5px] font-bold text-green-700">Voir le détail <ArrowRight class="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" :stroke-width="2" /></span>
           </div>
         </button>
       </div>
       <div v-if="items.length < total" class="mt-4.5 text-center">
-        <CoreButton tone="secondary" :disabled="loadingMore" @click="loadMore">{{ loadingMore ? 'Chargement…' : `Voir plus (${total - items.length} restantes)` }}</CoreButton>
+        <CoreButton tone="secondary" :disabled="loadingMore" @click="loadMore">{{ loadingMore ? 'Chargement…' : `Voir plus (${total - items.length} restante${total - items.length > 1 ? 's' : ''})` }}</CoreButton>
       </div>
     </template>
 

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { CircleCheck, Lock } from '@lucide/vue'
 import type { ArtisanOffer, ArtisanRequestSummary } from '~/types/artisan'
 import type { RefEntry } from '~/types/reference'
 import { ApiRequestError } from '~/utils/authenticatedFetcher'
@@ -73,8 +74,12 @@ const price = computed(() => Number(offer.value?.price ?? 0))
 const retentionPct = computed(() => offer.value?.retention_percentage ?? 0)
 const retainedAmount = computed(() => Math.round((price.value * retentionPct.value) / 100))
 const immediateAmount = computed(() => price.value - retainedAmount.value)
+/** Solde inconnu (lecture du wallet en échec) : jamais affiché « 0 F », l'API vérifie au paiement. */
+const balanceKnown = computed(() => wallet.state.value === 'success')
 const balanceAfter = computed(() => wallet.balanceTotal.value - price.value)
-const insufficientBalance = computed(() => price.value > wallet.balanceTotal.value)
+const insufficientBalance = computed(() => balanceKnown.value && price.value > wallet.balanceTotal.value)
+
+const modalTitle = computed(() => (step.value === 'done' ? 'Paiement effectué' : "Payer l'intervention"))
 
 function close() {
   modal.value = ''
@@ -99,72 +104,52 @@ async function submit() {
 </script>
 
 <template>
-  <Teleport to="body">
-    <div v-if="open" class="fixed inset-0 z-[90] grid animate-[im-veil_.22s_ease_both] place-items-center bg-black/50 p-6 backdrop-blur-[3px]" @click="close">
-      <div class="w-[460px] max-w-[calc(100vw-3rem)] overflow-hidden rounded-2xl bg-[var(--surface-page)] shadow-panel animate-[im-rise_.28s_var(--ease-standard)_both]" @click.stop>
-        <div class="flex items-center justify-between border-b border-[var(--border-subtle)] px-6 py-4.5">
-          <h3 class="m-0 font-display text-[19px] font-bold tracking-[-.02em]">{{ step === 'done' ? 'Paiement effectué' : "Payer l'intervention" }}</h3>
-          <button type="button" class="grid h-[34px] w-[34px] place-items-center rounded-pill bg-sand-200 text-[15px] text-sand-800" @click="close">✕</button>
-        </div>
-
-        <div class="p-6">
-          <template v-if="step === 'loading'">
-            <p class="m-0 text-[13.5px] text-[var(--text-muted)]">Chargement…</p>
-          </template>
-
-          <template v-else-if="step === 'error'">
-            <p class="m-0 text-[13.5px] font-semibold text-danger-fg">{{ loadError }}</p>
-          </template>
-
-          <template v-else-if="step === 'confirm'">
-            <p class="m-0 text-[13px] font-bold uppercase tracking-[.04em] text-[var(--text-faint)]">{{ tradeLabel(request?.trade_reference_id) }} — {{ artisanName(request) }}</p>
-
-            <div class="mt-3.5 rounded-md border border-[var(--border-subtle)] bg-white p-4">
-              <div class="flex items-center justify-between py-1">
-                <span class="text-[13px] text-[var(--text-muted)]">Montant de l'intervention</span>
-                <span class="font-mono text-[15px] font-bold">{{ formatFcfa(price) }}</span>
-              </div>
-              <div class="flex items-center justify-between py-1">
-                <span class="text-[13px] text-[var(--text-muted)]">Versé à l'artisan immédiatement</span>
-                <span class="font-mono text-[13.5px]">{{ formatFcfa(immediateAmount) }}</span>
-              </div>
-              <div v-if="retainedAmount > 0" class="flex items-center justify-between py-1">
-                <span class="text-[13px] text-[var(--text-muted)]">Retenu en garantie ({{ retentionPct }} %, {{ offer?.warranty_days }} j)</span>
-                <span class="font-mono text-[13.5px]">{{ formatFcfa(retainedAmount) }}</span>
-              </div>
-            </div>
-
-            <div class="mt-3.5 flex items-center justify-between rounded-md px-1 py-1">
-              <span class="text-[12.5px] text-[var(--text-faint)]">Solde après paiement</span>
-              <span class="font-mono text-[12.5px] font-bold" :class="insufficientBalance ? 'text-danger-fg' : 'text-[var(--text-secondary)]'">{{ formatFcfa(balanceAfter) }}</span>
-            </div>
-            <p v-if="insufficientBalance" class="mb-0 mt-2 text-[12.5px] font-semibold text-danger-fg">Solde insuffisant pour ce paiement.</p>
-            <p v-if="submitError" class="mb-0 mt-2 text-[12.5px] font-semibold text-danger-fg">{{ submitError }}</p>
-
-            <div class="mt-5 flex gap-2.5">
-              <button type="button" class="flex-1 rounded-md border border-[var(--border-default)] bg-white py-3.5 text-sm font-bold" :disabled="submitting" @click="close">Annuler</button>
-              <button
-                type="button"
-                class="flex-1 rounded-md py-3.5 text-sm font-bold text-white transition-colors"
-                :class="insufficientBalance || submitting ? 'cursor-not-allowed bg-sand-400' : 'cursor-pointer bg-[image:var(--action-primary)] shadow-action'"
-                :disabled="insufficientBalance || submitting"
-                @click="submit"
-              >{{ submitting ? 'Paiement…' : `Payer ${formatFcfa(price)}` }}</button>
-            </div>
-          </template>
-
-          <template v-else>
-            <div class="px-0.5 py-1 text-center">
-              <div class="mx-auto grid h-15 w-15 animate-[im-pop_.5s_ease] place-items-center rounded-pill bg-green-600 text-[28px] text-white">✓</div>
-              <p class="mb-0 mt-4.5 text-lg font-bold">Paiement effectué</p>
-              <p class="mx-auto mb-0 mt-2.5 max-w-[320px] text-sm leading-[1.6] text-[var(--text-muted)]">
-                {{ formatFcfa(immediateAmount) }} versés à l'artisan{{ retainedAmount > 0 ? `, ${formatFcfa(retainedAmount)} retenus en garantie.` : '.' }}
-              </p>
-              <CoreButton size="lg" full-width class="mt-5" @click="close">Terminé</CoreButton>
-            </div>
-          </template>
-        </div>
-      </div>
+  <CoreModal :open="open" :title="modalTitle" width="480px" @close="close">
+    <div v-if="step === 'loading'" class="flex flex-col gap-2.5">
+      <DataSkeletonCard :height="120" :lines="1" />
     </div>
-  </Teleport>
+
+    <p v-else-if="step === 'error'" class="m-0 text-[13.5px] font-semibold text-danger-fg">{{ loadError }} Fermez cette fenêtre puis réessayez depuis la liste.</p>
+
+    <template v-else-if="step === 'confirm'">
+      <p class="m-0 text-label font-bold uppercase tracking-label text-[var(--text-faint)]">{{ tradeLabel(request?.trade_reference_id) }} · {{ artisanName(request) }}</p>
+
+      <div class="mt-3 rounded-md border border-[var(--border-default)] bg-white px-4 py-3">
+        <DataMoneyLine label="Montant de l'intervention" :value="formatFcfa(price)" />
+        <DataMoneyLine label="Versé à l'artisan tout de suite" :value="formatFcfa(immediateAmount)" />
+        <DataMoneyLine v-if="retainedAmount > 0" :label="`Retenu en garantie (${retentionPct} %, ${offer?.warranty_days} j)`" :value="formatFcfa(retainedAmount)" />
+      </div>
+      <p v-if="retainedAmount > 0" class="mb-0 mt-2.5 flex items-start gap-2 text-[12.5px] leading-[1.5] text-[var(--text-muted)]">
+        <Lock class="mt-0.5 h-3.5 w-3.5 flex-none" :stroke-width="1.9" />
+        La part retenue est conservée par Immo et versée à l'artisan à la fin de la garantie, sauf si vous signalez un problème d'ici là.
+      </p>
+
+      <div class="mt-3.5 flex items-center justify-between gap-3 px-1">
+        <span class="text-[12.5px] text-[var(--text-muted)]">Solde après paiement</span>
+        <span v-if="balanceKnown" class="font-mono text-[13px] font-bold" :class="insufficientBalance ? 'text-danger-fg' : 'text-[var(--text-secondary)]'">{{ formatFcfa(balanceAfter) }}</span>
+        <span v-else class="text-[12.5px] text-[var(--text-faint)]">Solde indisponible · <button type="button" class="font-bold text-green-700" @click="wallet.reload()">Réessayer</button></span>
+      </div>
+      <p v-if="!balanceKnown" class="mb-0 mt-1.5 px-1 text-xs text-[var(--text-faint)]">Votre solde sera vérifié au moment du paiement.</p>
+      <p v-if="insufficientBalance" class="mb-0 mt-2 text-[13px] font-semibold text-danger-fg">
+        Solde insuffisant pour ce paiement. <NuxtLink to="/pro/wallet" class="font-bold underline" @click="close">Voir mon wallet</NuxtLink>
+      </p>
+      <p v-if="submitError" class="mb-0 mt-2 text-[13px] font-semibold text-danger-fg">{{ submitError }}</p>
+    </template>
+
+    <div v-else class="flex flex-col items-center py-2 text-center">
+      <span class="grid h-[46px] w-[46px] place-items-center rounded-pill bg-green-50 text-green-700"><CircleCheck class="h-6 w-6" :stroke-width="1.9" /></span>
+      <p class="mb-0 mt-3.5 text-[15px] font-bold">Paiement effectué</p>
+      <p class="mx-auto mb-0 mt-2 max-w-[340px] text-[13.5px] leading-[1.6] text-[var(--text-muted)]">
+        <span class="font-mono">{{ formatFcfa(immediateAmount) }}</span> versés à l'artisan<template v-if="retainedAmount > 0">, <span class="font-mono">{{ formatFcfa(retainedAmount) }}</span> retenus en garantie</template>. Il réalise l'intervention puis la marque terminée.
+      </p>
+    </div>
+
+    <template v-if="step === 'confirm' || step === 'done'" #footer>
+      <div v-if="step === 'confirm'" class="flex flex-wrap justify-end gap-2.5">
+        <CoreButton tone="secondary" :disabled="submitting" @click="close">Annuler</CoreButton>
+        <CoreButton :disabled="insufficientBalance || submitting" @click="submit">{{ submitting ? 'Paiement…' : `Payer ${formatFcfa(price)}` }}</CoreButton>
+      </div>
+      <CoreButton v-else full-width @click="close">Terminé</CoreButton>
+    </template>
+  </CoreModal>
 </template>

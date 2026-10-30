@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { CalendarOff, Check, ChevronLeft, ChevronRight, DoorOpen, MessageSquare, Plus, UserRound, X } from '@lucide/vue'
 import type { AvailabilityBlock, BillingFrequency, LandlordWaitlistEntry, PropertySearchResult, UnitPricing } from '~/types/property'
 import { ApiRequestError } from '~/utils/authenticatedFetcher'
 import { errorText } from '~/utils/apiErrors'
@@ -38,22 +39,36 @@ async function loadUnits() {
   const page = await landlordPropertiesApi.fetchMine({ limit: 100 })
   myProperties.value = page.data as PropertySearchResult[]
 }
-onMounted(async () => {
+function pickUnit(wanted: string) {
+  selectedUnitId.value = myUnits.value.some(u => u.id === wanted) ? wanted : (selectedUnitId.value || myUnits.value[0]?.id || '')
+}
+async function loadAll() {
+  myUnitsState.value = 'loading'
   try {
     await loadUnits()
     myUnitsState.value = myUnits.value.length ? 'success' : 'empty'
-    const wanted = String(route.query.unit ?? '')
-    selectedUnitId.value = myUnits.value.some(u => u.id === wanted) ? wanted : (myUnits.value[0]?.id ?? '')
+    pickUnit(String(route.query.unit ?? ''))
   } catch {
     myUnitsState.value = 'error'
   }
-})
+}
+onMounted(loadAll)
+/* Lien profond (?unit=) suivi même si l'on est déjà sur la page ; le logement choisi est reporté dans l'URL. */
+const router = useRouter()
+watch(() => route.query.unit, v => { if (typeof v === 'string' && v && v !== selectedUnitId.value && myUnitsState.value === 'success') pickUnit(v) })
+watch(selectedUnitId, id => { if (id && route.query.unit !== id) router.replace({ query: { ...route.query, unit: id } }) })
+const unitOptions = computed(() => myUnits.value.map(u => ({ value: u.id, label: u.label })))
 onMounted(() => useLandlordTarifsBadge().markAllSeen())
 watch(selectedUnitId, id => {
   if (!id) return
   pricingError.value = ''
   pricingNote.value = ''
+  pricingFlash.value = ''
   blockError.value = ''
+  blockFlash.value = ''
+  confirmRemoveId.value = null
+  confirmSuspendId.value = null
+  confirmUnblock.value = null
   loadPricing()
   loadWaitlist()
   loadAvailability()
@@ -100,6 +115,10 @@ const example = computed(() => {
 
 const pricingError = ref('')
 const pricingNote = ref('')
+/** Résultat d'une action réussie sur la grille (bandeau vert). */
+const pricingFlash = ref('')
+const FREQ_OPTIONS = computed(() => missingFreqs.value.map(f => ({ value: f, label: FREQ_LABEL[f] })))
+const newFreqModel = computed({ get: () => newFreq.value as string, set: (v: string) => { newFreq.value = v as BillingFrequency } })
 /** Écart déjà présent à l'ouverture (tarif modifié ailleurs, ou avant ce lot) : signalé, alignement en un clic. */
 const baseMismatch = computed(() => (selectedUnit.value && pricingState.value === 'success') ? syncedBasePrice(pricing.value, Number(selectedUnit.value.price)) : null)
 const pricingBusy = ref<string | null>(null)
@@ -137,6 +156,7 @@ async function addPricing() {
   try {
     await pricingApi.createPricing(selectedUnitId.value, { billing_frequency: newFreq.value, price: Number(newPrice.value.replace(/\s/g, '')), min_periods: Number(newMin.value) })
     showAdd.value = false
+    pricingFlash.value = `Tarif « ${freqLabel(newFreq.value).toLowerCase()} » ajouté.`
     await loadPricing()
     await syncBase()
   } catch (e) {
@@ -163,6 +183,7 @@ async function saveEdit(p: UnitPricing) {
   try {
     await pricingApi.updatePricing(selectedUnitId.value, p.id, { price: Number(editPrice.value.replace(/\s/g, '')), min_periods: Number(editMin.value) })
     editingId.value = null
+    pricingFlash.value = `Tarif « ${freqLabel(p.billing_frequency).toLowerCase()} » mis à jour.`
     await loadPricing()
     await syncBase()
   } catch (e) {
@@ -171,12 +192,27 @@ async function saveEdit(p: UnitPricing) {
     pricingBusy.value = null
   }
 }
+/** Suspendre se confirme (comme retirer) : un tarif « à la nuit » suspendu ferme la réservation en ligne. Réactiver, non. */
+const confirmSuspendId = ref<string | null>(null)
+function askToggle(p: UnitPricing) {
+  pricingFlash.value = ''
+  confirmRemoveId.value = null
+  if (p.is_available) confirmSuspendId.value = p.id
+  else toggleAvailable(p)
+}
+function suspendMessage(p: UnitPricing) {
+  return p.billing_frequency === 'daily'
+    ? 'Suspendre le tarif à la nuit ? La réservation en ligne de ce logement sera fermée jusqu\'à sa réactivation.'
+    : `Suspendre le tarif « ${freqLabel(p.billing_frequency).toLowerCase()} » ? Il ne s'appliquera plus aux séjours, jusqu'à sa réactivation.`
+}
 async function toggleAvailable(p: UnitPricing) {
   pricingBusy.value = p.id
   pricingError.value = ''
   pricingNote.value = ''
   try {
     await pricingApi.updatePricing(selectedUnitId.value, p.id, { is_available: !p.is_available })
+    confirmSuspendId.value = null
+    pricingFlash.value = p.is_available ? `Tarif « ${freqLabel(p.billing_frequency).toLowerCase()} » suspendu.` : `Tarif « ${freqLabel(p.billing_frequency).toLowerCase()} » réactivé.`
     await loadPricing()
     await syncBase()
   } catch (e) {
@@ -193,6 +229,7 @@ async function removePricing(p: UnitPricing) {
   try {
     await pricingApi.removePricing(selectedUnitId.value, p.id)
     confirmRemoveId.value = null
+    pricingFlash.value = `Tarif « ${freqLabel(p.billing_frequency).toLowerCase()} » retiré.`
     await loadPricing()
     await syncBase()
   } catch (e) {
@@ -208,6 +245,11 @@ const maxStay = ref('')
 const stayError = ref('')
 const staySaved = ref(false)
 const staySaving = ref(false)
+function onStayInput(which: 'min' | 'max', v: string) {
+  if (which === 'min') minStay.value = v
+  else maxStay.value = v
+  staySaved.value = false
+}
 function resetStayLimits() {
   const u = selectedUnit.value
   minStay.value = u?.min_duration_days ? String(u.min_duration_days) : ''
@@ -269,14 +311,18 @@ async function contactWaitlistTenant(w: LandlordWaitlistEntry) {
   }
 }
 const confirmWaitId = ref<string | null>(null)
+const waitlistBusy = ref(false)
 async function removeWaitlistEntry(w: LandlordWaitlistEntry) {
   waitlistError.value = ''
+  waitlistBusy.value = true
   try {
     await waitlistApi.removeEntry(selectedUnitId.value, w.tenant.id)
     confirmWaitId.value = null
     waitlist.value = waitlist.value.filter(x => x.id !== w.id)
   } catch (e) {
     waitlistError.value = formatError(e, 'Le retrait a échoué.')
+  } finally {
+    waitlistBusy.value = false
   }
 }
 
@@ -358,6 +404,7 @@ const blockFirst = ref('')
 const blockLast = ref('')
 const blockNote = ref('')
 const blockError = ref('')
+const blockFlash = ref('')
 const blockBusy = ref(false)
 async function submitBlock() {
   blockError.value = ''
@@ -370,6 +417,7 @@ async function submitBlock() {
     knownBlocks.value = [...knownBlocks.value, { id: created.id, start_date: blockFirst.value, end_date: addDays(blockLast.value, 1), note: blockNote.value.trim() || null }]
     writeKnown(selectedUnitId.value, knownBlocks.value)
     showBlockForm.value = false
+    blockFlash.value = blockFirst.value === blockLast.value ? `Le ${fmtDay(blockFirst.value)} est bloqué.` : `Du ${fmtDay(blockFirst.value)} au ${fmtDay(blockLast.value)} : dates bloquées.`
     blockFirst.value = ''
     blockLast.value = ''
     blockNote.value = ''
@@ -382,167 +430,224 @@ async function submitBlock() {
     blockBusy.value = false
   }
 }
-function unblockBlock(b: AvailabilityBlock) {
-  const k = knownFor(b)
-  if (k) unblock(k)
+/** Débloquer rouvre les dates à la réservation : confirmé sur place, comme un retrait. */
+const confirmUnblock = ref<AvailabilityBlock | null>(null)
+const unblocking = ref(false)
+function askUnblock(b: AvailabilityBlock) {
+  blockFlash.value = ''
+  confirmUnblock.value = b
 }
-async function unblock(k: KnownBlock) {
+async function unblockConfirmed() {
+  const b = confirmUnblock.value
+  const k = b ? knownFor(b) : undefined
+  if (!b || !k) return
   blockError.value = ''
+  unblocking.value = true
   try {
     await pricingApi.unblockAvailability(selectedUnitId.value, k.id)
   } catch (e) {
     if (!(e instanceof ApiRequestError && e.status === 404)) {
       blockError.value = formatError(e, 'Le retrait a échoué.')
+      unblocking.value = false
       return
     }
   }
   knownBlocks.value = knownBlocks.value.filter(x => x.id !== k.id)
   writeKnown(selectedUnitId.value, knownBlocks.value)
+  confirmUnblock.value = null
+  unblocking.value = false
+  blockFlash.value = `Dates rouvertes à la réservation (${blockRange(b)}).`
   await loadAvailability()
+}
+function sameBlock(a: AvailabilityBlock | null, b: AvailabilityBlock) {
+  return !!a && a.start_date === b.start_date && a.end_date === b.end_date && a.blocked_by === b.blocked_by
 }
 </script>
 
 <template>
-  <div class="animate-[im-fade_.3s_ease_both]">
+  <div class="animate-[im-fade_.3s_ease_backwards]">
     <div v-if="myUnitsState === 'loading'" class="flex flex-col gap-3.5">
-      <DataSkeletonCard :height="90" :lines="1" />
+      <DataSkeletonCard :height="42" :lines="0" />
+      <DataSkeletonCard :height="180" :lines="1" />
     </div>
-    <p v-else-if="myUnitsState === 'error'" class="rounded-md border border-dashed border-danger-border bg-white px-4 py-10 text-center text-[13.5px] text-danger-fg">Impossible de charger vos logements pour le moment.</p>
-    <p v-else-if="myUnitsState === 'empty'" class="rounded-md border border-dashed border-[var(--border-default)] bg-white px-4 py-10 text-center text-[13.5px] text-[var(--text-muted)]">Aucun logement pour l'instant — <NuxtLink to="/pro/biens/ajouter" class="font-bold text-green-700">ajoutez d'abord un bien</NuxtLink>.</p>
+    <FeedbackAlertBanner v-else-if="myUnitsState === 'error'" tone="danger">
+      Impossible de charger vos logements pour le moment.
+      <button type="button" class="ml-2 font-bold underline" @click="loadAll">Réessayer</button>
+    </FeedbackAlertBanner>
+    <ProEmptyPanel v-else-if="myUnitsState === 'empty'" :icon="DoorOpen" title="Aucun logement à tarifer" text="Les tarifs et le calendrier se règlent logement par logement. Ajoutez d'abord un bien avec au moins un logement.">
+      <NuxtLink to="/pro/biens" class="inline-flex items-center gap-1.5 rounded-md bg-[image:var(--action-primary)] px-5 py-3 text-[14px] font-bold text-white shadow-action">Mes biens</NuxtLink>
+    </ProEmptyPanel>
 
     <template v-else>
-      <div class="mb-4.5 flex flex-wrap items-center gap-3">
-        <select v-model="selectedUnitId" aria-label="Logement" class="h-11 max-w-full rounded-pill border border-[var(--border-default)] bg-white px-4 text-[13px] font-semibold text-sand-900">
-          <option v-for="u in myUnits" :key="u.id" :value="u.id">{{ u.label }}</option>
+      <div class="mb-4.5 flex flex-wrap items-center gap-x-3 gap-y-2">
+        <select v-model="selectedUnitId" aria-label="Logement" class="h-[42px] max-w-full cursor-pointer rounded-pill border border-[var(--border-default)] bg-white px-3.5 text-[13px] font-semibold text-sand-900 outline-none">
+          <option v-for="u in unitOptions" :key="u.value" :value="u.value">{{ u.label }}</option>
         </select>
-        <span v-if="selectedUnit" class="text-[12.5px] text-[var(--text-muted)]">Prix affiché sur l'annonce : <strong class="font-mono text-[var(--text-primary)]">{{ fmtF(selectedUnit.price) }}</strong></span>
+        <span v-if="selectedUnit" class="text-xs text-[var(--text-faint)]">Prix affiché sur l'annonce : <strong class="font-mono text-[13px] text-[var(--text-primary)]">{{ fmtF(selectedUnit.price) }}</strong></span>
+        <NuxtLink v-if="selectedUnit" :to="`/pro/biens/fiche?id=${selectedUnit.propertyId}`" class="ml-auto text-[12.5px] font-bold text-green-700">Fiche du bien</NuxtLink>
       </div>
 
-      <div class="grid grid-cols-1 items-start gap-4.5 lg:grid-cols-[1.15fr_1fr]">
-        <div class="flex flex-col gap-4.5">
+      <div class="grid grid-cols-1 items-start gap-4.5 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
+        <div class="flex min-w-0 flex-col gap-4.5">
           <!-- Grille tarifaire -->
-          <div class="rounded-2xl border border-[var(--border-subtle)] bg-white p-5.5">
-            <div class="mb-1.5 flex items-baseline justify-between gap-3">
-              <p class="m-0 text-[15px] font-bold">Grille tarifaire</p>
-              <button v-if="missingFreqs.length" type="button" class="rounded-pill border border-[var(--border-default)] bg-white px-3.5 py-2 text-[12.5px] font-bold" @click="openAdd">+ Tarif</button>
+          <section class="rounded-2xl border border-[var(--border-subtle)] bg-white p-5.5">
+            <div class="mb-1 flex flex-wrap items-center justify-between gap-3">
+              <h2 class="m-0 text-[15px] font-bold">Grille tarifaire</h2>
+              <CoreButton v-if="missingFreqs.length && !showAdd" size="sm" tone="secondary" class="inline-flex items-center gap-1.5" @click="openAdd"><Plus class="h-4 w-4" :stroke-width="1.9" />Ajouter un tarif</CoreButton>
             </div>
-            <p class="mb-3.5 mt-0 text-[12.5px] leading-[1.55] text-[var(--text-muted)]">
-              <template v-if="hasDaily">Réservation en ligne <strong class="text-ok-fg">ouverte</strong> : le locataire paie le prix de la nuit, et Immo applique automatiquement vos tarifs semaine/mois dès que le séjour est assez long (la combinaison la moins chère).</template>
+            <p class="mb-3.5 mt-0 text-[13.5px] leading-[1.55] text-[var(--text-muted)]">
+              <template v-if="hasDaily">Réservation en ligne <strong class="text-ok-fg">ouverte</strong> : le voyageur paie le prix de la nuit, et Immo applique vos tarifs semaine/mois dès que le séjour est assez long (la combinaison la moins chère).</template>
               <template v-else>Sans tarif « À la nuit » actif, ce logement ne peut pas être réservé en ligne : il se loue uniquement avec un bail.</template>
             </p>
             <p v-if="example" class="mb-3.5 mt-0 rounded-md bg-green-50 px-3.5 py-2.5 text-[12.5px] text-green-900">
-              Exemple : {{ example.nights }} nuits = {{ example.q.lines.map(l => l.label).join(' + ') }} → <strong>{{ fmtF(example.q.total) }}</strong> au lieu de {{ fmtF(example.q.total + example.q.saving) }}.
+              Exemple : <span class="font-mono">{{ example.nights }}</span> nuits = {{ example.q.lines.map(l => l.label).join(' + ') }}, soit <strong class="font-mono">{{ fmtF(example.q.total) }}</strong> au lieu de <span class="font-mono">{{ fmtF(example.q.total + example.q.saving) }}</span>.
             </p>
 
-            <div v-if="showAdd" class="mb-3.5 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-page)] p-3.5">
-              <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                <label class="text-[11.5px] font-bold">Fréquence
-                  <select v-model="newFreq" class="mt-1 h-10 w-full rounded-sm border border-[var(--border-default)] bg-white px-2 text-[13px] font-normal">
-                    <option v-for="f in missingFreqs" :key="f" :value="f">{{ FREQ_LABEL[f] }}</option>
-                  </select>
-                </label>
-                <label class="text-[11.5px] font-bold">Prix (FCFA)
-                  <input v-model="newPrice" inputmode="numeric" placeholder="15000" class="mt-1 h-10 w-full rounded-sm border border-[var(--border-default)] bg-white px-2 font-mono text-[13px] font-normal outline-none">
-                </label>
-                <label class="text-[11.5px] font-bold">{{ newFreq === 'daily' ? 'Nuits minimum' : 'Périodes minimum' }}
-                  <input v-model="newMin" inputmode="numeric" class="mt-1 h-10 w-full rounded-sm border border-[var(--border-default)] bg-white px-2 font-mono text-[13px] font-normal outline-none">
-                </label>
+            <div v-if="showAdd" class="mb-3.5 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-page)] p-4">
+              <div class="grid grid-cols-1 items-start gap-3 sm:grid-cols-3">
+                <FormsSelect v-model="newFreqModel" label="Fréquence" :options="FREQ_OPTIONS" class="[&_select]:w-full" />
+                <FormsInput v-model="newPrice" label="Prix (FCFA)" type="number" mono placeholder="15000" />
+                <FormsInput v-model="newMin" :label="newFreq === 'daily' ? 'Nuits minimum' : 'Périodes minimum'" type="number" mono />
               </div>
-              <div class="mt-2.5 flex gap-2">
-                <CoreButton size="sm" :disabled="pricingBusy === 'new'" @click="addPricing">{{ pricingBusy === 'new' ? '…' : 'Ajouter' }}</CoreButton>
+              <div class="mt-3 flex gap-2">
+                <CoreButton size="sm" :disabled="pricingBusy === 'new'" @click="addPricing">{{ pricingBusy === 'new' ? 'Ajout…' : 'Ajouter' }}</CoreButton>
                 <CoreButton size="sm" tone="secondary" @click="showAdd = false">Annuler</CoreButton>
               </div>
             </div>
 
-            <div v-if="baseMismatch !== null && selectedUnit" class="mb-2.5 flex flex-wrap items-center gap-2 rounded-md border border-warn-border bg-warn-bg px-3 py-2 text-[12.5px] text-warn-fg">
-              <span class="flex-1">Le prix affiché sur l'annonce ({{ fmtF(selectedUnit.price) }}) ne correspond pas à votre grille ({{ fmtF(baseMismatch) }}) : la recherche et le bail utilisent le prix affiché.</span>
+            <div v-if="baseMismatch !== null && selectedUnit" class="mb-3 flex flex-wrap items-center gap-2.5 rounded-md border border-warn-border bg-warn-bg px-3.5 py-2.5 text-[12.5px] text-warn-fg">
+              <span class="min-w-0 flex-1">Le prix affiché sur l'annonce (<span class="font-mono">{{ fmtF(selectedUnit.price) }}</span>) ne correspond pas à votre grille (<span class="font-mono">{{ fmtF(baseMismatch) }}</span>) : la recherche et le bail utilisent le prix affiché.</span>
               <CoreButton size="sm" tone="secondary" @click="syncBase">Aligner</CoreButton>
             </div>
-            <p v-if="pricingError" class="mb-2.5 mt-0 rounded-md border border-danger-border bg-danger-bg px-3 py-2 text-[12.5px] font-semibold text-danger-fg">{{ pricingError }}</p>
-            <p v-if="pricingNote" class="mb-2.5 mt-0 rounded-md bg-sand-100 px-3 py-2 text-[12.5px] text-[var(--text-secondary)]">{{ pricingNote }}</p>
+            <p v-if="pricingFlash" class="mb-3 mt-0 rounded-md border border-ok-border bg-ok-bg px-3.5 py-2.5 text-[13px] font-semibold text-green-900">{{ pricingFlash }}</p>
+            <p v-if="pricingError" class="mb-3 mt-0 text-[13px] font-semibold text-danger-fg">{{ pricingError }}</p>
+            <p v-if="pricingNote" class="mb-3 mt-0 rounded-md bg-sand-100 px-3.5 py-2.5 text-[12.5px] text-[var(--text-secondary)]">{{ pricingNote }}</p>
 
-            <div v-if="pricingState === 'loading'" class="flex flex-col gap-2"><DataSkeletonCard :height="40" :lines="1" /></div>
-            <p v-else-if="pricingState === 'error'" class="m-0 text-[13px] text-danger-fg">Impossible de charger les tarifs. <button type="button" class="font-bold underline" @click="loadPricing">Réessayer</button></p>
-            <p v-else-if="!pricing.length" class="m-0 text-[13px] text-[var(--text-muted)]">Aucun tarif : le logement se loue au prix affiché sur l'annonce, avec un bail.</p>
+            <DataSkeletonCard v-if="pricingState === 'loading'" :height="44" :lines="0" />
+            <FeedbackAlertBanner v-else-if="pricingState === 'error'" tone="danger">
+              Impossible de charger les tarifs.
+              <button type="button" class="ml-2 font-bold underline" @click="loadPricing">Réessayer</button>
+            </FeedbackAlertBanner>
+            <p v-else-if="!pricing.length" class="m-0 rounded-md border border-dashed border-[var(--border-default)] px-4 py-6 text-center text-[13.5px] text-[var(--text-muted)]">Aucun tarif : le logement se loue au prix affiché sur l'annonce, avec un bail. Ajoutez un tarif « À la nuit » pour ouvrir la réservation en ligne.</p>
             <div v-for="p in sortedPricing" v-else :key="p.id" class="border-b border-sand-200 py-3 last:border-b-0">
-              <div v-if="editingId !== p.id" class="flex flex-wrap items-center gap-3">
+              <div v-if="editingId !== p.id" class="flex flex-wrap items-center gap-x-3 gap-y-2">
                 <div class="min-w-0 flex-1">
-                  <p class="m-0 text-sm font-bold" :class="p.is_available ? '' : 'text-[var(--text-faint)]'">{{ freqLabel(p.billing_frequency) }}</p>
+                  <div class="flex flex-wrap items-center gap-2">
+                    <p class="m-0 text-sm font-bold" :class="p.is_available ? '' : 'text-[var(--text-faint)]'">{{ freqLabel(p.billing_frequency) }}</p>
+                    <CoreBadge :tone="p.is_available ? 'ok' : 'neutral'">{{ p.is_available ? 'Actif' : 'Suspendu' }}</CoreBadge>
+                  </div>
                   <p class="mb-0 mt-0.5 text-xs text-[var(--text-faint)]">{{ minLabel(p) }}</p>
                 </div>
                 <span class="font-mono text-[15px] font-bold" :class="p.is_available ? '' : 'text-[var(--text-faint)] line-through'">{{ fmtF(p.price) }}</span>
-                <button type="button" class="rounded-pill px-2.5 py-1.5 text-[11px] font-bold" :class="p.is_available ? 'bg-green-50 text-green-700' : 'bg-sand-200 text-[var(--text-muted)]'" :disabled="pricingBusy === p.id" :title="p.is_available ? 'Cliquer pour suspendre ce tarif' : 'Cliquer pour réactiver ce tarif'" @click="toggleAvailable(p)">{{ p.is_available ? 'Actif' : 'Suspendu' }}</button>
-                <button type="button" class="text-xs font-bold text-green-700" @click="startEdit(p)">Modifier</button>
-                <button type="button" class="text-xs font-bold text-danger-fg" :disabled="pricingBusy === p.id" @click="confirmRemoveId = p.id">Retirer</button>
+                <div class="flex w-full flex-wrap gap-1 sm:w-auto">
+                  <button type="button" class="rounded-pill px-3 py-2 text-xs font-bold text-[var(--text-secondary)] hover:bg-sand-100 disabled:opacity-50" :disabled="pricingBusy === p.id" @click="askToggle(p)">{{ p.is_available ? 'Suspendre' : 'Réactiver' }}</button>
+                  <button type="button" class="rounded-pill px-3 py-2 text-xs font-bold text-green-700 hover:bg-green-50" @click="startEdit(p); confirmSuspendId = null">Modifier</button>
+                  <button type="button" class="rounded-pill px-3 py-2 text-xs font-bold text-danger-fg hover:bg-danger-bg disabled:opacity-50" :disabled="pricingBusy === p.id" @click="confirmRemoveId = p.id; confirmSuspendId = null; pricingFlash = ''">Retirer</button>
+                </div>
               </div>
-              <div v-else class="flex flex-wrap items-end gap-2">
-                <p class="m-0 w-full text-sm font-bold">{{ freqLabel(p.billing_frequency) }}</p>
-                <label class="text-[11.5px] font-bold">Prix (FCFA)<input v-model="editPrice" inputmode="numeric" class="mt-1 block h-9 w-32 rounded-sm border border-[var(--border-default)] bg-white px-2 font-mono text-[13px] font-normal outline-none"></label>
-                <label class="text-[11.5px] font-bold">Minimum<input v-model="editMin" inputmode="numeric" class="mt-1 block h-9 w-20 rounded-sm border border-[var(--border-default)] bg-white px-2 font-mono text-[13px] font-normal outline-none"></label>
-                <CoreButton size="sm" :disabled="pricingBusy === p.id" @click="saveEdit(p)">{{ pricingBusy === p.id ? '…' : 'Enregistrer' }}</CoreButton>
-                <CoreButton size="sm" tone="secondary" @click="editingId = null">Annuler</CoreButton>
+              <div v-else class="rounded-md border border-[var(--border-subtle)] bg-[var(--surface-page)] p-3.5">
+                <p class="m-0 mb-2.5 text-sm font-bold">{{ freqLabel(p.billing_frequency) }}</p>
+                <div class="grid grid-cols-2 gap-3">
+                  <FormsInput v-model="editPrice" label="Prix (FCFA)" type="number" mono />
+                  <FormsInput v-model="editMin" :label="p.billing_frequency === 'daily' ? 'Nuits minimum' : 'Périodes minimum'" type="number" mono />
+                </div>
+                <div class="mt-3 flex gap-2">
+                  <CoreButton size="sm" :disabled="pricingBusy === p.id" @click="saveEdit(p)">{{ pricingBusy === p.id ? 'Enregistrement…' : 'Enregistrer' }}</CoreButton>
+                  <CoreButton size="sm" tone="secondary" @click="editingId = null">Annuler</CoreButton>
+                </div>
               </div>
-              <div v-if="confirmRemoveId === p.id" class="mt-2.5 flex flex-wrap items-center gap-2 rounded-md border border-danger-border bg-danger-bg px-3 py-2">
-                <p class="m-0 flex-1 text-[12.5px] font-semibold text-danger-fg-deep">Retirer le tarif « {{ freqLabel(p.billing_frequency).toLowerCase() }} » ?<template v-if="p.billing_frequency === 'daily'"> La réservation en ligne sera fermée.</template></p>
-                <CoreButton size="sm" tone="danger" :disabled="pricingBusy === p.id" @click="removePricing(p)">Retirer</CoreButton>
-                <CoreButton size="sm" tone="secondary" @click="confirmRemoveId = null">Annuler</CoreButton>
-              </div>
+              <CoreInlineConfirm
+                v-if="confirmSuspendId === p.id"
+                class="mt-2.5"
+                tone="warning"
+                :message="suspendMessage(p)"
+                confirm-label="Suspendre"
+                :loading="pricingBusy === p.id"
+                @confirm="toggleAvailable(p)"
+                @cancel="confirmSuspendId = null"
+              />
+              <CoreInlineConfirm
+                v-if="confirmRemoveId === p.id"
+                class="mt-2.5"
+                tone="danger"
+                :message="`Retirer le tarif « ${freqLabel(p.billing_frequency).toLowerCase()} » ?${p.billing_frequency === 'daily' ? ' La réservation en ligne sera fermée.' : ''}`"
+                confirm-label="Retirer"
+                :loading="pricingBusy === p.id"
+                @confirm="removePricing(p)"
+                @cancel="confirmRemoveId = null"
+              />
             </div>
-          </div>
+          </section>
 
           <!-- Durée de séjour -->
-          <div class="rounded-2xl border border-[var(--border-subtle)] bg-white p-5.5">
-            <p class="m-0 text-[15px] font-bold">Durée de séjour</p>
-            <p class="mb-3 mt-1 text-[12.5px] text-[var(--text-muted)]">Appliquée à chaque réservation en ligne. Laissez vide pour ne rien imposer.</p>
-            <div class="flex flex-wrap items-end gap-2.5">
-              <label class="text-[11.5px] font-bold">Minimum (nuits)<input v-model="minStay" inputmode="numeric" placeholder="1" class="mt-1 block h-10 w-28 rounded-sm border border-[var(--border-default)] bg-white px-2 font-mono text-[13px] font-normal outline-none" @input="staySaved = false"></label>
-              <label class="text-[11.5px] font-bold">Maximum (nuits)<input v-model="maxStay" inputmode="numeric" placeholder="—" class="mt-1 block h-10 w-28 rounded-sm border border-[var(--border-default)] bg-white px-2 font-mono text-[13px] font-normal outline-none" @input="staySaved = false"></label>
-              <CoreButton size="sm" :disabled="staySaving" @click="saveStayLimits">{{ staySaving ? '…' : 'Enregistrer' }}</CoreButton>
-              <span v-if="staySaved" class="text-[12.5px] font-semibold text-ok-fg">Enregistré ✓</span>
+          <section class="rounded-2xl border border-[var(--border-subtle)] bg-white p-5.5">
+            <h2 class="m-0 text-[15px] font-bold">Durée de séjour</h2>
+            <p class="mb-3.5 mt-1 text-[13.5px] text-[var(--text-muted)]">Appliquée à chaque réservation en ligne. Laissez vide pour ne rien imposer.</p>
+            <div class="grid grid-cols-2 items-start gap-3 sm:grid-cols-[1fr_1fr_auto]">
+              <FormsInput :model-value="minStay" label="Minimum (nuits)" type="number" mono placeholder="1" @update:model-value="onStayInput('min', $event)" />
+              <FormsInput :model-value="maxStay" label="Maximum (nuits)" type="number" mono placeholder="Aucun" @update:model-value="onStayInput('max', $event)" />
+              <CoreButton tone="secondary" class="col-span-2 sm:col-span-1 sm:mt-[26px]" :disabled="staySaving" @click="saveStayLimits">{{ staySaving ? 'Enregistrement…' : 'Enregistrer' }}</CoreButton>
             </div>
-            <p v-if="stayError" class="mb-0 mt-2 text-[12.5px] font-semibold text-danger-fg">{{ stayError }}</p>
-          </div>
+            <p v-if="staySaved" class="mb-0 mt-2.5 flex items-center gap-1.5 text-[13px] font-semibold text-ok-fg"><Check class="h-4 w-4" :stroke-width="2" />Durées enregistrées : elles s'appliquent aux prochaines réservations.</p>
+            <p v-if="stayError" class="mb-0 mt-2.5 text-[13px] font-semibold text-danger-fg">{{ stayError }}</p>
+          </section>
 
           <!-- Liste d'attente -->
-          <div class="rounded-2xl border border-[var(--border-subtle)] bg-white p-5.5">
-            <p class="m-0 text-[15px] font-bold">Liste d'attente</p>
-            <p class="mb-2 mt-1 text-[12.5px] text-[var(--text-muted)]">Immo ne prévient pas encore automatiquement ces personnes quand le logement se libère : contactez-les.</p>
-            <div v-if="waitlistState === 'loading'" class="mt-3"><DataSkeletonCard :height="40" :lines="1" /></div>
-            <p v-else-if="waitlistState === 'error'" class="mb-0 mt-2 text-[12.5px] text-danger-fg">Impossible de charger la liste d'attente.</p>
-            <p v-else-if="!waitlist.length" class="mb-0 mt-2 text-[12.5px] text-[var(--text-muted)]">Personne en attente pour ce logement.</p>
-            <div v-for="w in waitlist" :key="w.id" class="border-t border-sand-200 py-2.5 first:border-t-0">
-              <div class="flex items-center gap-3">
-                <CoreAvatar :name="waitlistName(w)" :size="34" />
-                <div class="min-w-0 flex-1">
-                  <p class="m-0 text-[13.5px] font-semibold">{{ waitlistName(w) }}</p>
-                  <p class="mb-0 mt-0.5 text-xs text-[var(--text-faint)]">inscrit le {{ fmtDay(w.created_at) }}</p>
-                  <p v-if="w.message" class="mb-0 mt-1 text-[12.5px] italic text-[var(--text-secondary)]">« {{ w.message }} »</p>
-                </div>
-                <CoreButton size="sm" tone="secondary" @click="contactWaitlistTenant(w)">Contacter</CoreButton>
-                <button type="button" class="text-xs font-bold text-danger-fg" @click="confirmWaitId = w.id">Retirer</button>
-              </div>
-              <div v-if="confirmWaitId === w.id" class="mt-2 flex flex-wrap items-center gap-2 rounded-md border border-danger-border bg-danger-bg px-3 py-2">
-                <p class="m-0 flex-1 text-[12.5px] font-semibold text-danger-fg-deep">Retirer {{ waitlistName(w) }} de la liste ?</p>
-                <CoreButton size="sm" tone="danger" @click="removeWaitlistEntry(w)">Retirer</CoreButton>
-                <CoreButton size="sm" tone="secondary" @click="confirmWaitId = null">Annuler</CoreButton>
-              </div>
+          <section class="rounded-2xl border border-[var(--border-subtle)] bg-white p-5.5">
+            <h2 class="m-0 text-[15px] font-bold">Liste d'attente</h2>
+            <p class="mb-3 mt-1 text-[13.5px] text-[var(--text-muted)]">Immo ne prévient pas encore automatiquement ces personnes quand le logement se libère : contactez-les.</p>
+            <DataSkeletonCard v-if="waitlistState === 'loading'" :height="44" :lines="0" />
+            <FeedbackAlertBanner v-else-if="waitlistState === 'error'" tone="danger">
+              Impossible de charger la liste d'attente.
+              <button type="button" class="ml-2 font-bold underline" @click="loadWaitlist">Réessayer</button>
+            </FeedbackAlertBanner>
+            <div v-else-if="!waitlist.length" class="flex items-center gap-3 rounded-md border border-dashed border-[var(--border-default)] px-4 py-3.5">
+              <UserRound class="h-4.5 w-4.5 flex-none text-[var(--text-faint)]" :stroke-width="1.9" />
+              <p class="m-0 text-[13.5px] text-[var(--text-muted)]">Personne en attente pour ce logement. Les locataires s'inscrivent depuis l'annonce quand il est occupé.</p>
             </div>
-            <p v-if="waitlistError" class="mb-0 mt-2 text-[12.5px] font-semibold text-danger-fg">{{ waitlistError }}</p>
-          </div>
+            <div v-for="w in waitlist" :key="w.id" class="border-b border-sand-200 py-3 last:border-b-0">
+              <div class="flex flex-wrap items-center gap-3">
+                <CoreAvatar :name="waitlistName(w)" :size="36" />
+                <div class="min-w-0 flex-1">
+                  <p class="m-0 text-sm font-bold">{{ waitlistName(w) }}</p>
+                  <p class="mb-0 mt-0.5 text-xs text-[var(--text-faint)]">Inscrit le <span class="font-mono">{{ fmtDay(w.created_at) }}</span></p>
+                  <p v-if="w.message" class="mb-0 mt-1 text-[13px] italic text-[var(--text-secondary)] [overflow-wrap:anywhere]">« {{ w.message }} »</p>
+                </div>
+                <div class="flex gap-1">
+                  <CoreButton size="sm" tone="secondary" class="inline-flex items-center gap-1.5" @click="contactWaitlistTenant(w)"><MessageSquare class="h-3.5 w-3.5" :stroke-width="1.9" />Écrire</CoreButton>
+                  <button v-if="confirmWaitId !== w.id" type="button" class="inline-flex items-center gap-1 rounded-pill px-3 py-2 text-xs font-bold text-danger-fg hover:bg-danger-bg" @click="confirmWaitId = w.id"><X class="h-3.5 w-3.5" :stroke-width="1.9" />Retirer</button>
+                </div>
+              </div>
+              <CoreInlineConfirm
+                v-if="confirmWaitId === w.id"
+                class="mt-2.5"
+                tone="danger"
+                :message="`Retirer ${waitlistName(w)} de la liste d'attente ? Rien ne lui est envoyé.`"
+                confirm-label="Retirer"
+                :loading="waitlistBusy"
+                @confirm="removeWaitlistEntry(w)"
+                @cancel="confirmWaitId = null"
+              />
+            </div>
+            <p v-if="waitlistError" class="mb-0 mt-2.5 text-[13px] font-semibold text-danger-fg">{{ waitlistError }}</p>
+          </section>
         </div>
 
         <!-- Calendrier -->
-        <div class="rounded-2xl border border-[var(--border-subtle)] bg-white p-5.5">
+        <section class="rounded-2xl border border-[var(--border-subtle)] bg-white p-5.5">
           <div class="mb-3.5 flex items-center justify-between gap-2">
-            <button type="button" class="grid h-8 w-8 place-items-center rounded-pill border border-[var(--border-default)] text-sm disabled:opacity-40" aria-label="Mois précédent" :disabled="monthOffset <= 0" @click="monthOffset--">‹</button>
-            <p class="m-0 text-[15px] font-bold capitalize">{{ monthLabel }}</p>
-            <button type="button" class="grid h-8 w-8 place-items-center rounded-pill border border-[var(--border-default)] text-sm" aria-label="Mois suivant" @click="monthOffset++">›</button>
+            <button type="button" class="grid h-9 w-9 place-items-center rounded-pill border border-[var(--border-default)] bg-white text-sand-900 disabled:opacity-40" aria-label="Mois précédent" :disabled="monthOffset <= 0" @click="monthOffset--"><ChevronLeft class="h-4 w-4" :stroke-width="1.9" /></button>
+            <h2 class="m-0 text-[15px] font-bold capitalize">{{ monthLabel }}</h2>
+            <button type="button" class="grid h-9 w-9 place-items-center rounded-pill border border-[var(--border-default)] bg-white text-sand-900" aria-label="Mois suivant" @click="monthOffset++"><ChevronRight class="h-4 w-4" :stroke-width="1.9" /></button>
           </div>
 
-          <div v-if="availabilityState === 'loading'" class="flex flex-col gap-2"><DataSkeletonCard :height="180" :lines="1" /></div>
-          <p v-else-if="availabilityState === 'error'" class="m-0 text-[13px] text-danger-fg">Impossible de charger le calendrier. <button type="button" class="font-bold underline" @click="loadAvailability">Réessayer</button></p>
+          <DataSkeletonCard v-if="availabilityState === 'loading'" :height="220" :lines="0" />
+          <FeedbackAlertBanner v-else-if="availabilityState === 'error'" tone="danger">
+            Impossible de charger le calendrier.
+            <button type="button" class="ml-2 font-bold underline" @click="loadAvailability">Réessayer</button>
+          </FeedbackAlertBanner>
           <template v-else>
-            <div class="mb-1 grid grid-cols-7 gap-1.5 text-center text-[10.5px] font-bold text-[var(--text-faint)]">
+            <div class="mb-1 grid grid-cols-7 gap-1.5 text-center text-label font-bold text-[var(--text-faint)]">
               <span v-for="(d, i) in ['L', 'M', 'M', 'J', 'V', 'S', 'D']" :key="i">{{ d }}</span>
             </div>
             <div class="grid grid-cols-7 gap-1.5">
@@ -551,7 +656,7 @@ async function unblock(k: KnownBlock) {
                   v-if="c.d"
                   class="grid h-full w-full place-items-center rounded-sm font-mono text-xs font-bold"
                   :class="[c.block ? (BLOCK_COLOR[c.block.blocked_by] ?? 'bg-sand-300') : 'border border-sand-200 bg-white text-[var(--text-secondary)]', c.past ? 'opacity-40' : '']"
-                  :title="c.block ? BLOCK_LABEL[c.block.blocked_by] ?? c.block.blocked_by : 'Libre'"
+                  :title="c.block ? BLOCK_LABEL[c.block.blocked_by] ?? 'Indisponible' : 'Libre'"
                 >{{ c.d }}</div>
               </div>
             </div>
@@ -563,37 +668,52 @@ async function unblock(k: KnownBlock) {
             </div>
 
             <div class="mt-4.5 border-t border-sand-200 pt-4">
-              <div class="mb-2 flex items-center justify-between">
-                <p class="m-0 text-[13.5px] font-bold">Indisponibilités à venir</p>
-                <button type="button" class="rounded-pill border border-[var(--border-default)] bg-white px-3.5 py-2 text-[12.5px] font-bold" @click="showBlockForm = !showBlockForm">+ Bloquer des dates</button>
+              <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <p class="m-0 text-sm font-bold">Indisponibilités à venir</p>
+                <CoreButton v-if="!showBlockForm" size="sm" tone="secondary" class="inline-flex items-center gap-1.5" @click="showBlockForm = true; blockFlash = ''"><CalendarOff class="h-4 w-4" :stroke-width="1.9" />Bloquer des dates</CoreButton>
               </div>
 
-              <div v-if="showBlockForm" class="mb-3 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-page)] p-3.5">
-                <div class="grid grid-cols-2 gap-2">
-                  <label class="text-[11.5px] font-bold">Premier jour bloqué<input v-model="blockFirst" type="date" :min="todayIso" class="mt-1 block h-10 w-full rounded-sm border border-[var(--border-default)] bg-white px-2 text-[13px] font-normal outline-none"></label>
-                  <label class="text-[11.5px] font-bold">Dernier jour bloqué<input v-model="blockLast" type="date" :min="blockFirst || todayIso" class="mt-1 block h-10 w-full rounded-sm border border-[var(--border-default)] bg-white px-2 text-[13px] font-normal outline-none"></label>
+              <div v-if="showBlockForm" class="mb-3 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-page)] p-4">
+                <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <FormsInput v-model="blockFirst" label="Premier jour bloqué" type="date" />
+                  <FormsInput v-model="blockLast" label="Dernier jour bloqué" type="date" />
                 </div>
-                <input v-model="blockNote" maxlength="255" placeholder="Motif (optionnel, pour vous seul)" class="mt-2 h-10 w-full rounded-sm border border-[var(--border-default)] bg-white px-2 text-[13px] outline-none">
-                <div class="mt-2.5 flex gap-2">
-                  <CoreButton size="sm" :disabled="blockBusy" @click="submitBlock">{{ blockBusy ? '…' : 'Bloquer' }}</CoreButton>
+                <FormsInput v-model="blockNote" label="Motif (facultatif)" placeholder="Travaux, usage personnel…" hint="Visible par vous seul, sur cet appareil." class="mt-3" />
+                <div class="mt-3 flex gap-2">
+                  <CoreButton size="sm" :disabled="blockBusy" @click="submitBlock">{{ blockBusy ? 'Blocage…' : 'Bloquer' }}</CoreButton>
                   <CoreButton size="sm" tone="secondary" @click="showBlockForm = false">Annuler</CoreButton>
                 </div>
               </div>
-              <p v-if="blockError" class="mb-2 mt-0 text-[12.5px] font-semibold text-danger-fg">{{ blockError }}</p>
+              <p v-if="blockFlash" class="mb-2.5 mt-0 rounded-md border border-ok-border bg-ok-bg px-3.5 py-2.5 text-[13px] font-semibold text-green-900">{{ blockFlash }}</p>
+              <p v-if="blockError" class="mb-2.5 mt-0 text-[13px] font-semibold text-danger-fg">{{ blockError }}</p>
 
-              <p v-if="!upcomingBlocks.length" class="m-0 text-[12.5px] text-[var(--text-muted)]">Aucune indisponibilité prévue.</p>
-              <div v-for="(b, i) in upcomingBlocks" :key="i" class="flex items-center gap-2.5 border-t border-sand-100 py-2 first:border-t-0">
-                <span class="h-2.5 w-2.5 flex-none rounded-pill" :class="BLOCK_COLOR[b.blocked_by]?.split(' ')[0] ?? 'bg-sand-300'" />
-                <div class="min-w-0 flex-1">
-                  <p class="m-0 text-[13px] font-semibold">{{ BLOCK_LABEL[b.blocked_by] ?? b.blocked_by }}<template v-if="knownFor(b)?.note"> — {{ knownFor(b)?.note }}</template></p>
-                  <p class="mb-0 mt-0.5 text-xs text-[var(--text-faint)]">{{ blockRange(b) }}</p>
+              <p v-if="!upcomingBlocks.length" class="m-0 text-[13.5px] text-[var(--text-muted)]">Aucune indisponibilité prévue : le logement est libre à la réservation.</p>
+              <div v-for="(b, i) in upcomingBlocks" :key="i" class="border-b border-sand-200 py-2.5 last:border-b-0">
+                <div class="flex items-center gap-2.5">
+                  <span class="h-2.5 w-2.5 flex-none rounded-pill" :class="BLOCK_COLOR[b.blocked_by]?.split(' ')[0] ?? 'bg-sand-300'" />
+                  <div class="min-w-0 flex-1">
+                    <p class="m-0 text-[13.5px] font-semibold">{{ BLOCK_LABEL[b.blocked_by] ?? 'Indisponible' }}<template v-if="knownFor(b)?.note"> · {{ knownFor(b)?.note }}</template></p>
+                    <p class="mb-0 mt-0.5 text-xs text-[var(--text-faint)]">{{ blockRange(b) }}</p>
+                  </div>
+                  <button v-if="b.blocked_by === 'manual' && knownFor(b) && !sameBlock(confirmUnblock, b)" type="button" class="rounded-pill px-3 py-2 text-xs font-bold text-danger-fg hover:bg-danger-bg" @click="askUnblock(b)">Débloquer</button>
                 </div>
-                <button v-if="b.blocked_by === 'manual' && knownFor(b)" type="button" class="text-xs font-bold text-danger-fg" @click="unblockBlock(b)">Débloquer</button>
-                <span v-else-if="b.blocked_by === 'manual'" class="text-[11px] text-[var(--text-faint)]" title="L'API ne permet de retirer un blocage que depuis l'appareil qui l'a créé.">non retirable ici</span>
+                <p v-if="b.blocked_by === 'manual' && !knownFor(b)" class="mb-0 mt-1 pl-5 text-xs text-[var(--text-faint)]">
+                  Créé depuis un autre appareil : <NuxtLink :to="{ path: '/contact', query: { sujet: 'Autre' } }" class="font-bold text-green-700">contactez le support</NuxtLink> pour le retirer.
+                </p>
+                <CoreInlineConfirm
+                  v-if="sameBlock(confirmUnblock, b)"
+                  class="mt-2"
+                  tone="warning"
+                  :message="`Débloquer ces dates (${blockRange(b)}) ? Elles redeviennent réservables en ligne.`"
+                  confirm-label="Débloquer"
+                  :loading="unblocking"
+                  @confirm="unblockConfirmed"
+                  @cancel="confirmUnblock = null"
+                />
               </div>
             </div>
           </template>
-        </div>
+        </section>
       </div>
     </template>
   </div>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ClipboardCheck, DoorOpen, FileText } from '@lucide/vue'
 import type { InventoryDetail, InventoryType, LeaseSummary } from '~/types/tenant'
 import type { LandlordBookingSummary } from '~/types/landlordBookings'
 import { leasePhase } from '~/utils/leases'
@@ -97,22 +98,38 @@ async function load() {
 onMounted(load)
 onMounted(() => useLandlordEdlBadge().markAllSeen())
 
-/** `?inventory=` (notification) ou `?lease=…&type=…` (fiche du bail) ouvre directement l'état des lieux. */
-let queryHandled = false
+/**
+ * `?inventory=` (notification), `?lease=…&type=…` (fiche du bail) ou `?booking=…&type=…`
+ * (réservation dont la retenue attend l'état des lieux) ouvre directement l'état des lieux.
+ * Suivi aussi quand on est déjà sur la page (clic de notification) ; un même lien ne rouvre pas deux fois.
+ */
+let lastQueryKey = ''
 function openFromQuery() {
-  if (queryHandled) return
-  queryHandled = true
   const q = route.query
+  const type = q.type === 'exit' ? 'exit' : 'entry'
+  const key = [q.inventory, q.lease, q.booking, type].join('|')
+  if (key === lastQueryKey || state.value === 'loading') return
+  lastQueryKey = key
   const r = typeof q.inventory === 'string'
     ? rows.value.find(x => x.inventory?.id === q.inventory)
     : typeof q.lease === 'string'
-      ? rows.value.find(x => x.leaseId === q.lease && x.type === (q.type === 'exit' ? 'exit' : 'entry'))
-      : undefined
+      ? rows.value.find(x => x.leaseId === q.lease && x.type === type)
+      : typeof q.booking === 'string'
+        ? rows.value.find(x => x.bookingId === q.booking && x.type === type)
+        : undefined
   if (r) {
     tab.value = category(r)
     editing.value = r
+  } else if (typeof q.inventory === 'string' || typeof q.lease === 'string' || typeof q.booking === 'string') {
+    queryMiss.value = true
   }
 }
+/** Lien vers un état des lieux qui n'est plus (ou pas encore) dans la liste : on le dit au lieu de ne rien faire. */
+const queryMiss = ref(false)
+watch(() => [route.query.inventory, route.query.lease, route.query.booking, route.query.type], () => {
+  queryMiss.value = false
+  if (state.value === 'success') openFromQuery()
+})
 
 function badge(r: EdlRow): { label: string; tone: 'ok' | 'warn' | 'neutral' | 'danger' } {
   if (!r.inventory) return r.required ? { label: 'Exigé', tone: 'danger' } : { label: 'À faire', tone: 'neutral' }
@@ -121,8 +138,15 @@ function badge(r: EdlRow): { label: string; tone: 'ok' | 'warn' | 'neutral' | 'd
   return { label: INVENTORY_STATUS_LABEL[r.inventory.status] ?? r.inventory.status, tone: INVENTORY_STATUS_TONE[r.inventory.status] ?? 'neutral' }
 }
 
-/** Onglets : ce qui attend une action de votre part, ce qui attend le locataire, ce qui est signé. */
-const tab = ref<'todo' | 'waiting' | 'done'>('todo')
+/** Onglets : ce qui attend une action de votre part, ce qui attend le locataire, ce qui est signé (gardés dans l'URL). */
+type EdlTab = 'todo' | 'waiting' | 'done'
+const router = useRouter()
+function tabFrom(v: unknown): EdlTab {
+  return v === 'waiting' || v === 'done' ? v : 'todo'
+}
+const tab = ref<EdlTab>(tabFrom(route.query.onglet))
+watch(tab, t => router.replace({ query: { ...route.query, onglet: t === 'todo' ? undefined : t } }))
+const tabModel = computed({ get: () => tab.value as string, set: (v: string) => { tab.value = tabFrom(v) } })
 function category(r: EdlRow): 'todo' | 'waiting' | 'done' {
   if (!r.inventory || r.inventory.status === 'draft' || awaitingMySignature(r.inventory, false)) return 'todo'
   return r.inventory.status === 'signed' ? 'done' : 'waiting'
@@ -133,6 +157,11 @@ const counts = computed(() => ({
   done: rows.value.filter(r => category(r) === 'done').length
 }))
 const shown = computed(() => rows.value.filter(r => category(r) === tab.value))
+const tabOptions = computed(() => [
+  { value: 'todo', label: `À faire · ${counts.value.todo}` },
+  { value: 'waiting', label: `Chez le locataire · ${counts.value.waiting}` },
+  { value: 'done', label: `Signés · ${counts.value.done}` }
+])
 
 const editing = ref<EdlRow | null>(null)
 function onSaved() {
@@ -141,7 +170,7 @@ function onSaved() {
 </script>
 
 <template>
-  <div class="animate-[im-fade_.3s_ease_both]">
+  <div class="animate-[im-fade_.3s_ease_backwards]">
     <div v-if="state === 'loading' && !rows.length" class="flex flex-col gap-3.5">
       <DataSkeletonCard v-for="i in 3" :key="i" :height="70" :lines="1" />
     </div>
@@ -151,38 +180,45 @@ function onSaved() {
       <button type="button" class="ml-2 font-bold underline" @click="load">Réessayer</button>
     </FeedbackAlertBanner>
 
-    <p v-else-if="state === 'empty'" class="rounded-md border border-dashed border-[var(--border-default)] bg-white px-4 py-10 text-center text-[13.5px] text-[var(--text-muted)]">
-      Aucun bail signé ni séjour confirmé pour l'instant : un état des lieux se rattache à l'un des deux.
-    </p>
+    <ProEmptyPanel v-else-if="state === 'empty'" :icon="ClipboardCheck" title="Aucun état des lieux à faire" text="Un état des lieux se rattache à un bail signé ou à un séjour confirmé. Il apparaîtra ici dès que l'un des deux existe.">
+      <NuxtLink to="/pro/baux" class="inline-flex items-center rounded-md border border-[var(--border-default)] bg-white px-5 py-3 text-[14px] font-bold text-sand-900">Voir mes baux</NuxtLink>
+    </ProEmptyPanel>
 
     <template v-else>
-      <p class="mb-4 mt-0 text-[13.5px] leading-[1.55] text-[var(--text-muted)]">
+      <p class="mb-4.5 mt-0 text-[13.5px] leading-[1.55] text-[var(--text-muted)]">
         Faites l'état des lieux d'entrée à la remise des clés et celui de sortie au départ, idéalement ensemble : chacun signe sur son téléphone. Une fois signé des deux côtés, il ne peut plus être modifié.
       </p>
-      <div class="mb-4 flex gap-1.5 rounded-pill bg-sand-200 p-1" style="width: fit-content">
-        <button type="button" class="rounded-pill px-3.5 py-1.5 text-[12.5px] font-bold" :class="tab === 'todo' ? 'bg-white shadow-sm' : 'text-[var(--text-muted)]'" @click="tab = 'todo'">À faire ({{ counts.todo }})</button>
-        <button type="button" class="rounded-pill px-3.5 py-1.5 text-[12.5px] font-bold" :class="tab === 'waiting' ? 'bg-white shadow-sm' : 'text-[var(--text-muted)]'" @click="tab = 'waiting'">Chez le locataire ({{ counts.waiting }})</button>
-        <button type="button" class="rounded-pill px-3.5 py-1.5 text-[12.5px] font-bold" :class="tab === 'done' ? 'bg-white shadow-sm' : 'text-[var(--text-muted)]'" @click="tab = 'done'">Signés ({{ counts.done }})</button>
-      </div>
-      <p v-if="!shown.length" class="rounded-md border border-dashed border-[var(--border-default)] bg-white px-4 py-8 text-center text-[13.5px] text-[var(--text-muted)]">
-        {{ tab === 'todo' ? 'Rien à faire pour l\'instant.' : tab === 'waiting' ? 'Aucun état des lieux en attente du locataire.' : 'Aucun état des lieux signé.' }}
+      <p v-if="queryMiss" class="mb-4 rounded-md border border-warn-border bg-warn-bg px-3.5 py-2.5 text-[13px] font-semibold text-warn-fg">
+        L'état des lieux demandé par le lien n'est pas dans votre liste : le bail ou le séjour n'est peut-être plus actif.
       </p>
-      <div v-else class="overflow-hidden rounded-2xl border border-[var(--border-subtle)] bg-white p-2">
-        <div v-for="r in shown" :key="r.key" class="flex flex-wrap items-center gap-3.5 border-b border-sand-200 p-3.5 last:border-b-0">
-          <div class="grid h-10 w-10 flex-none place-items-center rounded-md text-[15px]" :class="r.inventory?.status === 'signed' ? 'bg-ok-bg' : r.inventory ? 'bg-warn-bg' : 'bg-sand-200'">
-            {{ r.type === 'exit' ? '⇤' : '☑' }}
+      <div class="mb-4.5 max-w-full overflow-x-auto">
+        <FormsSegmentedControl v-model="tabModel" :options="tabOptions" size="sm" class="whitespace-nowrap" />
+      </div>
+      <p v-if="!shown.length" class="rounded-md border border-dashed border-[var(--border-default)] bg-white px-4 py-10 text-center text-[13.5px] text-[var(--text-muted)]">
+        {{ tab === 'todo' ? 'Rien à faire pour l\'instant : tout est envoyé ou signé.' : tab === 'waiting' ? 'Aucun état des lieux en attente du locataire.' : 'Aucun état des lieux signé pour l\'instant.' }}
+      </p>
+      <section v-else class="rounded-2xl border border-[var(--border-subtle)] bg-white px-5.5 py-2">
+        <div v-for="r in shown" :key="r.key" class="flex flex-wrap items-center gap-3 border-b border-sand-200 py-3.5 last:border-b-0">
+          <div class="grid h-10 w-10 flex-none place-items-center rounded-md" :class="r.inventory?.status === 'signed' ? 'bg-ok-bg text-ok-fg' : r.inventory ? 'bg-warn-bg text-warn-fg' : 'bg-sand-200 text-[var(--text-secondary)]'">
+            <DoorOpen v-if="r.type === 'exit'" class="h-4.5 w-4.5" :stroke-width="1.9" />
+            <ClipboardCheck v-else class="h-4.5 w-4.5" :stroke-width="1.9" />
           </div>
           <div class="min-w-0 flex-1">
-            <p class="m-0 text-[14.5px] font-bold">{{ r.title }}</p>
-            <p class="mb-0 mt-0.5 text-[12.5px] text-[var(--text-muted)]">
+            <div class="flex flex-wrap items-center gap-2">
+              <p class="m-0 text-sm font-bold">{{ r.title }}</p>
+              <CoreBadge :tone="badge(r).tone">{{ badge(r).label }}</CoreBadge>
+            </div>
+            <p class="mb-0 mt-0.5 text-xs text-[var(--text-faint)]">
               {{ r.meta }}<template v-if="r.required && !r.inventory"> · la retenue du séjour n'est versée qu'une fois l'état des lieux fait</template>
             </p>
           </div>
-          <CoreBadge :tone="badge(r).tone">{{ badge(r).label }}</CoreBadge>
-          <NuxtLink v-if="r.leaseId" :to="`/pro/baux/${r.leaseId}`" class="text-[12.5px] font-bold text-[var(--text-muted)] underline">Bail</NuxtLink>
-          <button type="button" class="rounded-pill border border-[var(--border-default)] bg-white px-3.5 py-2 text-[12.5px] font-bold" @click="editing = r">{{ r.inventory ? 'Ouvrir' : 'Commencer' }}</button>
+          <div class="flex flex-none items-center gap-1">
+            <NuxtLink v-if="r.leaseId" :to="`/pro/baux/${r.leaseId}`" class="inline-flex items-center gap-1 rounded-pill px-3 py-2 text-xs font-bold text-[var(--text-secondary)] hover:bg-sand-100"><FileText class="h-3.5 w-3.5" :stroke-width="1.9" />Bail</NuxtLink>
+            <NuxtLink v-else-if="r.bookingId" :to="{ path: '/pro/reservations', query: { booking: r.bookingId } }" class="inline-flex items-center gap-1 rounded-pill px-3 py-2 text-xs font-bold text-[var(--text-secondary)] hover:bg-sand-100">Séjour</NuxtLink>
+            <CoreButton size="sm" tone="secondary" @click="editing = r">{{ r.inventory ? 'Ouvrir' : 'Commencer' }}</CoreButton>
+          </div>
         </div>
-      </div>
+      </section>
     </template>
 
     <ProEdlEditorModal
