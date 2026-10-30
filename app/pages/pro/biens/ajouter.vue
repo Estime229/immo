@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { Check, ImagePlus, Lock, X } from '@lucide/vue'
 import { ApiRequestError } from '~/utils/authenticatedFetcher'
 import { errorText } from '~/utils/apiErrors'
 import { UPLOAD_HINT, prepareUpload } from '~/utils/uploadFile'
@@ -8,6 +9,7 @@ import {
   PROPERTY_CHARACTERISTICS, RENTAL_CHOICES, imagesPayload, rentalSetup, validateMonths, validateRentalPrices,
   type RentalChoice
 } from '~/utils/propertyForm'
+import { photoRemovalWarning } from '~/utils/proProperties'
 
 definePageMeta({ layout: 'pro' })
 
@@ -153,17 +155,25 @@ async function addPhoto(e: Event) {
     input.value = ''
   }
 }
+/** Retirer une photo se confirme sur place (5 au minimum pour publier). */
+const confirmPhotoId = ref<string | null>(null)
+const photoBusy = ref(false)
+const removalWarning = computed(() => photoRemovalWarning(photos.value.length))
 async function changePhotos(change: { removeId?: string; primaryId?: string }) {
   if (!propertyId.value) return
   uploadError.value = ''
+  photoBusy.value = true
   const images = imagesPayload(photos.value, change)
   try {
     await propertiesApi.update(propertyId.value, { images })
     // L'API recrée les lignes média (nouveaux id) : on relit plutôt que de deviner.
     const fresh = await searchApi.fetchById(propertyId.value)
     photos.value = [...fresh.media].sort((x, y) => Number(!!y.is_primary) - Number(!!x.is_primary)).map(m => ({ id: m.id, url: m.url, is_primary: !!m.is_primary }))
+    confirmPhotoId.value = null
   } catch (e) {
     uploadError.value = formatError(e, 'La modification des photos a échoué.')
+  } finally {
+    photoBusy.value = false
   }
 }
 
@@ -311,6 +321,17 @@ const currentStepError = computed(() => {
   return step.value === 2 ? step2Error.value : step.value === 3 ? step3Error.value : step.value === 4 ? step4Error.value : null
 })
 
+/* ---- Options des listes (FormsSelect) ---- */
+const toOptions = (list: { code: string; label: string }[]) => list.map(o => ({ value: o.code, label: o.label }))
+const propertyTypeOptions = computed(() => toOptions(propertyTypes.value))
+const cityOptions = computed(() => cities.value.map(c => ({ value: c.id, label: c.name })))
+const neighborhoodOptions = computed(() => neighborhoods.value.map(n => ({ value: n.id, label: n.name })))
+const unitTypeOptions = computed(() => unitTypes.value.map(t => ({ value: t.id, label: t.label })))
+const furnishedSelect = computed(() => toOptions(furnishedOptions.value))
+const waterSelect = computed(() => toOptions(waterOptions.value))
+const meterSelect = computed(() => toOptions(meterOptions.value))
+const progress = computed(() => `${Math.round((step.value / STEP_LABELS.length) * 100)}%`)
+
 const summary = computed(() => {
   const parts: string[] = []
   if (hasMonthly.value && monthlyPrice.value) parts.push(`${formatFcfa(Number(monthlyPrice.value))} / mois`)
@@ -320,84 +341,74 @@ const summary = computed(() => {
 </script>
 
 <template>
-  <div>
-    <div v-if="notVerified" class="mx-auto max-w-[560px] rounded-2xl border border-[var(--border-subtle)] bg-white px-7 py-9 text-center">
-      <span class="mx-auto grid h-14 w-14 place-items-center rounded-pill" :class="stage === 'rejected' ? 'bg-danger-bg text-danger-fg' : stage === 'review' ? 'bg-info-bg text-info-fg' : 'bg-green-50 text-green-700'">
-        <CoreLockIcon :size="24" />
+  <div class="animate-[im-fade_.3s_ease_backwards]">
+    <section v-if="notVerified" class="mx-auto max-w-[560px] rounded-2xl border border-[var(--border-subtle)] bg-white p-5.5 text-center sm:px-8 sm:py-9">
+      <span class="mx-auto grid h-[46px] w-[46px] place-items-center rounded-pill" :class="stage === 'rejected' ? 'bg-danger-bg text-danger-fg' : stage === 'review' ? 'bg-info-bg text-info-fg' : 'bg-green-50 text-green-700'">
+        <Lock class="h-5 w-5" :stroke-width="1.9" />
       </span>
-      <h2 class="mb-0 mt-4 font-display text-[22px] font-bold tracking-[-.02em]">{{ gateCopy.title }}</h2>
-      <p class="mx-auto mb-0 mt-2 max-w-[440px] text-[14.5px] leading-[1.6] text-[var(--text-secondary)]">{{ gateCopy.text }}</p>
-      <div class="mt-6 flex flex-col justify-center gap-2.5 sm:flex-row">
-        <NuxtLink :to="verificationLink('/pro/biens/ajouter')" class="rounded-md bg-[image:var(--action-primary)] px-6 py-3.5 text-[15px] font-bold text-white shadow-action">{{ gateCopy.cta }}</NuxtLink>
-        <NuxtLink to="/pro/biens" class="rounded-md border border-[var(--border-default)] bg-white px-6 py-3.5 text-[15px] font-bold">Retour à mes biens</NuxtLink>
+      <h2 class="mb-0 mt-4 text-[17px] font-bold">{{ gateCopy.title }}</h2>
+      <p class="mx-auto mb-0 mt-2 max-w-[440px] text-[13.5px] leading-[1.6] text-[var(--text-muted)]">{{ gateCopy.text }}</p>
+      <div class="mt-5.5 flex flex-col justify-center gap-2.5 sm:flex-row">
+        <NuxtLink :to="verificationLink('/pro/biens/ajouter')" class="inline-flex items-center justify-center rounded-md bg-[image:var(--action-primary)] px-5 py-3 text-[14px] font-bold text-white shadow-action">{{ gateCopy.cta }}</NuxtLink>
+        <NuxtLink to="/pro/biens" class="inline-flex items-center justify-center rounded-md border border-[var(--border-default)] bg-white px-5 py-3 text-[14px] font-bold text-sand-900">Retour à mes biens</NuxtLink>
       </div>
-    </div>
+    </section>
 
-    <div v-else class="grid grid-cols-1 items-start gap-6.5 lg:grid-cols-[220px_1fr]">
-      <div class="rounded-xl border border-[var(--border-subtle)] bg-white p-4.5 lg:sticky lg:top-[94px]">
+    <div v-else class="grid grid-cols-1 items-start gap-4.5 lg:grid-cols-[220px_minmax(0,1fr)]">
+      <!-- Mobile et tablette : barre de progression compacte, le formulaire reste en haut de l'écran -->
+      <div class="rounded-2xl border border-[var(--border-subtle)] bg-white px-5 py-3.5 lg:hidden">
+        <div class="flex items-baseline justify-between gap-3">
+          <p class="m-0 text-sm font-bold">{{ STEP_LABELS[step - 1] }}</p>
+          <p class="m-0 text-xs text-[var(--text-faint)]">Étape <span class="font-mono">{{ step }}</span> sur <span class="font-mono">{{ STEP_LABELS.length }}</span></p>
+        </div>
+        <div class="mt-2.5 h-1.5 overflow-hidden rounded-pill bg-sand-200">
+          <div class="h-full rounded-pill bg-green-600 transition-[width] duration-[var(--duration-base)]" :style="{ width: progress }" />
+        </div>
+      </div>
+
+      <!-- Ordinateur : sommaire des étapes -->
+      <nav aria-label="Étapes" class="hidden rounded-2xl border border-[var(--border-subtle)] bg-white p-4 lg:sticky lg:top-[94px] lg:block">
         <button
           v-for="(label, i) in STEP_LABELS"
           :key="label"
           type="button"
-          class="flex w-full items-center gap-2.5 rounded-sm p-2.5 text-left"
-          :class="step === i + 1 ? 'bg-green-50' : 'bg-transparent'"
+          class="flex w-full items-center gap-2.5 rounded-md p-2.5 text-left disabled:cursor-not-allowed"
+          :class="step === i + 1 ? 'bg-green-50' : 'bg-transparent hover:bg-sand-100'"
           :disabled="i + 1 > step && !propertyId"
+          :aria-current="step === i + 1 ? 'step' : undefined"
           @click="(i + 1 <= step || propertyId) && (step = i + 1)"
         >
-          <span
-            class="grid h-6 w-6 flex-none place-items-center rounded-pill text-[11px] font-black"
-            :class="step >= i + 1 ? 'bg-green-600 text-white' : 'bg-sand-300 text-[var(--text-faint)]'"
-          >{{ step > i + 1 ? '✓' : i + 1 }}</span>
+          <span class="grid h-6 w-6 flex-none place-items-center rounded-pill font-mono text-[11px] font-black" :class="step >= i + 1 ? 'bg-green-600 text-white' : 'bg-sand-300 text-[var(--text-faint)]'">
+            <Check v-if="step > i + 1" class="h-3.5 w-3.5" :stroke-width="2.4" /><template v-else>{{ i + 1 }}</template>
+          </span>
           <span class="text-[13px] font-semibold" :class="step === i + 1 ? 'text-green-800' : 'text-[var(--text-secondary)]'">{{ label }}</span>
         </button>
         <div class="my-3 h-px bg-sand-200" />
-        <p class="m-0 px-1 text-xs text-[var(--text-faint)]">{{ propertyId ? 'Bien enregistré — étape' : 'Étape' }} {{ step }} / 5</p>
-      </div>
+        <p class="m-0 px-1 text-xs text-[var(--text-faint)]">{{ propertyId ? 'Bien enregistré · étape' : 'Étape' }} <span class="font-mono">{{ step }} / 5</span></p>
+      </nav>
 
-      <div class="rounded-2xl border border-[var(--border-subtle)] bg-white p-6.5">
-        <h2 class="mb-1 mt-0 font-display text-[22px] font-bold tracking-[-.02em]">{{ STEP_LABELS[step - 1] }}</h2>
-        <p class="mb-5.5 mt-0 text-[13.5px] text-[var(--text-muted)]">{{ hint }}</p>
+      <section class="rounded-2xl border border-[var(--border-subtle)] bg-white p-5.5">
+        <h2 class="m-0 hidden text-[15px] font-bold lg:block">{{ STEP_LABELS[step - 1] }}</h2>
+        <p class="mb-5 mt-0 text-[13.5px] text-[var(--text-muted)] lg:mt-1">{{ hint }}</p>
 
         <div v-if="step === 1" class="flex flex-col gap-3.5">
           <p v-if="step1Error" class="m-0 rounded-md border border-danger-border bg-danger-bg px-3.5 py-3 text-[13px] font-semibold text-danger-fg">{{ step1Error }}</p>
-          <div>
-            <p class="mb-1.5 mt-0 text-[12.5px] font-bold">Nom du bien</p>
-            <input v-model="name" placeholder="Résidence Étoile" class="h-[46px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-3.5 text-sm outline-none">
-          </div>
+          <FormsInput v-model="name" label="Nom du bien" placeholder="Résidence Étoile" />
           <div class="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
-            <div>
-              <p class="mb-1.5 mt-0 text-[12.5px] font-bold">Type de bâtiment</p>
-              <select v-model="buildingType" class="h-[46px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-3 text-sm text-sand-900">
-                <option v-for="t in propertyTypes" :key="t.code" :value="t.code">{{ t.label }}</option>
-              </select>
-            </div>
-            <div>
-              <p class="mb-1.5 mt-0 text-[12.5px] font-bold">Ville</p>
-              <select v-model="cityId" class="h-[46px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-3 text-sm text-sand-900">
-                <option v-for="c in cities" :key="c.id" :value="c.id">{{ c.name }}</option>
-              </select>
-            </div>
-            <div>
-              <p class="mb-1.5 mt-0 text-[12.5px] font-bold">Quartier (optionnel)</p>
-              <select v-model="neighborhoodId" class="h-[46px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-3 text-sm text-sand-900">
-                <option value="">—</option>
-                <option v-for="n in neighborhoods" :key="n.id" :value="n.id">{{ n.name }}</option>
-              </select>
-            </div>
-            <div>
-              <p class="mb-1.5 mt-0 text-[12.5px] font-bold">Adresse (optionnel)</p>
-              <input v-model="address" placeholder="Rue 12.45, Fidjrossè" class="h-[46px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-3.5 text-sm outline-none">
-            </div>
+            <FormsSelect v-model="buildingType" label="Type de bâtiment" :options="propertyTypeOptions" class="[&_select]:w-full" />
+            <FormsSelect v-model="cityId" label="Ville" :options="cityOptions" class="[&_select]:w-full" />
+            <FormsSelect v-model="neighborhoodId" label="Quartier (facultatif)" placeholder="Non précisé" :options="neighborhoodOptions" class="[&_select]:w-full" />
+            <FormsInput v-model="address" label="Adresse (facultatif)" placeholder="Rue 12.45, Fidjrossè" />
           </div>
           <div>
             <p class="mb-1 mt-0 text-[12.5px] font-bold">Position sur la carte (recommandé)</p>
             <p class="mb-2.5 mt-0 text-[12.5px] text-[var(--text-muted)]">Les locataires verront le bien à cet endroit, dans la recherche et sur l'annonce.</p>
             <MapPicker v-model="gps" :city-name="cityName" :clearable="!gpsSaved" />
           </div>
-          <div>
-            <p class="mb-1.5 mt-0 text-[12.5px] font-bold">Description (optionnel)</p>
+          <label class="block">
+            <span class="mb-[7px] block text-[12.5px] font-bold">Description (facultatif)</span>
             <textarea v-model="description" placeholder="Environnement, accès, points forts…" class="min-h-[84px] w-full resize-y rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] p-3.5 text-sm outline-none" />
-          </div>
+          </label>
           <div>
             <p class="mb-2 mt-0 text-[12.5px] font-bold">Le bâtiment dispose de</p>
             <div class="flex flex-wrap gap-2">
@@ -405,41 +416,52 @@ const summary = computed(() => {
                 v-for="c in PROPERTY_CHARACTERISTICS"
                 :key="c.key"
                 type="button"
-                class="rounded-pill border px-3.5 py-2 text-[13px] font-semibold"
+                :aria-pressed="!!characteristics[c.key]"
+                class="inline-flex items-center gap-1.5 rounded-pill border px-3.5 py-2 text-[13px] font-semibold"
                 :class="characteristics[c.key] ? 'border-green-600 bg-green-50 text-green-800' : 'border-[var(--border-default)] bg-white text-[var(--text-secondary)]'"
                 @click="characteristics = { ...characteristics, [c.key]: !characteristics[c.key] }"
-              >{{ characteristics[c.key] ? '✓ ' : '' }}{{ c.label }}</button>
+              ><Check v-if="characteristics[c.key]" class="h-3.5 w-3.5" :stroke-width="2.2" />{{ c.label }}</button>
             </div>
           </div>
-          <label class="flex cursor-pointer items-center justify-between gap-4 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-page)] p-4">
-            <div>
-              <p class="m-0 text-sm font-bold">Afficher sur ma vitrine publique</p>
-              <p class="mb-0 mt-0.5 text-[12.5px] text-[var(--text-muted)]">Votre page propriétaire liste ce bien. La recherche, elle, montre tout bien ayant un logement libre.</p>
-            </div>
-            <input v-model="onVitrine" type="checkbox" class="h-5 w-5 flex-none accent-[var(--color-green-600)]">
-          </label>
+          <div class="rounded-md border border-[var(--border-subtle)] bg-[var(--surface-page)] p-4">
+            <FormsToggle v-model="onVitrine" label="Afficher sur ma vitrine publique" hint="Votre page propriétaire liste ce bien. La recherche, elle, montre tout bien ayant un logement libre." />
+          </div>
         </div>
 
         <div v-else-if="step === 2">
-          <p class="m-0 mb-3.5 text-[13px] font-semibold" :class="photos.length >= MIN_PHOTOS ? 'text-ok-fg' : 'text-[var(--text-muted)]'">
-            {{ photos.length }} / {{ MIN_PHOTOS }} photos{{ photos.length >= MIN_PHOTOS ? ' ✓' : '' }}
+          <p class="m-0 mb-3.5 flex items-center gap-1.5 text-[13px] font-semibold" :class="photos.length >= MIN_PHOTOS ? 'text-ok-fg' : 'text-[var(--text-muted)]'">
+            <Check v-if="photos.length >= MIN_PHOTOS" class="h-4 w-4" :stroke-width="2.2" /><span class="font-mono">{{ photos.length }} / {{ MIN_PHOTOS }}</span> photos
           </p>
-          <label class="block cursor-pointer rounded-lg border-[1.5px] border-dashed border-[var(--border-default)] bg-[var(--surface-page)] p-7 text-center">
+          <label class="block cursor-pointer rounded-lg border-[1.5px] border-dashed border-[var(--border-default)] bg-[var(--surface-page)] p-7 text-center hover:border-green-600">
             <input type="file" accept="image/jpeg,image/png,image/webp" class="hidden" :disabled="uploading" @change="addPhoto">
-            <p class="m-0 text-sm font-bold">{{ uploading ? 'Envoi en cours…' : 'Cliquez pour ajouter une photo' }}</p>
+            <span class="mx-auto grid h-[46px] w-[46px] place-items-center rounded-pill bg-green-50 text-green-700"><ImagePlus class="h-5 w-5" :stroke-width="1.9" /></span>
+            <p class="mb-0 mt-3 text-sm font-bold">{{ uploading ? 'Envoi en cours…' : 'Ajouter une photo' }}</p>
             <p class="mb-0 mt-1.5 text-[12.5px] text-[var(--text-muted)]">JPG, PNG ou WebP · les photos lourdes sont réduites automatiquement · une à la fois</p>
           </label>
           <p v-if="uploadError" class="mb-0 mt-2.5 text-[13px] font-semibold text-danger-fg">{{ uploadError }}</p>
           <div v-if="photos.length" class="mt-3.5 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
-            <div v-for="p in photos" :key="p.id" class="group relative h-[96px] overflow-hidden rounded-sm bg-cover bg-center" :style="{ backgroundImage: `url(${p.url})` }">
-              <span v-if="p.is_primary" class="absolute left-1.5 top-1.5 rounded-pill bg-green-600 px-2 py-0.5 text-[9.5px] font-bold text-white">Principale</span>
-              <div class="absolute inset-x-1.5 bottom-1.5 flex gap-1">
-                <button v-if="!p.is_primary" type="button" class="flex-1 rounded-xs bg-white/90 px-1.5 py-1 text-[10.5px] font-bold" @click="changePhotos({ primaryId: p.id })">Principale</button>
-                <button type="button" class="rounded-xs bg-white/90 px-2 py-1 text-[10.5px] font-bold text-danger-fg" :aria-label="'Retirer la photo'" @click="changePhotos({ removeId: p.id })">✕</button>
+            <div v-for="p in photos" :key="p.id" class="relative h-[110px] overflow-hidden rounded-md bg-sand-200 bg-cover bg-center" :class="confirmPhotoId === p.id ? 'ring-2 ring-danger-fg' : ''" :style="{ backgroundImage: `url(${p.url})` }">
+              <CoreBadge v-if="p.is_primary" tone="onPhoto" class="absolute left-1.5 top-1.5">Principale</CoreBadge>
+              <div class="absolute inset-x-1.5 bottom-1.5 flex gap-1.5">
+                <button v-if="!p.is_primary" type="button" class="h-9 min-w-0 flex-1 truncate rounded-sm bg-white/95 px-2 text-[11.5px] font-bold text-sand-900 disabled:opacity-50" :disabled="photoBusy" @click="changePhotos({ primaryId: p.id })">Principale</button>
+                <div v-else class="flex-1" />
+                <button type="button" class="grid h-9 w-9 flex-none place-items-center rounded-sm bg-white/95 text-danger-fg disabled:opacity-50" aria-label="Retirer la photo" :disabled="photoBusy" @click="confirmPhotoId = p.id"><X class="h-4 w-4" :stroke-width="2" /></button>
               </div>
             </div>
           </div>
-          <p class="mb-0 mt-3 text-[12px] text-[var(--text-faint)]">{{ UPLOAD_HINT }}. Une annonce avec photos reçoit bien plus de demandes.</p>
+          <CoreInlineConfirm
+            v-if="confirmPhotoId"
+            class="mt-3.5"
+            tone="danger"
+            message="Retirer cette photo ?"
+            confirm-label="Retirer"
+            :loading="photoBusy"
+            @confirm="changePhotos({ removeId: confirmPhotoId! })"
+            @cancel="confirmPhotoId = null"
+          >
+            <p v-if="removalWarning" class="m-0 text-[12.5px] text-danger-fg-deep">{{ removalWarning }}</p>
+          </CoreInlineConfirm>
+          <p class="mb-0 mt-3 text-xs text-[var(--text-faint)]">{{ UPLOAD_HINT }}. Une annonce avec photos reçoit bien plus de demandes.</p>
         </div>
 
         <div v-else-if="step === 3" class="flex flex-col gap-4">
@@ -450,51 +472,29 @@ const summary = computed(() => {
                 v-for="r in RENTAL_CHOICES"
                 :key="r.key"
                 type="button"
+                :aria-pressed="rentalChoice === r.key"
                 class="rounded-md border p-3.5 text-left"
-                :class="rentalChoice === r.key ? 'border-2 border-green-600 bg-green-50' : 'border-[var(--border-default)] bg-white'"
+                :class="rentalChoice === r.key ? 'border-green-600 bg-green-50 ring-1 ring-green-600' : 'border-[var(--border-default)] bg-white'"
                 @click="rentalChoice = r.key"
               >
                 <p class="m-0 text-sm font-bold">{{ r.label }}</p>
-                <p class="mb-0 mt-0.5 text-[12px] text-[var(--text-muted)]">{{ r.hint }}</p>
+                <p class="mb-0 mt-0.5 text-xs text-[var(--text-faint)]">{{ r.hint }}</p>
               </button>
             </div>
           </div>
           <div class="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
-            <div v-if="hasMonthly"><p class="mb-1.5 mt-0 text-[12.5px] font-bold">Loyer mensuel (FCFA)</p><input v-model="monthlyPrice" inputmode="numeric" maxlength="9" class="h-[46px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-3.5 font-mono text-sm outline-none"></div>
-            <div v-if="hasNightly"><p class="mb-1.5 mt-0 text-[12.5px] font-bold">Prix par nuit (FCFA)</p><input v-model="nightlyPrice" inputmode="numeric" maxlength="9" class="h-[46px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-3.5 font-mono text-sm outline-none"></div>
-            <div><p class="mb-1.5 mt-0 text-[12.5px] font-bold">Nom du logement</p><input v-model="unitName" placeholder="Appartement A1" class="h-[46px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-3.5 text-sm outline-none"></div>
-            <div>
-              <p class="mb-1.5 mt-0 text-[12.5px] font-bold">Type</p>
-              <select v-model="unitTypeId" class="h-[46px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-3 text-sm text-sand-900">
-                <option v-for="t in unitTypes" :key="t.id" :value="t.id">{{ t.label }}</option>
-              </select>
-            </div>
-            <div>
-              <p class="mb-1.5 mt-0 text-[12.5px] font-bold">Ameublement</p>
-              <select v-model="furnishedLevel" class="h-[46px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-3 text-sm text-sand-900">
-                <option value="">—</option>
-                <option v-for="o in furnishedOptions" :key="o.code" :value="o.code">{{ o.label }}</option>
-              </select>
-            </div>
+            <FormsInput v-if="hasMonthly" v-model="monthlyPrice" label="Loyer mensuel (FCFA)" type="number" mono />
+            <FormsInput v-if="hasNightly" v-model="nightlyPrice" label="Prix par nuit (FCFA)" type="number" mono />
+            <FormsInput v-model="unitName" label="Nom du logement" placeholder="Appartement A1" />
+            <FormsSelect v-model="unitTypeId" label="Type" :options="unitTypeOptions" class="[&_select]:w-full" />
+            <FormsSelect v-model="furnishedLevel" label="Ameublement" placeholder="Non précisé" :options="furnishedSelect" class="[&_select]:w-full" />
             <div class="grid grid-cols-3 gap-2.5">
-              <div><p class="mb-1.5 mt-0 text-[12.5px] font-bold">m²</p><input v-model="surface" inputmode="numeric" maxlength="5" class="h-[46px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-3 font-mono text-sm outline-none"></div>
-              <div><p class="mb-1.5 mt-0 text-[12.5px] font-bold">Chambres</p><input v-model="bedrooms" inputmode="numeric" maxlength="2" class="h-[46px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-3 font-mono text-sm outline-none"></div>
-              <div><p class="mb-1.5 mt-0 text-[12.5px] font-bold">Douches</p><input v-model="bathrooms" inputmode="numeric" maxlength="2" class="h-[46px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-3 font-mono text-sm outline-none"></div>
+              <FormsInput v-model="surface" label="m²" type="number" mono />
+              <FormsInput v-model="bedrooms" label="Chambres" type="number" mono />
+              <FormsInput v-model="bathrooms" label="Douches" type="number" mono />
             </div>
-            <div>
-              <p class="mb-1.5 mt-0 text-[12.5px] font-bold">Source d'eau</p>
-              <select v-model="waterSource" class="h-[46px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-3 text-sm text-sand-900">
-                <option value="">—</option>
-                <option v-for="o in waterOptions" :key="o.code" :value="o.code">{{ o.label }}</option>
-              </select>
-            </div>
-            <div>
-              <p class="mb-1.5 mt-0 text-[12.5px] font-bold">Compteur</p>
-              <select v-model="meterType" class="h-[46px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-3 text-sm text-sand-900">
-                <option value="">—</option>
-                <option v-for="o in meterOptions" :key="o.code" :value="o.code">{{ o.label }}</option>
-              </select>
-            </div>
+            <FormsSelect v-model="waterSource" label="Source d'eau" placeholder="Non précisé" :options="waterSelect" class="[&_select]:w-full" />
+            <FormsSelect v-model="meterType" label="Compteur" placeholder="Non précisé" :options="meterSelect" class="[&_select]:w-full" />
           </div>
           <div v-if="featureOptions.length">
             <p class="mb-2 mt-0 text-[12.5px] font-bold">Équipements</p>
@@ -503,46 +503,43 @@ const summary = computed(() => {
                 v-for="f in featureOptions"
                 :key="f.code"
                 type="button"
-                class="rounded-pill border px-3 py-1.5 text-[12.5px] font-semibold"
+                :aria-pressed="features.includes(f.code)"
+                class="inline-flex items-center gap-1.5 rounded-pill border px-3 py-1.5 text-[12.5px] font-semibold"
                 :class="features.includes(f.code) ? 'border-green-600 bg-green-50 text-green-800' : 'border-[var(--border-default)] bg-white text-[var(--text-secondary)]'"
                 @click="toggleFeature(f.code)"
-              >{{ features.includes(f.code) ? '✓ ' : '' }}{{ f.label }}</button>
+              ><Check v-if="features.includes(f.code)" class="h-3.5 w-3.5" :stroke-width="2.2" />{{ f.label }}</button>
             </div>
           </div>
-          <div>
-            <p class="mb-1.5 mt-0 text-[12.5px] font-bold">Description du logement (optionnel)</p>
+          <label class="block">
+            <span class="mb-[7px] block text-[12.5px] font-bold">Description du logement (facultatif)</span>
             <textarea v-model="unitDescription" class="min-h-[70px] w-full resize-y rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] p-3.5 text-sm outline-none" />
-          </div>
+          </label>
         </div>
 
         <div v-else-if="step === 4" class="flex flex-col gap-4">
           <div v-if="hasMonthly">
-            <p class="mb-2 mt-0 text-[13px] font-bold">Location au mois</p>
+            <p class="mb-2.5 mt-0 text-sm font-bold">Location au mois</p>
             <div class="grid grid-cols-1 gap-3.5 sm:grid-cols-3">
-              <div><p class="mb-1.5 mt-0 text-[12.5px] font-bold">Caution (mois)</p><input v-model="cautionMonths" inputmode="numeric" maxlength="1" class="h-[46px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-3.5 font-mono text-sm outline-none"></div>
-              <div><p class="mb-1.5 mt-0 text-[12.5px] font-bold">Avance (mois)</p><input v-model="avanceMonths" inputmode="numeric" maxlength="1" class="h-[46px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-3.5 font-mono text-sm outline-none"></div>
-              <div><p class="mb-1.5 mt-0 text-[12.5px] font-bold">Frais de dossier (FCFA)</p><input v-model="fraisDossier" inputmode="numeric" class="h-[46px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-3.5 font-mono text-sm outline-none"></div>
+              <FormsInput v-model="cautionMonths" label="Caution (mois)" type="number" mono />
+              <FormsInput v-model="avanceMonths" label="Avance (mois)" type="number" mono />
+              <FormsInput v-model="fraisDossier" label="Frais de dossier (FCFA)" type="number" mono />
             </div>
-            <p class="mb-0 mt-2 text-[12px] text-[var(--text-faint)]">La loi 2022-30 plafonne la caution et l'avance à 3 mois de loyer chacune. La caution est séquestrée par Immo, jamais versée au propriétaire.</p>
+            <p class="mb-0 mt-2 text-xs text-[var(--text-faint)]">La loi 2022-30 plafonne la caution et l'avance à 3 mois de loyer chacune. La caution est séquestrée par Immo, jamais versée au propriétaire.</p>
           </div>
           <div v-if="hasNightly">
-            <p class="mb-2 mt-0 text-[13px] font-bold">Séjours à la nuit</p>
-            <div class="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
-              <div><p class="mb-1.5 mt-0 text-[12.5px] font-bold">Retenue de garantie (%)</p><input v-model="bookingRetentionPercentage" inputmode="numeric" maxlength="3" placeholder="0" class="h-[46px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-3.5 font-mono text-sm outline-none"></div>
-              <label class="flex h-[46px] cursor-pointer items-center gap-2.5 self-end rounded-md border border-[var(--border-subtle)] bg-[var(--surface-page)] px-3.5">
-                <input v-model="requiresBookingInventory" type="checkbox" class="h-4 w-4 accent-[var(--color-green-600)]">
-                <span class="text-[12.5px] font-semibold">Exiger un état des lieux à l'arrivée</span>
-              </label>
+            <p class="mb-2.5 mt-0 text-sm font-bold">Séjours à la nuit</p>
+            <FormsInput v-model="bookingRetentionPercentage" label="Retenue de garantie (%)" type="number" mono placeholder="0" hint="La retenue est gardée par Immo jusqu'au départ du voyageur, puis versée." class="sm:max-w-[260px]" />
+            <div class="mt-3.5 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-page)] p-4">
+              <FormsToggle v-model="requiresBookingInventory" label="Exiger un état des lieux à l'arrivée" hint="La retenue n'est versée qu'une fois l'état des lieux d'arrivée fait." />
             </div>
-            <p class="mb-0 mt-2 text-[12px] text-[var(--text-faint)]">La retenue est gardée par Immo jusqu'au départ du voyageur, puis versée.</p>
           </div>
         </div>
 
         <div v-else class="flex flex-col gap-3.5">
-          <div><p class="mb-1.5 mt-0 text-[12.5px] font-bold">Disponible à partir du (optionnel)</p><input v-model="availableFrom" type="date" class="h-[46px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-3.5 text-sm outline-none"></div>
+          <FormsInput v-model="availableFrom" label="Disponible à partir du (facultatif)" type="date" class="sm:max-w-[260px]" />
           <div class="rounded-md border border-[var(--border-subtle)] bg-[var(--surface-page)] p-4 text-[13px] leading-[1.6] text-[var(--text-secondary)]">
-            <p class="m-0 font-bold text-[var(--text-primary)]">{{ name || 'Votre bien' }} — {{ unitName || 'logement' }}</p>
-            <p class="m-0">{{ summary || 'Prix à renseigner' }}<template v-if="photos.length"> · {{ photos.length }} photo{{ photos.length > 1 ? 's' : '' }}</template></p>
+            <p class="m-0 font-bold text-[var(--text-primary)]">{{ name || 'Votre bien' }} · {{ unitName || 'logement' }}</p>
+            <p class="m-0"><span class="font-mono">{{ summary || 'Prix à renseigner' }}</span><template v-if="photos.length"> · {{ photos.length }} photo{{ photos.length > 1 ? 's' : '' }}</template></p>
             <p class="mb-0 mt-2">Dès la mise en ligne, l'annonce apparaît dans la recherche (sous une minute) tant que le logement est libre. Passez-le en « Occupée » depuis la fiche pour la retirer.</p>
           </div>
           <p v-if="finalError" class="m-0 rounded-md border border-danger-border bg-danger-bg px-3.5 py-3 text-[13px] font-semibold text-danger-fg">{{ finalError }}</p>
@@ -552,18 +549,13 @@ const summary = computed(() => {
           </div>
         </div>
 
-        <p v-if="currentStepError" class="mb-0 mt-4 rounded-md border border-danger-border bg-danger-bg px-3.5 py-3 text-[13px] font-semibold text-danger-fg">{{ currentStepError }}</p>
+        <p v-if="currentStepError" class="mb-0 mt-4 text-[13px] font-semibold text-danger-fg">{{ currentStepError }}</p>
 
         <div class="mt-6 flex justify-between gap-3">
-          <button type="button" class="rounded-md border border-[var(--border-default)] bg-white px-5.5 py-3.5 text-sm font-bold disabled:opacity-50" :disabled="step === 1" @click="prev">Précédent</button>
-          <button
-            type="button"
-            class="rounded-md bg-[image:var(--action-primary)] px-6 py-3.5 text-sm font-bold text-white shadow-action disabled:opacity-60"
-            :disabled="!refsReady || step1Loading || finalLoading || !!pricingWarning"
-            @click="next"
-          >{{ nextLabel }}</button>
+          <CoreButton tone="secondary" :disabled="step === 1" @click="prev">Précédent</CoreButton>
+          <CoreButton :disabled="!refsReady || step1Loading || finalLoading || !!pricingWarning" @click="next">{{ nextLabel }}</CoreButton>
         </div>
-      </div>
+      </section>
     </div>
   </div>
 </template>

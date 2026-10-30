@@ -70,13 +70,18 @@ export interface InvitePayload {
   team_name?: string
 }
 
-/** `type: 'email'` (pas de compte : lien à transmettre) ou `'in_app'` (compte existant). */
+/**
+ * `type: 'email'` (pas de compte) ou `'in_app'` (compte existant). Depuis les
+ * correctifs du 06/10/2026, les deux reçoivent un lien `/invite/<token>` et la
+ * réponse dit si l'e-mail est parti (`email_sent`, absent sur l'ancienne API).
+ */
 export interface InviteResult {
   type: 'email' | 'in_app'
   invitation_id?: string
   member_id?: string
   token?: string
   expires_at?: string
+  email_sent?: boolean
   message: string
 }
 

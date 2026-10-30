@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ChevronRight, FileText, Plus } from '@lucide/vue'
 import type { LeaseSummary } from '~/types/tenant'
 import { cancelUnpaidState, leasePhase, LEASE_PHASE_LABEL, LEASE_PHASE_TONE, noticeDepartureDate, RENT_SUFFIX } from '~/utils/leases'
 
@@ -22,14 +23,20 @@ const ACCENT: Record<string, string> = {
   inconsistent: 'border-l-danger-fg'
 }
 
-const tab = ref<'current' | 'closed'>('current')
+/* ---- Onglets, gardés dans l'URL (?onglet=termines) ---- */
+const route = useRoute()
+const router = useRouter()
+const tab = ref<'current' | 'closed'>(route.query.onglet === 'termines' ? 'closed' : 'current')
+watch(tab, t => router.replace({ query: { ...route.query, onglet: t === 'closed' ? 'termines' : undefined } }))
+watch(() => route.query.onglet, v => { tab.value = v === 'termines' ? 'closed' : 'current' })
+const tabModel = computed({ get: () => tab.value as string, set: (v: string) => { tab.value = v === 'closed' ? 'closed' : 'current' } })
 const closedPhases = ['terminated', 'cancelled_unpaid']
 const current = computed(() => block.items.value.filter(l => !closedPhases.includes(leasePhase(l))))
 const closed = computed(() => block.items.value.filter(l => closedPhases.includes(leasePhase(l))))
 const shown = computed(() => (tab.value === 'current' ? current.value : closed.value))
 const tabs = computed(() => [
-  { key: 'current' as const, label: `En cours (${current.value.length})` },
-  { key: 'closed' as const, label: `Terminés (${closed.value.length})` }
+  { value: 'current', label: `En cours · ${current.value.length}` },
+  { value: 'closed', label: `Terminés · ${closed.value.length}` }
 ])
 
 function tenantName(l: LeaseSummary) {
@@ -64,7 +71,7 @@ function nextLine(l: LeaseSummary): string {
 </script>
 
 <template>
-  <div class="animate-[im-fade_.3s_ease_both]">
+  <div class="animate-[im-fade_.3s_ease_backwards]">
     <div v-if="block.state.value === 'loading'" class="flex flex-col gap-3.5">
       <DataSkeletonCard v-for="i in 2" :key="i" :height="110" :lines="1" />
     </div>
@@ -74,44 +81,41 @@ function nextLine(l: LeaseSummary): string {
       <button type="button" class="ml-2 font-bold underline" @click="block.load">Réessayer</button>
     </FeedbackAlertBanner>
 
-    <div v-else-if="block.state.value === 'empty'" class="rounded-md border border-dashed border-[var(--border-default)] bg-white px-4 py-10 text-center">
-      <p class="m-0 text-[14.5px] font-bold">Aucun bail pour l'instant</p>
-      <p class="mx-auto mb-0 mt-1.5 max-w-[420px] text-[13px] text-[var(--text-muted)]">Après une visite, créez le bail : le locataire le signe en ligne, paie son entrée, et les loyers sont suivis ici.</p>
-      <NuxtLink to="/pro/baux/nouveau" class="mt-4 inline-block rounded-md bg-[image:var(--action-primary)] px-5 py-3 text-[13.5px] font-bold text-white">Créer un bail</NuxtLink>
-    </div>
+    <ProEmptyPanel v-else-if="block.state.value === 'empty'" :icon="FileText" title="Aucun bail pour l'instant" text="Après une visite ou une candidature retenue, créez le bail : le locataire le signe en ligne, paie son entrée, et les loyers sont suivis ici.">
+      <NuxtLink to="/pro/baux/nouveau" class="inline-flex items-center gap-1.5 rounded-md bg-[image:var(--action-primary)] px-5 py-3 text-[14px] font-bold text-white shadow-action"><Plus class="h-4 w-4" :stroke-width="1.9" />Créer un bail</NuxtLink>
+    </ProEmptyPanel>
 
     <template v-else>
-      <div class="mb-4 flex flex-wrap items-center gap-3">
-        <div class="flex gap-1.5 rounded-pill bg-sand-200 p-1">
-          <button v-for="t in tabs" :key="t.key" type="button" class="rounded-pill px-3.5 py-1.5 text-[12.5px] font-bold" :class="tab === t.key ? 'bg-white shadow-sm' : 'text-[var(--text-muted)]'" @click="tab = t.key">{{ t.label }}</button>
-        </div>
-        <div class="flex-1" />
-        <NuxtLink to="/pro/baux/nouveau" class="rounded-md bg-[image:var(--action-primary)] px-4 py-2.5 text-[13px] font-bold text-white">+ Créer un bail</NuxtLink>
+      <div class="mb-4.5 flex flex-wrap items-center gap-2.5">
+        <FormsSegmentedControl v-model="tabModel" :options="tabs" size="sm" />
+        <NuxtLink to="/pro/baux/nouveau" class="ml-auto inline-flex items-center gap-1.5 rounded-pill bg-[image:var(--action-primary)] px-4 py-[9px] text-[13px] font-bold text-white shadow-action"><Plus class="h-4 w-4" :stroke-width="1.9" />Créer un bail</NuxtLink>
       </div>
 
-      <p v-if="!shown.length" class="rounded-md border border-dashed border-[var(--border-default)] bg-white px-4 py-8 text-center text-[13.5px] text-[var(--text-muted)]">
-        {{ tab === 'current' ? 'Aucun bail en cours.' : 'Aucun bail terminé.' }}
+      <p v-if="!shown.length" class="rounded-md border border-dashed border-[var(--border-default)] bg-white px-4 py-10 text-center text-[13.5px] text-[var(--text-muted)]">
+        {{ tab === 'current' ? 'Aucun bail en cours : les baux terminés sont dans l\'autre onglet.' : 'Aucun bail terminé pour l\'instant.' }}
       </p>
 
       <NuxtLink
         v-for="l in shown"
         :key="l.id"
         :to="`/pro/baux/${l.id}`"
-        class="mb-3.5 block rounded-2xl border border-l-4 border-[var(--border-subtle)] bg-white p-5 transition-shadow hover:shadow-md"
+        class="group mb-3.5 block rounded-2xl border border-l-4 border-[var(--border-subtle)] bg-white p-5 transition-shadow hover:shadow-raised"
         :class="ACCENT[leasePhase(l)]"
+        data-testid="lease-card"
       >
-        <div class="flex items-start gap-4">
+        <div class="flex items-center gap-3.5">
+          <CoreAvatar :name="tenantName(l)" :size="40" />
           <div class="min-w-0 flex-1">
-            <div class="flex flex-wrap items-center gap-2.5">
-              <p class="m-0 text-base font-bold tracking-[-.015em]">{{ tenantName(l) }}</p>
+            <div class="flex flex-wrap items-center gap-2">
+              <p class="m-0 text-[15px] font-bold tracking-[-.01em] group-hover:text-green-700">{{ tenantName(l) }}</p>
               <CoreBadge :tone="LEASE_PHASE_TONE[leasePhase(l)]">{{ LEASE_PHASE_LABEL[leasePhase(l)] }}</CoreBadge>
             </div>
-            <p class="mb-0 mt-1.5 text-[13.5px] text-[var(--text-muted)]">
-              {{ l.unit?.name ?? 'Logement supprimé' }} · {{ formatFcfa(Number(l.signed_rent)) }} {{ RENT_SUFFIX[l.billing_frequency ?? 'monthly'] }} · {{ fmtDate(l.start_date) }}{{ l.end_date ? ` → ${fmtDate(l.end_date)}` : '' }}
+            <p class="mb-0 mt-1 text-xs text-[var(--text-faint)]">
+              {{ l.unit?.name ?? 'Logement supprimé' }}<template v-if="l.property"> · {{ l.property.name }}</template> · <span class="font-mono">{{ formatFcfa(Number(l.signed_rent)) }} {{ RENT_SUFFIX[l.billing_frequency ?? 'monthly'] }}</span> · <span class="font-mono">{{ fmtDate(l.start_date) }}{{ l.end_date ? ` au ${fmtDate(l.end_date)}` : '' }}</span>
             </p>
-            <p class="mb-0 mt-1.5 text-[13px] font-semibold text-[var(--text-secondary)]">{{ nextLine(l) }}</p>
+            <p class="mb-0 mt-1.5 text-[13.5px] font-semibold text-[var(--text-secondary)]">{{ nextLine(l) }}</p>
           </div>
-          <span class="flex-none self-center text-lg text-[var(--text-faint)]">›</span>
+          <ChevronRight class="h-5 w-5 flex-none text-[var(--text-faint)]" :stroke-width="1.9" />
         </div>
       </NuxtLink>
     </template>

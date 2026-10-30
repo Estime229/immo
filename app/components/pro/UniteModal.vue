@@ -1,8 +1,10 @@
 <script setup lang="ts">
+import { Check, CircleCheck } from '@lucide/vue'
 import type { UnitSearchResult } from '~/types/property'
 import { ApiRequestError } from '~/utils/authenticatedFetcher'
 import { errorText } from '~/utils/apiErrors'
 import { RENTAL_CHOICES, rentalChoiceOf, rentalSetup, validateMonths, validateRentalPrices, type RentalChoice } from '~/utils/propertyForm'
+import { UNIT_STATUS_LABEL } from '~/utils/proProperties'
 
 const props = defineProps<{ propertyId: string; propertyName: string; unit?: UnitSearchResult }>()
 const emit = defineEmits<{ close: []; created: []; updated: [] }>()
@@ -89,6 +91,7 @@ onMounted(async () => {
   if (!unitTypeId.value) unitTypeId.value = props.unit?.ref_type_id ?? unitTypes.value[0]?.id ?? ''
   refsReady.value = true
   if (props.unit) await loadEditExtras(props.unit)
+  baseline.value = snapshot()
 })
 watch(() => props.unit, resetFromUnit)
 
@@ -115,13 +118,18 @@ function toggleFeature(code: string) {
   features.value = features.value.includes(code) ? features.value.filter(c => c !== code) : [...features.value, code]
 }
 
-const STATUS_OPTIONS = [
-  { code: 'available' as const, label: 'Libre' },
-  { code: 'occupied' as const, label: 'Occupée' },
-  { code: 'notice_given' as const, label: 'Préavis en cours' },
-  { code: 'maintenance' as const, label: 'En maintenance' },
-  { code: 'coming_soon' as const, label: 'Bientôt disponible' }
-]
+/** Mêmes mots que la fiche du bien (utils/proProperties). */
+const STATUS_OPTIONS = (['available', 'occupied', 'notice_given', 'maintenance', 'coming_soon'] as const).map(code => ({ value: code, label: UNIT_STATUS_LABEL[code]! }))
+const statusModel = computed({ get: () => unitStatus.value as string, set: (v: string) => { unitStatus.value = v as typeof unitStatus.value } })
+const toOptions = (list: { code: string; label: string }[]) => list.map(o => ({ value: o.code, label: o.label }))
+const unitTypeOptions = computed(() => unitTypes.value.map(t => ({ value: t.id, label: t.label })))
+
+/* Saisie entamée : la fenêtre ne se ferme plus sur un clic à côté (référence prise une fois le formulaire pré-rempli). */
+function snapshot() {
+  return JSON.stringify([name.value, unitTypeId.value, surface.value, bedrooms.value, bathrooms.value, floor.value, price.value, nightlyPrice.value, rentalChoice.value, waterSource.value, meterType.value, toiletType.value, furnishedLevel.value, unitStatus.value, availableFrom.value, fraisDossier.value, cautionMonths.value, avanceMonths.value, description.value, features.value])
+}
+const baseline = ref<string | null>(null)
+const dirty = computed(() => step.value === 'form' && baseline.value !== null && snapshot() !== baseline.value)
 const hasMonthly = computed(() => rentalChoice.value !== 'nuit')
 const hasNightly = computed(() => !isEdit.value && rentalChoice.value !== 'mois')
 const priceLabel = computed(() => {
@@ -201,139 +209,100 @@ async function submit() {
 }
 
 function close() {
-  if (step.value === 'done') emit(isEdit.value ? 'updated' : 'created')
+  if (step.value === 'done') {
+    if (isEdit.value) emit('updated')
+    else emit('created')
+  }
   emit('close')
 }
 </script>
 
 <template>
-  <Teleport to="body">
-    <div class="fixed inset-0 z-[90] grid animate-[im-veil_.22s_ease_both] place-items-center bg-black/50 p-6 backdrop-blur-[3px]" @click="close">
-      <div class="flex max-h-[90vh] w-[600px] max-w-[calc(100vw-3rem)] flex-col overflow-hidden rounded-2xl bg-[var(--surface-page)] shadow-panel animate-[im-rise_.28s_var(--ease-standard)_both]" @click.stop>
-        <div class="flex items-center justify-between border-b border-[var(--border-subtle)] px-6 py-4.5">
-          <h3 class="m-0 font-display text-[19px] font-bold tracking-[-.02em]">{{ step === 'done' ? (isEdit ? 'Logement mis à jour' : 'Logement ajouté') : (isEdit ? 'Modifier le logement' : 'Ajouter un logement') }}</h3>
-          <button type="button" class="grid h-[34px] w-[34px] place-items-center rounded-pill bg-sand-200 text-[15px] text-sand-800" aria-label="Fermer" @click="close">✕</button>
-        </div>
+  <CoreModal :open="true" :title="step === 'done' ? (isEdit ? 'Logement mis à jour' : 'Logement ajouté') : (isEdit ? 'Modifier le logement' : 'Ajouter un logement')" width="600px" :dirty="dirty" @close="close">
+    <template v-if="step === 'form'">
+      <p class="mb-4 mt-0 text-[13.5px] text-[var(--text-muted)]">{{ isEdit ? propertyName : `Nouveau logement dans ${propertyName}.` }}</p>
 
-        <div class="overflow-y-auto p-6">
-          <template v-if="step === 'form'">
-            <p class="mb-4 mt-0 text-[13px] text-[var(--text-muted)]">{{ isEdit ? propertyName : `Nouveau logement dans ${propertyName}.` }}</p>
-
-            <div v-if="!isEdit" class="mb-4">
-              <p class="mb-2 mt-0 text-[12.5px] font-bold">Ce logement se loue</p>
-              <div class="grid grid-cols-3 gap-2">
-                <button
-                  v-for="r in RENTAL_CHOICES"
-                  :key="r.key"
-                  type="button"
-                  class="rounded-md border px-3 py-2.5 text-left"
-                  :class="rentalChoice === r.key ? 'border-2 border-green-600 bg-green-50' : 'border-[var(--border-default)] bg-white'"
-                  @click="rentalChoice = r.key"
-                >
-                  <p class="m-0 text-[13px] font-bold">{{ r.label }}</p>
-                </button>
-              </div>
-            </div>
-            <p v-else class="mb-4 mt-0 rounded-md bg-sand-100 px-3.5 py-2.5 text-[12.5px] text-[var(--text-secondary)]">
-              Location <strong>{{ RENTAL_CHOICES.find(r => r.key === rentalChoice)?.label.toLowerCase() }}</strong> (d'après vos tarifs).
-              <NuxtLink to="/pro/tarifs" class="font-bold text-green-700">Changer les tarifs →</NuxtLink>
-            </p>
-
-            <div class="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
-              <div v-if="isEdit || hasMonthly"><p class="mb-1.5 mt-0 text-[12.5px] font-bold">{{ priceLabel }}</p><input v-model="price" inputmode="numeric" maxlength="9" class="h-[46px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-3.5 font-mono text-sm outline-none"></div>
-              <div v-if="hasNightly"><p class="mb-1.5 mt-0 text-[12.5px] font-bold">Prix par nuit (FCFA)</p><input v-model="nightlyPrice" inputmode="numeric" maxlength="9" class="h-[46px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-3.5 font-mono text-sm outline-none"></div>
-              <div><p class="mb-1.5 mt-0 text-[12.5px] font-bold">Nom du logement</p><input v-model="name" placeholder="Appartement C1" class="h-[46px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-3.5 text-sm outline-none"></div>
-              <div>
-                <p class="mb-1.5 mt-0 text-[12.5px] font-bold">Type</p>
-                <select v-model="unitTypeId" class="h-[46px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-3 text-sm text-sand-900">
-                  <option v-for="t in unitTypes" :key="t.id" :value="t.id">{{ t.label }}</option>
-                </select>
-              </div>
-              <div>
-                <p class="mb-1.5 mt-0 text-[12.5px] font-bold">Ameublement</p>
-                <select v-model="furnishedLevel" class="h-[46px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-3 text-sm text-sand-900">
-                  <option value="">—</option>
-                  <option v-for="o in furnishedOptions" :key="o.code" :value="o.code">{{ o.label }}</option>
-                </select>
-              </div>
-              <div class="grid grid-cols-4 gap-2">
-                <div><p class="mb-1.5 mt-0 text-[12.5px] font-bold">m²</p><input v-model="surface" inputmode="numeric" maxlength="5" class="h-[46px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-2.5 font-mono text-sm outline-none"></div>
-                <div><p class="mb-1.5 mt-0 text-[12.5px] font-bold">Ch.</p><input v-model="bedrooms" inputmode="numeric" maxlength="2" class="h-[46px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-2.5 font-mono text-sm outline-none"></div>
-                <div><p class="mb-1.5 mt-0 text-[12.5px] font-bold">Douch.</p><input v-model="bathrooms" inputmode="numeric" maxlength="2" class="h-[46px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-2.5 font-mono text-sm outline-none"></div>
-                <div><p class="mb-1.5 mt-0 text-[12.5px] font-bold">Étage</p><input v-model="floor" inputmode="numeric" maxlength="2" class="h-[46px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-2.5 font-mono text-sm outline-none"></div>
-              </div>
-              <div>
-                <p class="mb-1.5 mt-0 text-[12.5px] font-bold">Statut</p>
-                <select v-model="unitStatus" class="h-[46px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-3 text-sm text-sand-900">
-                  <option v-for="s in STATUS_OPTIONS" :key="s.code" :value="s.code">{{ s.label }}</option>
-                </select>
-              </div>
-              <div><p class="mb-1.5 mt-0 text-[12.5px] font-bold">Disponible à partir du</p><input v-model="availableFrom" type="date" class="h-[46px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-3.5 text-sm outline-none"></div>
-              <div>
-                <p class="mb-1.5 mt-0 text-[12.5px] font-bold">Source d'eau</p>
-                <select v-model="waterSource" class="h-[46px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-3 text-sm text-sand-900">
-                  <option value="">—</option>
-                  <option v-for="o in waterOptions" :key="o.code" :value="o.code">{{ o.label }}</option>
-                </select>
-              </div>
-              <div>
-                <p class="mb-1.5 mt-0 text-[12.5px] font-bold">Compteur</p>
-                <select v-model="meterType" class="h-[46px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-3 text-sm text-sand-900">
-                  <option value="">—</option>
-                  <option v-for="o in meterOptions" :key="o.code" :value="o.code">{{ o.label }}</option>
-                </select>
-              </div>
-              <div>
-                <p class="mb-1.5 mt-0 text-[12.5px] font-bold">Toilettes</p>
-                <select v-model="toiletType" class="h-[46px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-3 text-sm text-sand-900">
-                  <option value="">—</option>
-                  <option v-for="o in toiletOptions" :key="o.code" :value="o.code">{{ o.label }}</option>
-                </select>
-              </div>
-            </div>
-            <p class="mb-0 mt-1.5 text-[12px] text-[var(--text-faint)]">Un logement « Occupé » disparaît de la recherche ; « En maintenance » et « Bientôt disponible » y restent visibles.</p>
-
-            <div v-if="featureOptions.length" class="mt-4">
-              <p class="mb-2 mt-0 text-[12.5px] font-bold">Équipements</p>
-              <div class="flex flex-wrap gap-2">
-                <button
-                  v-for="f in featureOptions"
-                  :key="f.code"
-                  type="button"
-                  class="rounded-pill border px-3 py-1.5 text-[12.5px] font-semibold disabled:opacity-50"
-                  :class="features.includes(f.code) ? 'border-green-600 bg-green-50 text-green-800' : 'border-[var(--border-default)] bg-white text-[var(--text-secondary)]'"
-                  :disabled="isEdit && loadedFeatures === null"
-                  @click="toggleFeature(f.code)"
-                >{{ features.includes(f.code) ? '✓ ' : '' }}{{ f.label }}</button>
-              </div>
-            </div>
-
-            <div class="mt-4">
-              <p class="mb-1.5 mt-0 text-[12.5px] font-bold">Description (optionnel)</p>
-              <textarea v-model="description" class="min-h-[64px] w-full resize-y rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] p-3 text-sm outline-none" />
-            </div>
-
-            <div v-if="hasMonthly" class="mt-4 grid grid-cols-1 gap-3.5 sm:grid-cols-3">
-              <div><p class="mb-1.5 mt-0 text-[12.5px] font-bold">Caution (mois)</p><input v-model="cautionMonths" inputmode="numeric" maxlength="1" class="h-[46px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-3.5 font-mono text-sm outline-none"></div>
-              <div><p class="mb-1.5 mt-0 text-[12.5px] font-bold">Avance (mois)</p><input v-model="avanceMonths" inputmode="numeric" maxlength="1" class="h-[46px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-3.5 font-mono text-sm outline-none"></div>
-              <div><p class="mb-1.5 mt-0 text-[12.5px] font-bold">Frais de dossier</p><input v-model="fraisDossier" inputmode="numeric" class="h-[46px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-3.5 font-mono text-sm outline-none"></div>
-            </div>
-            <p v-if="hasMonthly" class="mb-0 mt-1.5 text-[12px] text-[var(--text-faint)]">Loi 2022-30 : caution et avance plafonnées à 3 mois chacune.</p>
-
-            <p v-if="(showFormError && formError) || errorMessage" class="mb-0 mt-3.5 rounded-md border border-danger-border bg-danger-bg px-3.5 py-2.5 text-[13px] font-semibold text-danger-fg">{{ errorMessage || formError }}</p>
-            <CoreButton size="lg" full-width class="mt-5" :disabled="loading || !refsReady" @click="submit">{{ !refsReady ? 'Chargement…' : loading ? 'Enregistrement…' : isEdit ? 'Enregistrer' : 'Ajouter le logement' }}</CoreButton>
-          </template>
-          <template v-else>
-            <div class="px-0.5 py-1 text-center">
-              <div class="mx-auto grid h-15 w-15 animate-[im-pop_.5s_ease] place-items-center rounded-pill bg-green-600 text-[28px] text-white">✓</div>
-              <p class="mb-0 mt-4.5 text-lg font-bold">{{ isEdit ? 'Logement mis à jour' : 'Logement ajouté' }}</p>
-              <p class="mx-auto mb-0 mt-2.5 max-w-[340px] text-sm leading-[1.6] text-[var(--text-muted)]">{{ name }} {{ isEdit ? 'a été mis à jour' : `est en ligne dans ${propertyName}` }}.</p>
-              <p v-if="pricingNote" class="mx-auto mb-0 mt-2.5 max-w-[360px] rounded-md bg-warn-bg px-3 py-2 text-[13px] text-warn-fg">{{ pricingNote }}</p>
-              <CoreButton size="lg" full-width class="mt-5.5" @click="close">Terminé</CoreButton>
-            </div>
-          </template>
+      <div v-if="!isEdit" class="mb-4">
+        <p class="mb-2 mt-0 text-[12.5px] font-bold">Ce logement se loue</p>
+        <div class="grid grid-cols-3 gap-2">
+          <button
+            v-for="r in RENTAL_CHOICES"
+            :key="r.key"
+            type="button"
+            :aria-pressed="rentalChoice === r.key"
+            class="rounded-md border px-3 py-2.5 text-left"
+            :class="rentalChoice === r.key ? 'border-green-600 bg-green-50 ring-1 ring-green-600' : 'border-[var(--border-default)] bg-white'"
+            @click="rentalChoice = r.key"
+          >
+            <p class="m-0 text-[13px] font-bold">{{ r.label }}</p>
+          </button>
         </div>
       </div>
+      <p v-else class="mb-4 mt-0 rounded-md bg-sand-100 px-3.5 py-2.5 text-[12.5px] text-[var(--text-secondary)]">
+        Location <strong>{{ RENTAL_CHOICES.find(r => r.key === rentalChoice)?.label.toLowerCase() }}</strong> (d'après vos tarifs).
+        <NuxtLink :to="{ path: '/pro/tarifs', query: { unit: unit?.id } }" class="font-bold text-green-700">Changer les tarifs</NuxtLink>
+      </p>
+
+      <div class="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+        <FormsInput v-if="isEdit || hasMonthly" v-model="price" :label="priceLabel" type="number" mono />
+        <FormsInput v-if="hasNightly" v-model="nightlyPrice" label="Prix par nuit (FCFA)" type="number" mono />
+        <FormsInput v-model="name" label="Nom du logement" placeholder="Appartement C1" />
+        <FormsSelect v-model="unitTypeId" label="Type" :options="unitTypeOptions" class="[&_select]:w-full" />
+        <FormsSelect v-model="furnishedLevel" label="Ameublement" placeholder="Non précisé" :options="toOptions(furnishedOptions)" class="[&_select]:w-full" />
+        <div class="grid grid-cols-4 gap-2">
+          <FormsInput v-model="surface" label="m²" type="number" mono />
+          <FormsInput v-model="bedrooms" label="Ch." type="number" mono />
+          <FormsInput v-model="bathrooms" label="Douch." type="number" mono />
+          <FormsInput v-model="floor" label="Étage" type="number" mono />
+        </div>
+        <FormsSelect v-model="statusModel" label="Statut" :options="STATUS_OPTIONS" class="[&_select]:w-full" />
+        <FormsInput v-model="availableFrom" label="Disponible à partir du" type="date" />
+        <FormsSelect v-model="waterSource" label="Source d'eau" placeholder="Non précisé" :options="toOptions(waterOptions)" class="[&_select]:w-full" />
+        <FormsSelect v-model="meterType" label="Compteur" placeholder="Non précisé" :options="toOptions(meterOptions)" class="[&_select]:w-full" />
+        <FormsSelect v-model="toiletType" label="Toilettes" placeholder="Non précisé" :options="toOptions(toiletOptions)" class="[&_select]:w-full" />
+      </div>
+      <p class="mb-0 mt-2 text-xs text-[var(--text-faint)]">Un logement « Occupée » disparaît de la recherche ; « En maintenance » et « Bientôt disponible » y restent visibles.</p>
+
+      <div v-if="featureOptions.length" class="mt-4">
+        <p class="mb-2 mt-0 text-[12.5px] font-bold">Équipements</p>
+        <div class="flex flex-wrap gap-2">
+          <button
+            v-for="f in featureOptions"
+            :key="f.code"
+            type="button"
+            :aria-pressed="features.includes(f.code)"
+            class="inline-flex items-center gap-1.5 rounded-pill border px-3 py-1.5 text-[12.5px] font-semibold disabled:opacity-50"
+            :class="features.includes(f.code) ? 'border-green-600 bg-green-50 text-green-800' : 'border-[var(--border-default)] bg-white text-[var(--text-secondary)]'"
+            :disabled="isEdit && loadedFeatures === null"
+            @click="toggleFeature(f.code)"
+          ><Check v-if="features.includes(f.code)" class="h-3.5 w-3.5" :stroke-width="2.2" />{{ f.label }}</button>
+        </div>
+      </div>
+
+      <label class="mt-4 block">
+        <span class="mb-[7px] block text-[12.5px] font-bold">Description (facultatif)</span>
+        <textarea v-model="description" class="min-h-[64px] w-full resize-y rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] p-3 text-sm outline-none" />
+      </label>
+
+      <div v-if="hasMonthly" class="mt-4 grid grid-cols-1 gap-3.5 sm:grid-cols-3">
+        <FormsInput v-model="cautionMonths" label="Caution (mois)" type="number" mono />
+        <FormsInput v-model="avanceMonths" label="Avance (mois)" type="number" mono />
+        <FormsInput v-model="fraisDossier" label="Frais de dossier" type="number" mono />
+      </div>
+      <p v-if="hasMonthly" class="mb-0 mt-2 text-xs text-[var(--text-faint)]">Loi 2022-30 : caution et avance plafonnées à 3 mois chacune.</p>
+
+      <p v-if="(showFormError && formError) || errorMessage" class="mb-0 mt-3.5 text-[13px] font-semibold text-danger-fg">{{ errorMessage || formError }}</p>
+    </template>
+    <div v-else class="px-0.5 py-1 text-center">
+      <span class="mx-auto grid h-[46px] w-[46px] animate-[im-pop_.5s_ease] place-items-center rounded-pill bg-ok-bg text-ok-fg"><CircleCheck class="h-6 w-6" :stroke-width="1.9" /></span>
+      <p class="mb-0 mt-4 text-[15px] font-bold">{{ isEdit ? 'Logement mis à jour' : 'Logement ajouté' }}</p>
+      <p class="mx-auto mb-0 mt-2 max-w-[340px] text-[13.5px] leading-[1.6] text-[var(--text-muted)]">{{ name }} {{ isEdit ? 'a été mis à jour' : `est enregistré dans ${propertyName}` }}.</p>
+      <p v-if="pricingNote" class="mx-auto mb-0 mt-2.5 max-w-[360px] rounded-md bg-warn-bg px-3 py-2 text-[13px] text-warn-fg">{{ pricingNote }}</p>
     </div>
-  </Teleport>
+
+    <template #footer>
+      <CoreButton v-if="step === 'form'" full-width :disabled="loading || !refsReady" @click="submit">{{ !refsReady ? 'Chargement…' : loading ? 'Enregistrement…' : isEdit ? 'Enregistrer' : 'Ajouter le logement' }}</CoreButton>
+      <CoreButton v-else full-width @click="close">Terminé</CoreButton>
+    </template>
+  </CoreModal>
 </template>

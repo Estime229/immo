@@ -1,4 +1,4 @@
-import type { Mandate, MandateStatus, MyTeam, TeamMember, TeamPermission, TeamRegistry } from '../types/team'
+import type { InvitePayload, InviteResult, Mandate, MandateStatus, MyTeam, RolePreset, TeamInvitation, TeamMember, TeamPermission, TeamRegistry } from '../types/team'
 
 /**
  * Permissions réellement vérifiées par l'API (lu dans le code, Lot 53) — les
@@ -71,8 +71,8 @@ export function validateInvite(f: InviteForm, team: MyTeam | null): string | nul
 }
 
 /**
- * Après un 500 sur `POST /team/invite`, l'écriture a souvent eu lieu (#4) :
- * on relit l'équipe pour dire ce qui existe vraiment.
+ * Filet de sécurité : si `POST /team/invite` répond 5xx, on relit l'équipe pour
+ * savoir si l'invitation existe malgré tout (cas fréquent avant le correctif #4).
  */
 export function inviteOutcome(team: MyTeam, email: string): 'invitation' | 'member' | 'missing' {
   const e = email.trim().toLowerCase()
@@ -83,6 +83,51 @@ export function inviteOutcome(team: MyTeam, email: string): 'invitation' | 'memb
 
 export function inviteLink(origin: string, token: string): string {
   return `${origin.replace(/\/$/, '')}/invite/${token}`
+}
+
+/**
+ * Invitations affichées : une invitation par e-mail, et les membres « en attente »
+ * qui n'en ont pas (comptes invités avant le correctif #74, sans lien). Depuis
+ * la migration 013, une invitation peut être liée à un membre en attente : on ne
+ * montre alors qu'une ligne, celle de l'invitation (annulable, avec un lien).
+ */
+export function pendingRows(team: MyTeam | null): { invitations: TeamInvitation[]; pendingMembers: TeamMember[] } {
+  const invitations = team?.invitations ?? []
+  const invited = new Set(invitations.map(i => i.email.toLowerCase()))
+  const pendingMembers = (team?.members ?? []).filter(m => m.status === 'pending' && !invited.has((m.email ?? '').toLowerCase()))
+  return { invitations, pendingMembers }
+}
+
+/**
+ * Corps d'une nouvelle invitation reprenant une invitation existante (« Nouveau
+ * lien ») : même poste, mêmes permissions, mêmes biens. L'API n'a pas de route de
+ * relance : on annule l'ancienne puis on recrée celle-ci, qui porte un lien neuf.
+ */
+export function reinvitePayload(inv: TeamInvitation, presets: RolePreset[]): InvitePayload {
+  const custom = inv.custom_preset_name ? presets.find(p => p.name === inv.custom_preset_name) : undefined
+  return {
+    email: inv.email,
+    ...(custom ? { custom_preset_id: custom.id } : { role_preset: inv.role_preset || 'custom', permissions: inv.permissions }),
+    property_ids: inv.property_ids
+  }
+}
+
+/**
+ * Ce que l'écran peut affirmer après une invitation. `email_sent` absent
+ * (ancienne API) : on ne promet pas qu'un e-mail est parti.
+ */
+export function inviteDelivery(res: Pick<InviteResult, 'token' | 'email_sent'>): 'sent' | 'link' | 'none' {
+  if (res.email_sent === true) return 'sent'
+  return res.token ? 'link' : 'none'
+}
+
+/** Membre et mandat : l'agent fait-il déjà partie de l'équipe (actif ou invité) ? */
+export function inTeam(team: MyTeam | null, email: string | null | undefined): 'active' | 'pending' | null {
+  const e = (email ?? '').trim().toLowerCase()
+  if (!e || !team) return null
+  const m = team.members.find(x => (x.email ?? '').toLowerCase() === e && x.status !== 'revoked')
+  if (m) return m.status === 'active' ? 'active' : 'pending'
+  return team.invitations.some(i => i.email.toLowerCase() === e) ? 'pending' : null
 }
 
 /* ---- Mandats ---- */
@@ -106,6 +151,12 @@ export function agentName(m: Mandate): string {
 export function mandatorName(m: Mandate): string {
   if (m.mandator_type === 'agency') return m.agency?.company_name || partyName(m.agency) || 'Une agence'
   return partyName(m.landlord) || 'Un propriétaire (nom non renseigné)'
+}
+
+/** Côté agent : l'équipe du mandant dont il est déjà membre actif, s'il y en a une. */
+export function mandatorTeam<T extends { team: { owner: { id: string } } }>(memberships: T[], m: Mandate): T | null {
+  const owner = m.landlord_id ?? m.agency_id
+  return owner ? memberships.find(x => x.team.owner.id === owner) ?? null : null
 }
 
 /** Biens du mandant où cet agent est désigné. */

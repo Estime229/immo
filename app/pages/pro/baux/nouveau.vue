@@ -1,10 +1,13 @@
 <script setup lang="ts">
+import { ArrowLeft, FileText, UserRound } from '@lucide/vue'
 import type { PropertySearchResult } from '~/types/property'
-import type { ConversationSummary } from '~/types/messaging'
 import type { LeaseBillingFrequency, LeaseContractType } from '~/types/tenant'
 import { ApiRequestError } from '~/utils/authenticatedFetcher'
 import { errorText } from '~/utils/apiErrors'
-import { depositExceedsCap, startDateWarning, validateLeaseForm } from '~/utils/leases'
+import { depositExceedsCap, RENT_SUFFIX, startDateWarning, validateLeaseForm } from '~/utils/leases'
+import {
+  CONTRACT_TYPE_HELP, CONTRACT_TYPE_HINT, CONTRACT_TYPE_LABEL, CONTRACT_TYPES, leaseFormMissing, leaseTenantCandidates, type TenantCandidate
+} from '~/utils/leaseDraft'
 
 definePageMeta({ layout: 'pro' })
 
@@ -12,70 +15,99 @@ const route = useRoute()
 const leasesApi = useLeasesApi()
 const landlordPropertiesApi = useLandlordPropertiesApi()
 const messagingApi = useMessagingApi()
-
-/**
- * Aucune recherche de locataire par email n'est accessible à un propriétaire :
- * `GET /user/all?search=` existe mais est réservé aux administrateurs
- * (vérifié sur le Swagger). Les locataires candidats viennent donc d'une
- * source réelle et déjà accessible au propriétaire : ses propres
- * conversations (chaque participant `tenant` y porte un vrai id).
- */
-const tenantCandidates = ref<{ id: string; name: string; hint: string }[]>([])
 const visitsApi = useVisitsApi()
-onMounted(async () => {
-  const seen = new Map<string, { name: string; hint: string }>()
-  const [conversations, visits] = await Promise.allSettled([messagingApi.fetchConversations(), visitsApi.fetchMine('landlord')])
-  // Visites d'abord (réalisées ou confirmées) : c'est d'elles que naît un bail le plus souvent (Lot 50).
-  if (visits.status === 'fulfilled') {
-    for (const v of visits.value) {
-      if (!v.tenant || !['completed', 'confirmed'].includes(v.status) || seen.has(v.tenant.id)) continue
-      const name = `${v.tenant.first_name ?? ''} ${v.tenant.last_name ?? ''}`.trim() || v.tenant.email
-      seen.set(v.tenant.id, { name, hint: `a visité ${v.unit?.name ?? 'un logement'}` })
-    }
+const rentalApi = useRentalRequestsApi()
+const authUser = useAuthUser()
+
+const tenantId = ref('')
+const unitId = ref('')
+
+/* ---- Locataires proposés : candidatures, visites, conversations (voir utils/leaseDraft) ---- */
+const tenantCandidates = ref<TenantCandidate[]>([])
+const candidatesState = ref<'loading' | 'ready'>('loading')
+/** Sources en échec : la liste reste utilisable, on dit seulement ce qui manque. */
+const candidatesPartial = ref(false)
+async function loadCandidates() {
+  candidatesState.value = 'loading'
+  const [requests, visits, conversations] = await Promise.allSettled([
+    rentalApi.fetchMine('landlord'),
+    visitsApi.fetchMine('landlord'),
+    messagingApi.fetchConversations()
+  ])
+  candidatesPartial.value = [requests, visits, conversations].some(r => r.status === 'rejected')
+  tenantCandidates.value = leaseTenantCandidates({
+    requests: requests.status === 'fulfilled' ? requests.value : [],
+    visits: visits.status === 'fulfilled' ? visits.value : [],
+    conversations: conversations.status === 'fulfilled' ? conversations.value : []
+  }, authUser.value?.id)
+  candidatesState.value = 'ready'
+  ensureQueryTenant()
+}
+onMounted(loadCandidates)
+
+/** Locataire passé par le lien (`?tenantId=`, depuis une visite) mais absent des listes : on le garde, sans inventer de nom. */
+function ensureQueryTenant() {
+  const id = tenantId.value
+  if (id && !tenantCandidates.value.some(t => t.id === id)) {
+    tenantCandidates.value = [{ id, name: 'Locataire du lien suivi', hint: 'compte transmis par la page précédente', unitId: null }, ...tenantCandidates.value]
   }
-  if (conversations.status === 'fulfilled') {
-    for (const c of conversations.value as ConversationSummary[]) {
-      const tenant = c.participants.find(p => p.role === 'tenant')
-      if (tenant && !seen.has(tenant.user_id)) {
-        seen.set(tenant.user_id, { name: `${tenant.user.first_name ?? ''} ${tenant.user.last_name ?? ''}`.trim() || 'Locataire', hint: 'conversation' })
-      }
-    }
-  }
-  tenantCandidates.value = [...seen].map(([id, t]) => ({ id, ...t }))
-  // Lien « Proposer un bail » : locataire hors des listes → on montre le champ d'identifiant pré-rempli.
-  if (tenantId.value && !seen.has(tenantId.value)) showIdField.value = true
+}
+const tenantOptions = computed(() => tenantCandidates.value.map(t => ({ value: t.id, label: `${t.name} · ${t.hint}` })))
+const selectedTenant = computed(() => tenantCandidates.value.find(t => t.id === tenantId.value) ?? null)
+// Choisir un candidat lié à un logement pré-remplit le logement, s'il n'est pas déjà choisi.
+watch(tenantId, () => {
+  if (!unitId.value && selectedTenant.value?.unitId && myUnits.value.some(u => u.id === selectedTenant.value!.unitId)) unitId.value = selectedTenant.value.unitId
 })
 
+/* ---- Logements ---- */
 const myProperties = ref<PropertySearchResult[]>([])
-onMounted(async () => {
+const unitsState = ref<'loading' | 'ready' | 'error'>('loading')
+async function loadUnits() {
+  unitsState.value = 'loading'
   try {
     const page = await landlordPropertiesApi.fetchMine({ limit: 100 })
     myProperties.value = page.data as PropertySearchResult[]
+    unitsState.value = 'ready'
   } catch {
-    myProperties.value = []
+    unitsState.value = 'error'
   }
-})
+}
+onMounted(loadUnits)
 const myUnits = computed(() => myProperties.value.flatMap(p => p.units.map(u => ({ id: u.id, propertyId: p.id, label: `${u.name} — ${p.name}`, price: u.price }))))
+const unitOptions = computed(() => myUnits.value.map(u => ({ value: u.id, label: u.label })))
+const selectedUnit = computed(() => myUnits.value.find(u => u.id === unitId.value) ?? null)
 
-const tenantId = ref(typeof route.query.tenantId === 'string' ? route.query.tenantId : '')
-const unitId = ref(typeof route.query.unitId === 'string' ? route.query.unitId : '')
+/* ---- Lien profond : ?tenantId= et ?unitId= sont lus, et suivis si on y revient depuis une autre fiche ---- */
+watch(() => [route.query.tenantId, route.query.unitId], ([t, u]) => {
+  if (typeof t === 'string' && t) tenantId.value = t
+  if (typeof u === 'string' && u) unitId.value = u
+  if (candidatesState.value === 'ready') ensureQueryTenant()
+}, { immediate: true })
+
 const billingFrequency = ref<LeaseBillingFrequency>('monthly')
+const FREQUENCY_OPTIONS = [
+  { value: 'monthly', label: 'Mensuelle' },
+  { value: 'daily', label: 'Journalière' },
+  { value: 'weekly', label: 'Hebdomadaire' },
+  { value: 'quarterly', label: 'Trimestrielle' },
+  { value: 'semi_annual', label: 'Semestrielle' },
+  { value: 'annual', label: 'Annuelle' }
+]
+const frequencyModel = computed({ get: () => billingFrequency.value as string, set: (v: string) => { billingFrequency.value = v as LeaseBillingFrequency } })
 const monthlyRent = ref('')
 const depositAmount = ref('')
 const startDate = ref('')
 const endDate = ref('')
 const contractType = ref<LeaseContractType>('standard')
+const contractModel = computed({ get: () => contractType.value as string, set: (v: string) => { contractType.value = v as LeaseContractType } })
+const CONTRACT_OPTIONS = CONTRACT_TYPES.map(c => ({ value: c, label: CONTRACT_TYPE_LABEL[c]! }))
 const depositAck = ref(false)
 const noticePeriod = ref('3')
-const showIdField = ref(false)
-
-const selectedUnit = computed(() => myUnits.value.find(u => u.id === unitId.value) ?? null)
 
 /**
  * Loyer pré-rempli depuis la grille tarifaire de la fréquence choisie (celle
  * que l'API utiliserait si le loyer était omis), sinon le prix de base pour un
- * bail mensuel. Avant : toujours le prix de base, même pour un bail
- * trimestriel ou si le tarif mensuel avait été changé dans « Tarifs ».
+ * bail mensuel.
  */
 const pricingApi = useUnitPricingApi()
 const unitPricing = ref<{ billing_frequency: string; price: string; is_available: boolean }[]>([])
@@ -101,11 +133,15 @@ function prefillRent() {
     rentHint.value = "Prix affiché sur l'annonce."
     if (!rentTouched.value) monthlyRent.value = String(Math.round(Number(selectedUnit.value.price)))
   } else {
-    rentHint.value = 'Aucun tarif pour cette fréquence : saisissez le loyer de la période.'
+    rentHint.value = selectedUnit.value ? 'Aucun tarif pour cette fréquence : saisissez le loyer de la période.' : ''
     if (!rentTouched.value) monthlyRent.value = ''
   }
 }
 watch(selectedUnit, u => { if (u && !unitPricing.value.length) prefillRent() })
+function onRentInput(v: string) {
+  monthlyRent.value = v
+  rentTouched.value = true
+}
 
 const depositMonths = computed(() => {
   const rent = Number(monthlyRent.value)
@@ -114,7 +150,7 @@ const depositMonths = computed(() => {
 })
 const depositExceeds = computed(() => depositExceedsCap(billingFrequency.value, Number(monthlyRent.value), Number(depositAmount.value)))
 
-const canSubmit = computed(() => !!(tenantId.value.trim() && unitId.value && startDate.value))
+const missing = computed(() => leaseFormMissing({ tenantId: tenantId.value, unitId: unitId.value, startDate: startDate.value }))
 const todayIso = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)
 const startWarning = computed(() => startDateWarning(startDate.value, todayIso))
 
@@ -122,12 +158,12 @@ const loading = ref(false)
 const errorMessage = ref('')
 
 async function submit() {
-  if (!canSubmit.value) return
+  if (missing.value) return
   const unit = selectedUnit.value
   errorMessage.value = validateLeaseForm({
     tenantId: tenantId.value, unitId: unitId.value, rent: monthlyRent.value, deposit: depositAmount.value,
     startDate: startDate.value, endDate: endDate.value, noticePeriod: noticePeriod.value
-  }) ?? (depositExceeds.value && !depositAck.value ? "Cochez l'accord des deux parties pour une caution au-delà de 3 mois de loyer." : '')
+  }) ?? (depositExceeds.value && !depositAck.value ? "Confirmez l'accord des deux parties pour une caution au-delà de 3 mois de loyer." : '')
   if (errorMessage.value || !unit) return
   loading.value = true
   try {
@@ -150,95 +186,125 @@ async function submit() {
     errorMessage.value = e instanceof ApiRequestError
       ? (e.status === 409
           ? 'Ce logement a déjà un bail sur cette période (un brouillon compte aussi). Choisissez un autre logement ou une autre date de début.'
-          : e.status === 404 ? "Ce locataire est introuvable : vérifiez l'identifiant." : errorText(e.mapped, 'La création du bail a échoué.'))
+          : e.status === 404 ? "Ce compte locataire est introuvable : choisissez un autre locataire." : errorText(e.mapped, 'La création du bail a échoué.'))
       : 'La création du bail a échoué.'
   } finally {
     loading.value = false
   }
 }
+
+function fmtDate(iso: string) {
+  return iso ? new Date(`${iso}T12:00:00`).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }) : ''
+}
 </script>
 
 <template>
-  <div class="max-w-[640px]">
-    <div class="rounded-2xl border border-[var(--border-subtle)] bg-white p-6.5">
-      <h2 class="mb-1 mt-0 font-display text-[22px] font-bold tracking-[-.02em]">Créer un bail</h2>
-      <p class="mb-5.5 mt-0 text-[13.5px] text-[var(--text-muted)]">Sélectionnez le locataire et l'unité, puis les conditions du bail.</p>
+  <div class="animate-[im-fade_.3s_ease_backwards]">
+    <NuxtLink to="/pro/baux" class="mb-4 inline-flex items-center gap-1.5 text-[13px] font-bold text-[var(--text-muted)] hover:text-green-700">
+      <ArrowLeft class="h-4 w-4" :stroke-width="1.9" /> Tous les baux
+    </NuxtLink>
 
-      <p v-if="errorMessage" class="mb-3.5 rounded-md border border-danger-border bg-danger-bg px-3.5 py-2.5 text-[13px] font-semibold text-danger-fg">{{ errorMessage }}</p>
+    <div class="grid grid-cols-1 items-start gap-4.5 lg:grid-cols-[minmax(0,1fr)_320px]">
+      <div class="flex min-w-0 flex-col gap-4.5">
+        <!-- Parties -->
+        <section class="rounded-2xl border border-[var(--border-subtle)] bg-white p-5.5">
+          <h2 class="m-0 text-[15px] font-bold">Locataire et logement</h2>
+          <p class="mb-4 mt-1 text-[13.5px] text-[var(--text-muted)]">Le bail est créé en brouillon : rien n'est envoyé au locataire avant que vous ne le signiez.</p>
 
-      <div class="flex flex-col gap-3.5">
-        <div>
-          <p class="mb-1.5 mt-0 text-[12.5px] font-bold">Locataire</p>
-          <select v-if="tenantCandidates.length" v-model="tenantId" class="h-[46px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-3 text-sm text-sand-900">
-            <option value="" disabled>Choisir parmi vos visites et conversations</option>
-            <option v-for="t in tenantCandidates" :key="t.id" :value="t.id">{{ t.name }} — {{ t.hint }}</option>
-          </select>
-          <p v-else class="m-0 text-[12.5px] text-[var(--text-muted)]">Aucun locataire dans vos visites ni vos conversations pour l'instant. Le locataire doit avoir un compte Immo.</p>
-          <button v-if="!showIdField && tenantCandidates.length" type="button" class="mt-1.5 text-[12px] font-bold text-[var(--text-muted)] underline" @click="showIdField = true">Le locataire n'est pas dans la liste ?</button>
-          <input v-if="showIdField || !tenantCandidates.length" v-model="tenantId" placeholder="Identifiant du compte locataire" class="mt-2 h-[42px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-3.5 font-mono text-[12.5px] outline-none">
-        </div>
-        <div>
-          <p class="mb-1.5 mt-0 text-[12.5px] font-bold">Unité</p>
-          <select v-model="unitId" class="h-[46px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-3 text-sm text-sand-900">
-            <option value="" disabled>Choisir une de vos unités</option>
-            <option v-for="u in myUnits" :key="u.id" :value="u.id">{{ u.label }}</option>
-          </select>
-        </div>
-
-        <div class="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
-          <div>
-            <p class="mb-1.5 mt-0 text-[12.5px] font-bold">Fréquence</p>
-            <select v-model="billingFrequency" class="h-[46px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-3 text-sm text-sand-900">
-              <option value="monthly">Mensuelle</option>
-              <option value="daily">Journalière</option>
-              <option value="weekly">Hebdomadaire</option>
-              <option value="quarterly">Trimestrielle</option>
-              <option value="semi_annual">Semestrielle</option>
-              <option value="annual">Annuelle</option>
-            </select>
+          <div v-if="candidatesState === 'loading'" class="h-[72px] animate-pulse rounded-md bg-sand-100" />
+          <template v-else-if="tenantCandidates.length">
+            <FormsSelect v-model="tenantId" label="Locataire" placeholder="Choisir parmi vos candidatures, visites et conversations" :options="tenantOptions" class="[&_select]:w-full" />
+            <p class="mb-0 mt-[7px] text-[12.5px] text-[var(--text-faint)]">Le locataire doit avoir un compte Immo : il signera et paiera son entrée en ligne.</p>
+          </template>
+          <div v-else class="flex items-start gap-3 rounded-md border border-dashed border-[var(--border-default)] p-4">
+            <span class="grid h-[46px] w-[46px] flex-none place-items-center rounded-pill bg-green-50 text-green-700"><UserRound class="h-5 w-5" :stroke-width="1.9" /></span>
+            <div class="min-w-0">
+              <p class="m-0 text-sm font-bold">Aucun locataire à proposer pour l'instant</p>
+              <p class="mb-0 mt-1 text-[13px] leading-[1.55] text-[var(--text-muted)]">Un locataire apparaît ici dès qu'il a candidaté, visité un de vos logements ou vous a écrit.</p>
+              <div class="mt-2.5 flex flex-wrap gap-x-4 gap-y-1.5 text-[12.5px] font-bold">
+                <NuxtLink to="/pro/candidatures" class="text-green-700">Candidatures</NuxtLink>
+                <NuxtLink to="/pro/visites" class="text-green-700">Visites</NuxtLink>
+                <NuxtLink to="/pro/messages" class="text-green-700">Messages</NuxtLink>
+              </div>
+            </div>
           </div>
-          <div>
-            <p class="mb-1.5 mt-0 text-[12.5px] font-bold">Loyer par période</p>
-            <input v-model="monthlyRent" inputmode="numeric" class="h-[46px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-3.5 font-mono text-sm outline-none" @input="rentTouched = true">
-            <p v-if="rentHint" class="mb-0 mt-1 text-[11.5px] text-[var(--text-faint)]">{{ rentHint }}</p>
+          <p v-if="candidatesPartial" class="mb-0 mt-2 text-[12.5px] font-semibold text-warn-fg">
+            Une partie de vos candidatures, visites ou conversations n'a pas pu être lue : la liste peut être incomplète.
+            <button type="button" class="font-bold underline" @click="loadCandidates">Réessayer</button>
+          </p>
+
+          <div class="mt-4">
+            <div v-if="unitsState === 'loading'" class="h-[72px] animate-pulse rounded-md bg-sand-100" />
+            <p v-else-if="unitsState === 'error'" class="m-0 text-[13px] font-semibold text-danger-fg">
+              Impossible de charger vos logements. <button type="button" class="font-bold underline" @click="loadUnits">Réessayer</button>
+            </p>
+            <template v-else-if="myUnits.length">
+              <FormsSelect v-model="unitId" label="Logement" placeholder="Choisir un de vos logements" :options="unitOptions" class="[&_select]:w-full" />
+            </template>
+            <p v-else class="m-0 text-[13px] text-[var(--text-muted)]">
+              Vous n'avez encore aucun logement. <NuxtLink to="/pro/biens/ajouter" class="font-bold text-green-700">Ajouter un bien</NuxtLink>
+            </p>
           </div>
-        </div>
+        </section>
 
-        <div class="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
-          <div><p class="mb-1.5 mt-0 text-[12.5px] font-bold">Caution</p><input v-model="depositAmount" inputmode="numeric" class="h-[46px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-3.5 font-mono text-sm outline-none"></div>
-          <div>
-            <p class="mb-1.5 mt-0 text-[12.5px] font-bold">Type de contrat</p>
-            <select v-model="contractType" class="h-[46px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-3 text-sm text-sand-900">
-              <option value="standard">Standard</option>
-              <option value="compact">Compact</option>
-              <option value="detailed">Détaillé</option>
-            </select>
+        <!-- Conditions -->
+        <section class="rounded-2xl border border-[var(--border-subtle)] bg-white p-5.5">
+          <h2 class="m-0 mb-4 text-[15px] font-bold">Conditions</h2>
+          <div class="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+            <FormsSelect v-model="frequencyModel" label="Fréquence de paiement" :options="FREQUENCY_OPTIONS" class="[&_select]:w-full" />
+            <FormsInput :model-value="monthlyRent" label="Loyer par période (FCFA)" type="number" mono :hint="rentHint || undefined" @update:model-value="onRentInput" />
+            <FormsInput v-model="depositAmount" label="Caution (FCFA)" type="number" mono hint="Conservée par Immo pendant tout le bail. 0 si aucune." />
+            <div>
+              <FormsSelect v-model="contractModel" label="Modèle de contrat" :options="CONTRACT_OPTIONS" class="[&_select]:w-full" />
+              <p class="mb-0 mt-[7px] text-[12.5px] text-[var(--text-faint)]">{{ CONTRACT_TYPE_HINT[contractType] }}</p>
+            </div>
           </div>
-        </div>
+          <p class="mb-0 mt-3 text-[12.5px] leading-[1.55] text-[var(--text-muted)]">{{ CONTRACT_TYPE_HELP }}</p>
 
-        <div v-if="depositExceeds" class="rounded-md border border-warn-border bg-warn-bg p-4">
-          <p class="m-0 text-[13.5px] font-bold text-warn-fg-deep">Caution supérieure au plafond légal</p>
-          <p class="mb-3 mt-1.5 text-[13px] leading-[1.55] text-clay-900">La Loi 2022-30 plafonne la caution à 3 mois de loyer hors charges. Vous demandez l'équivalent de {{ depositMonths.toFixed(1) }} mois. Une caution supérieure exige l'accord explicite des deux parties.</p>
-          <label class="flex cursor-pointer items-center gap-2.5" @click="depositAck = !depositAck">
-            <span class="grid h-5 w-5 flex-none place-items-center rounded-xs border-2 text-xs text-white" :class="depositAck ? 'border-green-600 bg-green-600' : 'border-[var(--border-default)] bg-white'">{{ depositAck ? '✓' : '' }}</span>
-            <span class="text-[13px] font-semibold">Je confirme cet accord dérogatoire des deux parties</span>
-          </label>
-        </div>
+          <div v-if="depositExceeds" class="mt-4 rounded-md border border-warn-border bg-warn-bg p-4">
+            <p class="m-0 text-[13.5px] font-bold text-warn-fg-deep">Caution supérieure au plafond légal</p>
+            <p class="mb-3 mt-1.5 text-[13px] leading-[1.55] text-warn-fg-deep">La Loi 2022-30 plafonne la caution à 3 mois de loyer hors charges. Vous demandez l'équivalent de <span class="font-mono">{{ depositMonths.toFixed(1).replace('.', ',') }}</span> mois : il faut l'accord explicite des deux parties.</p>
+            <FormsToggle v-model="depositAck" label="Je confirme cet accord dérogatoire des deux parties" />
+          </div>
+        </section>
 
-        <div class="grid grid-cols-1 gap-3.5 sm:grid-cols-3">
-          <div><p class="mb-1.5 mt-0 text-[12.5px] font-bold">Date de début</p><input v-model="startDate" type="date" class="h-[46px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-3.5 text-sm outline-none"></div>
-          <div><p class="mb-1.5 mt-0 text-[12.5px] font-bold">Date de fin (facultatif)</p><input v-model="endDate" type="date" :min="startDate || undefined" class="h-[46px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-3.5 text-sm outline-none"></div>
-          <div><p class="mb-1.5 mt-0 text-[12.5px] font-bold">Préavis (mois)</p><input v-model="noticePeriod" inputmode="numeric" class="h-[46px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-3.5 text-sm outline-none"></div>
-        </div>
-        <p v-if="startWarning" class="m-0 rounded-md border border-warn-border bg-warn-bg px-3.5 py-2.5 text-[12.5px] text-warn-fg">{{ startWarning }}</p>
-        <p class="m-0 text-[12px] leading-[1.5] text-[var(--text-faint)]">
-          Le bail est créé en brouillon : vous le relisez, puis vous l'envoyez (ce qui vaut votre signature). Dès sa création, le logement est bloqué dans votre calendrier sur cette période.
-        </p>
+        <!-- Dates -->
+        <section class="rounded-2xl border border-[var(--border-subtle)] bg-white p-5.5">
+          <h2 class="m-0 mb-4 text-[15px] font-bold">Durée</h2>
+          <div class="grid grid-cols-1 gap-3.5 sm:grid-cols-3">
+            <FormsInput v-model="startDate" label="Date de début" type="date" />
+            <FormsInput v-model="endDate" label="Date de fin (facultatif)" type="date" hint="Vide : durée indéterminée." />
+            <FormsInput v-model="noticePeriod" label="Préavis du locataire (mois)" type="number" mono hint="Entre 1 et 12 mois." />
+          </div>
+          <p v-if="startWarning" class="mb-0 mt-3.5 rounded-md border border-warn-border bg-warn-bg px-3.5 py-2.5 text-[12.5px] text-warn-fg">{{ startWarning }}</p>
+        </section>
       </div>
 
-      <div class="mt-6 flex justify-end">
-        <button type="button" class="rounded-md bg-[image:var(--action-primary)] px-6 py-3.5 text-sm font-bold text-white shadow-action" :disabled="!canSubmit || loading" @click="submit">{{ loading ? 'Création…' : 'Créer le bail (brouillon)' }}</button>
-      </div>
+      <!-- Récapitulatif et action -->
+      <aside class="rounded-2xl border border-[var(--border-subtle)] bg-white p-5.5 lg:sticky lg:top-[94px]">
+        <h2 class="m-0 text-[15px] font-bold">Récapitulatif</h2>
+        <div class="mt-3 flex flex-col">
+          <div class="flex items-center gap-3 border-b border-sand-200 py-3">
+            <UserRound class="h-4 w-4 flex-none text-[var(--text-faint)]" :stroke-width="1.9" />
+            <p class="m-0 min-w-0 flex-1 truncate text-[13.5px]" :class="selectedTenant ? 'font-bold' : 'text-[var(--text-faint)]'">{{ selectedTenant?.name ?? 'Locataire à choisir' }}</p>
+          </div>
+          <div class="flex items-center gap-3 border-b border-sand-200 py-3">
+            <FileText class="h-4 w-4 flex-none text-[var(--text-faint)]" :stroke-width="1.9" />
+            <p class="m-0 min-w-0 flex-1 truncate text-[13.5px]" :class="selectedUnit ? 'font-bold' : 'text-[var(--text-faint)]'">{{ selectedUnit?.label ?? 'Logement à choisir' }}</p>
+          </div>
+        </div>
+        <div class="mt-2">
+          <DataMoneyLine label="Loyer" :value="Number(monthlyRent) > 0 ? `${formatFcfa(Number(monthlyRent))} ${RENT_SUFFIX[billingFrequency]}` : 'à saisir'" />
+          <DataMoneyLine label="Caution" :value="depositAmount !== '' ? formatFcfa(Number(depositAmount)) : 'à saisir'" />
+          <DataMoneyLine label="Début" :value="startDate ? fmtDate(startDate) : 'à choisir'" />
+          <DataMoneyLine label="Contrat" :value="CONTRACT_TYPE_LABEL[contractType] ?? ''" />
+        </div>
+
+        <p v-if="errorMessage" class="mb-0 mt-4 rounded-md border border-danger-border bg-danger-bg px-3.5 py-2.5 text-[13px] font-semibold text-danger-fg">{{ errorMessage }}</p>
+        <CoreButton full-width class="mt-4.5" :disabled="!!missing || loading" @click="submit">{{ loading ? 'Création…' : 'Créer le bail en brouillon' }}</CoreButton>
+        <p v-if="missing" class="mb-0 mt-2 text-center text-[12.5px] font-semibold text-[var(--text-muted)]">{{ missing }}</p>
+        <p class="mb-0 mt-3 text-xs leading-[1.5] text-[var(--text-faint)]">Ensuite : vous relisez le contrat, puis vous l'envoyez, ce qui vaut votre signature. Dès sa création, le logement est bloqué dans votre calendrier sur cette période.</p>
+      </aside>
     </div>
   </div>
 </template>

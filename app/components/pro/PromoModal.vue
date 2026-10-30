@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { CircleCheck } from '@lucide/vue'
 import type { PropertySearchResult } from '~/types/property'
 import type { CreatePromoCodePayload, PromoDiscountType } from '~/types/landlordBookings'
 import { ApiRequestError } from '~/utils/authenticatedFetcher'
@@ -60,6 +61,23 @@ function close() {
   modal.value = ''
 }
 
+/** Saisie entamée : la fenêtre ne se ferme plus sur un clic à côté. */
+const dirty = computed(() => step.value === 'form' && !!(code.value.trim() || discountValue.value || rewardValue.value || validFrom.value || validUntil.value || scope.value !== 'portfolio'))
+const SCOPES: { value: Scope; label: string }[] = [
+  { value: 'portfolio', label: 'Tout mon portefeuille' },
+  { value: 'property', label: 'Un bien' },
+  { value: 'unit', label: 'Un logement' }
+]
+const scopeModel = computed({ get: () => scope.value as string, set: (v: string) => { scope.value = v as Scope; scopeTargetId.value = '' } })
+const propertyOptions = computed(() => myProperties.value.map(p => ({ value: p.id, label: p.name })))
+const unitOptions = computed(() => myUnits.value.map(u => ({ value: u.id, label: u.label })))
+/** Ce qui manque pour créer le code, dit sous le bouton plutôt qu'un bouton grisé muet. */
+const missingHint = computed(() => {
+  if (!discountValue.value && !rewardValue.value) return 'Indiquez une réduction pour le voyageur ou une récompense pour le parrain.'
+  if (scope.value !== 'portfolio' && !scopeTargetId.value) return scope.value === 'unit' ? 'Choisissez le logement concerné.' : 'Choisissez le bien concerné.'
+  return null
+})
+
 async function submit() {
   if (blocked.value) return
   loading.value = true
@@ -87,80 +105,61 @@ async function submit() {
 </script>
 
 <template>
-  <Teleport to="body">
-    <div v-if="open" class="fixed inset-0 z-[90] grid animate-[im-veil_.22s_ease_both] place-items-center bg-black/50 p-6 backdrop-blur-[3px]" @click="close">
-      <div class="flex max-h-[90vh] w-[480px] max-w-[calc(100vw-3rem)] flex-col overflow-hidden rounded-2xl bg-[var(--surface-page)] shadow-panel animate-[im-rise_.28s_var(--ease-standard)_both]" @click.stop>
-        <div class="flex items-center justify-between border-b border-[var(--border-subtle)] px-6 py-4.5">
-          <h3 class="m-0 font-display text-[19px] font-bold tracking-[-.02em]">{{ step === 'form' ? 'Créer un code promo' : 'Code créé' }}</h3>
-          <button type="button" class="grid h-[34px] w-[34px] place-items-center rounded-pill bg-sand-200 text-[15px] text-sand-800" @click="close">✕</button>
-        </div>
+  <CoreModal :open="open" :title="step === 'form' ? 'Créer un code promo' : 'Code créé'" width="480px" :dirty="dirty" @close="close">
+    <template v-if="step === 'form'">
+      <p v-if="errorMessage" class="mb-3.5 mt-0 text-[13px] font-semibold text-danger-fg">{{ errorMessage }}</p>
 
-        <div class="overflow-y-auto p-6">
-          <template v-if="step === 'form'">
-            <p v-if="errorMessage" class="mb-3.5 mt-0 text-[13px] font-semibold text-danger-fg">{{ errorMessage }}</p>
+      <label class="block">
+        <span class="mb-[7px] block text-[12.5px] font-bold">Code (facultatif)</span>
+        <input v-model="code" placeholder="RENTREE26" class="h-[46px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-3.5 font-mono text-[15px] font-bold uppercase outline-none">
+        <span class="mt-[7px] block text-[12.5px] text-[var(--text-faint)]">Vide : la réduction s'applique d'elle-même, sans code à saisir.</span>
+      </label>
 
-            <p class="mb-2 mt-0 text-[12.5px] font-bold">Code (optionnel — laissez vide pour un code auto-appliqué)</p>
-            <input v-model="code" placeholder="RENTREE26" class="h-[46px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-3.5 font-mono text-[15px] font-bold uppercase outline-none">
-
-            <p class="mb-2 mt-4 text-[12.5px] font-bold">Portée</p>
-            <div class="flex flex-wrap gap-2">
-              <button type="button" class="rounded-pill border px-3.5 py-2.5 text-[13px] font-semibold transition-all" :class="scope === 'portfolio' ? 'border-green-600 bg-green-600 text-white' : 'border-[var(--border-default)] bg-white text-[var(--text-secondary)]'" @click="scope = 'portfolio'; scopeTargetId = ''">Tout mon portefeuille</button>
-              <button type="button" class="rounded-pill border px-3.5 py-2.5 text-[13px] font-semibold transition-all" :class="scope === 'property' ? 'border-green-600 bg-green-600 text-white' : 'border-[var(--border-default)] bg-white text-[var(--text-secondary)]'" @click="scope = 'property'; scopeTargetId = ''">Un bien précis</button>
-              <button type="button" class="rounded-pill border px-3.5 py-2.5 text-[13px] font-semibold transition-all" :class="scope === 'unit' ? 'border-green-600 bg-green-600 text-white' : 'border-[var(--border-default)] bg-white text-[var(--text-secondary)]'" @click="scope = 'unit'; scopeTargetId = ''">Une unité précise</button>
-            </div>
-            <select v-if="scope === 'property'" v-model="scopeTargetId" class="mt-2.5 h-[46px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-3.5 text-[13px] outline-none">
-              <option value="" disabled>Choisir un bien</option>
-              <option v-for="p in myProperties" :key="p.id" :value="p.id">{{ p.name }}</option>
-            </select>
-            <select v-if="scope === 'unit'" v-model="scopeTargetId" class="mt-2.5 h-[46px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-3.5 text-[13px] outline-none">
-              <option value="" disabled>Choisir une unité</option>
-              <option v-for="u in myUnits" :key="u.id" :value="u.id">{{ u.label }}</option>
-            </select>
-
-            <div class="mt-4 grid grid-cols-2 gap-3.5">
-              <div>
-                <p class="mb-1.5 mt-0 text-[12.5px] font-bold">Réduction locataire</p>
-                <div class="flex gap-1.5">
-                  <input v-model.number="discountValue" type="number" min="0" placeholder="10" class="h-[46px] w-full min-w-0 rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-3.5 font-mono text-sm outline-none">
-                  <select v-model="discountType" class="h-[46px] flex-none rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-2 text-xs outline-none">
-                    <option value="percentage">%</option>
-                    <option value="fixed">F</option>
-                  </select>
-                </div>
-              </div>
-              <div>
-                <p class="mb-1.5 mt-0 text-[12.5px] font-bold">Récompense parrain</p>
-                <div class="flex gap-1.5">
-                  <input v-model.number="rewardValue" type="number" min="0" placeholder="2000" class="h-[46px] w-full min-w-0 rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-3.5 font-mono text-sm outline-none">
-                  <select v-model="rewardType" class="h-[46px] flex-none rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-2 text-xs outline-none">
-                    <option value="fixed">F</option>
-                    <option value="percentage">%</option>
-                  </select>
-                </div>
-              </div>
-              <div><p class="mb-1.5 mt-0 text-[12.5px] font-bold">Valide du</p><input v-model="validFrom" type="date" class="h-[46px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-3.5 text-sm outline-none"></div>
-              <div><p class="mb-1.5 mt-0 text-[12.5px] font-bold">au</p><input v-model="validUntil" type="date" class="h-[46px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-3.5 text-sm outline-none"></div>
-            </div>
-
-            <button
-              type="button"
-              class="mt-5.5 w-full rounded-md py-3.5 text-[15px] font-bold text-white transition-colors"
-              :class="blocked || loading ? 'cursor-not-allowed bg-sand-400' : 'cursor-pointer bg-[image:var(--action-primary)] shadow-action'"
-              :disabled="blocked || loading"
-              @click="submit"
-            >{{ loading ? 'Création…' : 'Créer le code' }}</button>
-          </template>
-
-          <template v-else>
-            <div class="px-0.5 py-1 text-center">
-              <div class="mx-auto grid h-15 w-15 animate-[im-pop_.5s_ease] place-items-center rounded-pill bg-green-600 text-[28px] text-white">✓</div>
-              <p class="mb-0 mt-4.5 text-lg font-bold">Code créé</p>
-              <p class="mx-auto mb-0 mt-2.5 max-w-[320px] text-sm leading-[1.6] text-[var(--text-muted)]">Le code <strong class="font-mono">{{ codeUpper || 'auto-appliqué' }}</strong> est actif et apparaît dans la liste.</p>
-              <CoreButton size="lg" full-width class="mt-5.5" @click="close">Terminé</CoreButton>
-            </div>
-          </template>
-        </div>
+      <p class="mb-2 mt-4 text-[12.5px] font-bold">Portée</p>
+      <div class="max-w-full overflow-x-auto">
+        <FormsSegmentedControl v-model="scopeModel" :options="SCOPES" size="sm" class="whitespace-nowrap" />
       </div>
+      <FormsSelect v-if="scope === 'property'" v-model="scopeTargetId" placeholder="Choisir un bien" :options="propertyOptions" class="mt-2.5 [&_select]:w-full" />
+      <FormsSelect v-if="scope === 'unit'" v-model="scopeTargetId" placeholder="Choisir un logement" :options="unitOptions" class="mt-2.5 [&_select]:w-full" />
+
+      <div class="mt-4 grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+        <div>
+          <p class="mb-[7px] mt-0 text-[12.5px] font-bold">Réduction voyageur</p>
+          <div class="flex gap-1.5">
+            <input v-model.number="discountValue" type="number" min="0" placeholder="10" aria-label="Montant de la réduction" class="h-[46px] w-full min-w-0 rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-3.5 font-mono text-sm outline-none">
+            <select v-model="discountType" aria-label="Unité de la réduction" class="h-[46px] flex-none rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-2 text-[13px] outline-none">
+              <option value="percentage">%</option>
+              <option value="fixed">FCFA</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <p class="mb-[7px] mt-0 text-[12.5px] font-bold">Récompense parrain</p>
+          <div class="flex gap-1.5">
+            <input v-model.number="rewardValue" type="number" min="0" placeholder="2000" aria-label="Montant de la récompense" class="h-[46px] w-full min-w-0 rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-3.5 font-mono text-sm outline-none">
+            <select v-model="rewardType" aria-label="Unité de la récompense" class="h-[46px] flex-none rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-2 text-[13px] outline-none">
+              <option value="fixed">FCFA</option>
+              <option value="percentage">%</option>
+            </select>
+          </div>
+        </div>
+        <FormsInput v-model="validFrom" label="Valide du" type="date" />
+        <FormsInput v-model="validUntil" label="au" type="date" />
+      </div>
+    </template>
+
+    <div v-else class="px-0.5 py-1 text-center">
+      <span class="mx-auto grid h-[46px] w-[46px] animate-[im-pop_.5s_ease] place-items-center rounded-pill bg-ok-bg text-ok-fg"><CircleCheck class="h-6 w-6" :stroke-width="1.9" /></span>
+      <p class="mb-0 mt-4 text-[15px] font-bold">Code créé</p>
+      <p class="mx-auto mb-0 mt-2 max-w-[320px] text-[13.5px] leading-[1.6] text-[var(--text-muted)]">Le code <strong class="font-mono">{{ codeUpper || 'auto-appliqué' }}</strong> est actif et apparaît dans la liste.</p>
     </div>
-  </Teleport>
+
+    <template #footer>
+      <template v-if="step === 'form'">
+        <CoreButton full-width :disabled="blocked || loading" @click="submit">{{ loading ? 'Création…' : 'Créer le code' }}</CoreButton>
+        <p v-if="missingHint" class="mb-0 mt-2 text-center text-[12.5px] font-semibold text-[var(--text-muted)]">{{ missingHint }}</p>
+      </template>
+      <CoreButton v-else full-width @click="close">Terminé</CoreButton>
+    </template>
+  </CoreModal>
 </template>

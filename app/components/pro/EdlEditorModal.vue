@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { FileText, Plus, X } from '@lucide/vue'
 import type { InventoryDetail, InventoryRoom, InventoryType } from '~/types/tenant'
 import { ApiRequestError } from '~/utils/authenticatedFetcher'
 import { errorText } from '~/utils/apiErrors'
@@ -28,7 +29,8 @@ const detail = ref<InventoryDetail | null>(props.inventory)
 const loading = ref(false)
 const errorMessage = ref('')
 const changed = ref(false)
-const body = ref<HTMLElement | null>(null)
+/** Haut du contenu : on y remonte après l'envoi, là où apparaît la zone de signature. */
+const top = ref<HTMLElement | null>(null)
 
 const rooms = ref<InventoryRoom[]>(editableRooms(props.inventory?.rooms))
 const generalComment = ref(props.inventory?.general_comment ?? '')
@@ -42,7 +44,17 @@ function syncFrom(inv: InventoryDetail) {
   generalComment.value = inv.general_comment ?? ''
   meterElectricity.value = inv.meter_readings?.electricity ?? ''
   meterWater.value = inv.meter_readings?.water ?? ''
+  savedSnapshot.value = snapshot()
 }
+
+/*
+ * Saisie non enregistrée (pièces, photos, remarques, relevés, signature tracée) :
+ * la fenêtre ne se ferme plus sur un clic à côté, et la croix demande confirmation.
+ */
+function snapshot() {
+  return JSON.stringify([rooms.value, generalComment.value, meterElectricity.value, meterWater.value])
+}
+const savedSnapshot = ref(snapshot())
 
 /** État des lieux d'entrée du même bail/séjour : point de départ et référence d'une sortie (Lot 52). */
 const entryRef = ref<InventoryDetail | null>(null)
@@ -130,6 +142,7 @@ async function save(): Promise<boolean> {
       meter_readings: meters.electricity || meters.water ? meters : undefined
     })
     changed.value = true
+    savedSnapshot.value = snapshot()
     return true
   } catch (e) {
     errorMessage.value = e instanceof ApiRequestError ? errorText(e.mapped, "L'enregistrement a échoué.") : "L'enregistrement a échoué."
@@ -153,7 +166,7 @@ async function sendForSignature() {
     changed.value = true
     // La zone de signature apparaît en haut : on y remonte (on était en bas, sur les pièces).
     await nextTick()
-    body.value?.scrollTo({ top: 0, behavior: 'smooth' })
+    top.value?.scrollIntoView({ block: 'start', behavior: 'smooth' })
   } catch (e) {
     errorMessage.value = e instanceof ApiRequestError ? errorText(e.mapped, "L'envoi a échoué.") : "L'envoi a échoué."
   } finally {
@@ -182,6 +195,7 @@ async function submitSignature() {
     }
     detail.value = await inventoriesApi.sign(detail.value!.id, signature.value)
     changed.value = true
+    signature.value = ''
     await pad.value?.rememberIfAsked()
   } catch (e) {
     errorMessage.value = e instanceof ApiRequestError ? errorText(e.mapped, 'La signature a échoué.') : 'La signature a échoué.'
@@ -196,7 +210,13 @@ async function openPdf() {
   errorMessage.value = (await doc.open('pdf', url, url)) ?? ''
 }
 
-function close() {
+const dirty = computed(() => (editable.value && snapshot() !== savedSnapshot.value) || (mustSign.value && !!signature.value))
+const confirmClose = ref(false)
+function close(force = false) {
+  if (dirty.value && !force) {
+    confirmClose.value = true
+    return
+  }
   if (changed.value) emit('saved')
   emit('close')
 }
@@ -215,146 +235,144 @@ const statusLine = computed(() => {
 </script>
 
 <template>
-  <Teleport to="body">
-    <div class="fixed inset-0 z-[90] grid animate-[im-veil_.22s_ease_both] place-items-center bg-black/50 p-3 backdrop-blur-[3px] sm:p-6" @click="close">
-      <div class="flex max-h-[90vh] w-[640px] max-w-full animate-[im-rise_.28s_var(--ease-standard)_both] flex-col overflow-hidden rounded-2xl bg-[var(--surface-page)] shadow-panel" @click.stop>
-        <div class="flex items-center justify-between gap-3 border-b border-[var(--border-subtle)] px-6 py-[18px]">
-          <div class="min-w-0">
-            <h3 class="m-0 truncate font-display text-lg font-bold tracking-[-.02em]">{{ title }}</h3>
-            <p v-if="detail" class="mb-0 mt-1 text-[12.5px] text-[var(--text-muted)]">{{ INVENTORY_STATUS_LABEL[detail.status] ?? detail.status }}</p>
-          </div>
-          <button type="button" class="grid h-9 w-9 flex-none place-items-center rounded-pill bg-sand-200 text-base text-sand-800" aria-label="Fermer" @click="close">✕</button>
-        </div>
-
-        <div ref="body" class="overflow-y-auto p-6">
-          <p v-if="!detail && loading" class="m-0 text-sm text-[var(--text-muted)]">Création en cours…</p>
-          <p v-if="errorMessage" class="mb-3.5 mt-0 rounded-md border border-danger-border bg-danger-bg px-3.5 py-2.5 text-[13px] font-semibold text-danger-fg">{{ errorMessage }}</p>
-          <p v-if="photoProgress" class="mb-3.5 mt-0 text-[12.5px] font-semibold text-[var(--text-muted)]">{{ photoProgress }}</p>
-          <template v-if="detail">
-            <div v-if="statusLine" class="mb-4 rounded-md border p-4" :class="detail.status === 'signed' ? 'border-ok-border bg-ok-bg' : 'border-warn-border bg-warn-bg'">
-              <p class="m-0 text-[13.5px] font-semibold" :class="detail.status === 'signed' ? 'text-green-900' : 'text-warn-fg'">{{ statusLine }}</p>
-            </div>
-
-            <div v-if="mustSign" class="mb-5 rounded-xl border border-[var(--border-escrow)] bg-[var(--surface-escrow)] p-4.5">
-              <p class="m-0 text-[14px] font-bold text-clay-700">Votre signature</p>
-              <p class="mb-3 mt-1.5 text-[12.5px] leading-[1.55] text-clay-900">Relisez le contenu ci-dessous : une fois signé, il ne peut plus être modifié.</p>
-              <FormsSignaturePad ref="pad" v-model="signature" />
-            </div>
-
-            <p v-if="editable && detail.status === 'draft'" class="mb-4 mt-0 text-[13px] leading-[1.55] text-[var(--text-muted)]">
-              Parcourez le logement pièce par pièce. Ajoutez les pièces en un clic, puis ajustez l'état de chaque élément. Enregistrez à tout moment ; envoyez à {{ otherName }} quand c'est terminé.
-            </p>
-
-            <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <label class="block">
-                <span class="mb-1.5 block text-[12px] font-bold text-[var(--text-muted)]">Relevé du compteur d'électricité</span>
-                <input v-model="meterElectricity" :disabled="!editable" inputmode="decimal" placeholder="ex. 04521" class="h-10 w-full rounded-sm border border-[var(--border-default)] bg-white px-3 text-[13.5px] outline-none disabled:bg-sand-100">
-              </label>
-              <label class="block">
-                <span class="mb-1.5 block text-[12px] font-bold text-[var(--text-muted)]">Relevé du compteur d'eau</span>
-                <input v-model="meterWater" :disabled="!editable" inputmode="decimal" placeholder="ex. 0318" class="h-10 w-full rounded-sm border border-[var(--border-default)] bg-white px-3 text-[13.5px] outline-none disabled:bg-sand-100">
-              </label>
-            </div>
-            <label class="mt-3.5 block">
-              <span class="mb-1.5 block text-[12px] font-bold text-[var(--text-muted)]">Commentaire général</span>
-              <textarea v-model="generalComment" :disabled="!editable" rows="2" maxlength="2000" class="w-full resize-y rounded-md border border-[var(--border-default)] bg-white p-3 text-sm outline-none disabled:bg-sand-100" />
-            </label>
-
-            <!-- Sortie : comparée à l'entrée (Lot 52) -->
-            <div v-if="type === 'exit' && entryRef" class="mt-4 rounded-md border p-4" :class="degradations.length ? 'border-danger-border bg-danger-bg' : 'border-[var(--border-subtle)] bg-white'">
-              <p class="m-0 text-[13.5px] font-bold" :class="degradations.length ? 'text-danger-fg' : ''">
-                {{ degradations.length ? `${degradations.length} élément${degradations.length > 1 ? 's' : ''} dégradé${degradations.length > 1 ? 's' : ''} depuis l'entrée` : "Aucun élément dégradé depuis l'entrée" }}
-              </p>
-              <ul v-if="degradations.length" class="mb-0 mt-1.5 list-disc pl-5 text-[12.5px] text-danger-fg">
-                <li v-for="d in degradations" :key="`${d.room}|${d.item}`">{{ d.room }} · {{ d.item }} : {{ itemStateLabel(d.from) }} → {{ itemStateLabel(d.to) }}</li>
-              </ul>
-              <p v-if="consumption && (consumption.electricity !== null || consumption.water !== null)" class="mb-0 mt-1.5 text-[12.5px] text-[var(--text-muted)]">
-                Consommation depuis l'entrée :<template v-if="consumption.electricity !== null"> électricité {{ consumption.electricity }}</template><template v-if="consumption.electricity !== null && consumption.water !== null"> ·</template><template v-if="consumption.water !== null"> eau {{ consumption.water }}</template>
-              </p>
-            </div>
-            <p v-else-if="type === 'exit' && !loading" class="mb-0 mt-4 text-[12.5px] text-[var(--text-muted)]">Aucun état des lieux d'entrée : la sortie ne pourra pas lui être comparée.</p>
-            <button v-if="editable && type === 'exit' && !rooms.length && entryRef?.rooms.length" type="button" class="mt-3 w-full rounded-md border border-dashed border-green-600 bg-green-50 px-4 py-3 text-[13px] font-bold text-green-800" @click="startFromEntry">
-              Reprendre les {{ entryRef.rooms.length }} pièces de l'état des lieux d'entrée
-            </button>
-
-            <div v-for="(room, ri) in rooms" :key="ri" class="mt-4 rounded-lg border border-[var(--border-subtle)] bg-white p-4">
-              <div class="flex items-center justify-between gap-2.5">
-                <input v-if="editable" v-model="room.name" class="h-9 min-w-0 flex-1 rounded-sm border border-transparent bg-transparent px-1 text-[14.5px] font-bold outline-none hover:border-[var(--border-default)] focus:border-[var(--border-default)]" aria-label="Nom de la pièce">
-                <p v-else class="m-0 text-[14.5px] font-bold">{{ room.name }}</p>
-                <button v-if="editable" type="button" class="flex-none text-xs font-bold text-danger-fg" @click="removeRoom(ri)">Retirer</button>
-              </div>
-              <div v-for="(item, ii) in room.items" :key="ii" class="mt-3 border-t border-sand-200 pt-3">
-                <div v-if="editable" class="grid grid-cols-1 gap-2 sm:grid-cols-[1.2fr_1fr_1.4fr_auto]">
-                  <input v-model="item.name" placeholder="Élément (ex. Murs)" class="h-9 w-full rounded-sm border border-[var(--border-default)] bg-white px-2.5 text-[13px] outline-none">
-                  <select v-model="item.state" class="h-9 w-full rounded-sm border border-[var(--border-default)] bg-white px-2 text-[13px]">
-                    <option v-for="s in INVENTORY_ITEM_STATES" :key="s.code" :value="s.code">{{ s.label }}</option>
-                  </select>
-                  <input v-model="item.comment" placeholder="Remarque (facultatif)" class="h-9 w-full rounded-sm border border-[var(--border-default)] bg-white px-2.5 text-[13px] outline-none">
-                  <button type="button" class="h-9 whitespace-nowrap rounded-sm border border-[var(--border-default)] bg-white px-2.5 text-xs font-bold" aria-label="Retirer l'élément" @click="removeItem(room, ii)">✕</button>
-                </div>
-                <div v-else class="flex items-start gap-2.5">
-                  <div class="min-w-0 flex-1">
-                    <p class="m-0 text-[13.5px] font-semibold">{{ item.name || 'Élément' }}</p>
-                    <p v-if="item.comment" class="mb-0 mt-0.5 text-[12.5px] text-[var(--text-muted)] [overflow-wrap:anywhere]">{{ item.comment }}</p>
-                  </div>
-                  <span class="flex-none text-[12.5px] font-bold text-[var(--text-secondary)]">{{ itemStateLabel(item.state) }}</span>
-                </div>
-                <p v-if="comparison(room, item)?.entryState" class="mb-0 mt-1 text-[11.5px]" :class="comparison(room, item)?.degraded ? 'font-bold text-danger-fg' : 'text-[var(--text-faint)]'">
-                  À l'entrée : {{ itemStateLabel(comparison(room, item)?.entryState ?? '') }}{{ comparison(room, item)?.degraded ? ' — dégradé' : '' }}
-                </p>
-                <EdlPhotoStrip
-                  :api="photos"
-                  :inventory-id="detail.id"
-                  :origin="item._origin ?? null"
-                  :existing="item._existing ?? []"
-                  :urls="item.photos ?? []"
-                  :editable="editable"
-                  @added="item.photos = [...(item.photos ?? []), $event]"
-                  @remove-existing="removeExisting(item, $event)"
-                  @remove-url="removeUrl(item, $event)"
-                />
-              </div>
-              <p v-if="!room.items.length" class="mb-0 mt-2 text-[12.5px] text-[var(--text-faint)]">Aucun élément constaté.</p>
-              <button v-if="editable" type="button" class="mt-3 text-[12.5px] font-bold text-green-700" @click="addItem(room)">+ Ajouter un élément</button>
-            </div>
-
-            <template v-if="editable">
-              <p class="mb-2 mt-5 text-[12px] font-bold text-[var(--text-muted)]">Ajouter une pièce</p>
-              <div class="flex flex-wrap gap-2">
-                <button v-for="p in ROOM_PRESETS" :key="p.name" type="button" class="rounded-pill border border-[var(--border-default)] bg-white px-3.5 py-2 text-[12.5px] font-bold hover:border-green-600" @click="addPreset(p)">+ {{ p.name }}</button>
-              </div>
-              <div class="mt-2.5 flex gap-2">
-                <input v-model="newRoomName" placeholder="Autre pièce (ex. Bureau)" class="h-10 min-w-0 flex-1 rounded-sm border border-[var(--border-default)] bg-white px-3 text-[13.5px] outline-none" @keydown.enter="addRoom">
-                <button type="button" class="whitespace-nowrap rounded-sm border border-[var(--border-default)] bg-white px-4 text-[12.5px] font-bold" @click="addRoom">Ajouter</button>
-              </div>
-            </template>
-            <p v-else-if="!rooms.length" class="mt-4 text-[13px] text-[var(--text-muted)]">Aucune pièce.</p>
-          </template>
-        </div>
-
-        <div v-if="detail" class="border-t border-[var(--border-subtle)] bg-[var(--surface-page)] px-6 py-[16px]">
-          <div v-if="confirmSend" class="mb-3 rounded-md border border-warn-border bg-warn-bg p-3.5 text-[13px] text-warn-fg">
-            <p class="m-0 font-bold">Envoyer à {{ otherName }} pour signature ?</p>
-            <p class="mb-0 mt-1">Vous pourrez encore corriger tant que personne n'a signé. Après la première signature, le contenu est figé.</p>
-            <div class="mt-2.5 flex gap-2">
-              <CoreButton tone="secondary" @click="confirmSend = false">Pas encore</CoreButton>
-              <CoreButton :disabled="loading" @click="sendForSignature">Envoyer</CoreButton>
-            </div>
-          </div>
-          <div v-else class="flex flex-wrap items-center gap-2.5">
-            <button v-if="detail.status !== 'draft'" type="button" class="text-[13px] font-bold text-green-700 underline disabled:opacity-60" :disabled="doc.loadingKey.value === 'pdf'" @click="openPdf">
-              {{ doc.loadingKey.value === 'pdf' ? 'PDF…' : 'PDF' }}
-            </button>
-            <button v-else type="button" class="text-sm font-bold text-[var(--text-muted)]" @click="close">Fermer</button>
-            <div class="flex-1" />
-            <template v-if="editable">
-              <CoreButton tone="secondary" :disabled="loading" @click="save">{{ loading ? '…' : 'Enregistrer' }}</CoreButton>
-              <CoreButton v-if="detail.status === 'draft'" :disabled="loading" @click="askSend">Envoyer pour signature</CoreButton>
-            </template>
-            <CoreButton v-if="mustSign" tone="accent" :disabled="loading || !signature" @click="submitSignature">{{ loading ? '…' : 'Signer' }}</CoreButton>
-          </div>
-        </div>
+  <CoreModal :open="true" :title="title" width="640px" :dirty="dirty" @close="close()">
+    <div ref="top" />
+    <p v-if="detail" class="mb-3.5 mt-0 text-xs text-[var(--text-faint)]">{{ INVENTORY_STATUS_LABEL[detail.status] ?? 'Statut inconnu' }}</p>
+    <p v-if="!detail && loading" class="m-0 text-[13.5px] text-[var(--text-muted)]">Création en cours…</p>
+    <p v-if="errorMessage" class="mb-3.5 mt-0 rounded-md border border-danger-border bg-danger-bg px-3.5 py-2.5 text-[13px] font-semibold text-danger-fg">{{ errorMessage }}</p>
+    <p v-if="photoProgress" class="mb-3.5 mt-0 text-[12.5px] font-semibold text-[var(--text-muted)]">{{ photoProgress }}</p>
+    <template v-if="detail">
+      <div v-if="statusLine" class="mb-4 rounded-md border p-4" :class="detail.status === 'signed' ? 'border-ok-border bg-ok-bg' : 'border-warn-border bg-warn-bg'">
+        <p class="m-0 text-[13.5px] font-semibold" :class="detail.status === 'signed' ? 'text-green-900' : 'text-warn-fg'">{{ statusLine }}</p>
       </div>
-    </div>
-  </Teleport>
+
+      <div v-if="mustSign" class="mb-5 rounded-xl border border-[var(--border-escrow)] bg-[var(--surface-escrow)] p-4.5">
+        <p class="m-0 text-sm font-bold text-clay-700">Votre signature</p>
+        <p class="mb-3 mt-1.5 text-[12.5px] leading-[1.55] text-clay-900">Relisez le contenu ci-dessous : une fois signé, il ne peut plus être modifié.</p>
+        <FormsSignaturePad ref="pad" v-model="signature" />
+      </div>
+
+      <p v-if="editable && detail.status === 'draft'" class="mb-4 mt-0 text-[13.5px] leading-[1.55] text-[var(--text-muted)]">
+        Parcourez le logement pièce par pièce. Ajoutez les pièces en un clic, puis ajustez l'état de chaque élément. Enregistrez à tout moment ; envoyez à {{ otherName }} quand c'est terminé.
+      </p>
+
+      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <label class="block">
+          <span class="mb-[7px] block text-[12.5px] font-bold">Relevé du compteur d'électricité</span>
+          <input v-model="meterElectricity" :disabled="!editable" inputmode="decimal" placeholder="ex. 04521" class="h-11 w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-3.5 font-mono text-[13.5px] outline-none disabled:bg-sand-100">
+        </label>
+        <label class="block">
+          <span class="mb-[7px] block text-[12.5px] font-bold">Relevé du compteur d'eau</span>
+          <input v-model="meterWater" :disabled="!editable" inputmode="decimal" placeholder="ex. 0318" class="h-11 w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-3.5 font-mono text-[13.5px] outline-none disabled:bg-sand-100">
+        </label>
+      </div>
+      <label class="mt-3.5 block">
+        <span class="mb-[7px] block text-[12.5px] font-bold">Commentaire général</span>
+        <textarea v-model="generalComment" :disabled="!editable" rows="2" maxlength="2000" class="w-full resize-y rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] p-3 text-sm outline-none disabled:bg-sand-100" />
+      </label>
+
+      <!-- Sortie : comparée à l'entrée (Lot 52) -->
+      <div v-if="type === 'exit' && entryRef" class="mt-4 rounded-md border p-4" :class="degradations.length ? 'border-danger-border bg-danger-bg' : 'border-[var(--border-subtle)] bg-white'">
+        <p class="m-0 text-[13.5px] font-bold" :class="degradations.length ? 'text-danger-fg' : ''">
+          {{ degradations.length ? `${degradations.length} élément${degradations.length > 1 ? 's' : ''} dégradé${degradations.length > 1 ? 's' : ''} depuis l'entrée` : "Aucun élément dégradé depuis l'entrée" }}
+        </p>
+        <ul v-if="degradations.length" class="mb-0 mt-1.5 list-disc pl-5 text-[12.5px] text-danger-fg">
+          <li v-for="d in degradations" :key="`${d.room}|${d.item}`">{{ d.room }} · {{ d.item }} : {{ itemStateLabel(d.from) }}, devenu {{ itemStateLabel(d.to).toLowerCase() }}</li>
+        </ul>
+        <p v-if="consumption && (consumption.electricity !== null || consumption.water !== null)" class="mb-0 mt-1.5 text-[12.5px] text-[var(--text-muted)]">
+          Consommation depuis l'entrée :<template v-if="consumption.electricity !== null"> électricité <span class="font-mono">{{ consumption.electricity }}</span></template><template v-if="consumption.electricity !== null && consumption.water !== null"> ·</template><template v-if="consumption.water !== null"> eau <span class="font-mono">{{ consumption.water }}</span></template>
+        </p>
+      </div>
+      <p v-else-if="type === 'exit' && !loading" class="mb-0 mt-4 text-[12.5px] text-[var(--text-muted)]">Aucun état des lieux d'entrée : la sortie ne pourra pas lui être comparée.</p>
+      <button v-if="editable && type === 'exit' && !rooms.length && entryRef?.rooms.length" type="button" class="mt-3 w-full rounded-md border border-dashed border-green-600 bg-green-50 px-4 py-3 text-[13px] font-bold text-green-800" @click="startFromEntry">
+        Reprendre les {{ entryRef.rooms.length }} pièces de l'état des lieux d'entrée
+      </button>
+
+      <div v-for="(room, ri) in rooms" :key="ri" class="mt-4 rounded-lg border border-[var(--border-subtle)] bg-white p-4">
+        <div class="flex items-center justify-between gap-2.5">
+          <input v-if="editable" v-model="room.name" class="h-9 min-w-0 flex-1 rounded-sm border border-transparent bg-transparent px-1 text-[14.5px] font-bold outline-none hover:border-[var(--border-default)] focus:border-[var(--border-default)]" aria-label="Nom de la pièce">
+          <p v-else class="m-0 text-[14.5px] font-bold">{{ room.name }}</p>
+          <button v-if="editable" type="button" class="flex-none rounded-pill px-3 py-2 text-xs font-bold text-danger-fg hover:bg-danger-bg" @click="removeRoom(ri)">Retirer la pièce</button>
+        </div>
+        <div v-for="(item, ii) in room.items" :key="ii" class="mt-3 border-t border-sand-200 pt-3">
+          <div v-if="editable" class="grid grid-cols-[1fr_auto] gap-2 sm:grid-cols-[1.2fr_1fr_1.4fr_auto]">
+            <input v-model="item.name" placeholder="Élément (ex. Murs)" class="col-span-1 h-10 w-full rounded-sm border border-[var(--border-default)] bg-white px-2.5 text-[13px] outline-none">
+            <button type="button" class="grid h-10 w-10 place-items-center rounded-sm border border-[var(--border-default)] bg-white text-[var(--text-secondary)] sm:order-last" aria-label="Retirer l'élément" @click="removeItem(room, ii)"><X class="h-4 w-4" :stroke-width="1.9" /></button>
+            <select v-model="item.state" class="col-span-2 h-10 w-full rounded-sm border border-[var(--border-default)] bg-white px-2 text-[13px] sm:col-span-1">
+              <option v-for="st in INVENTORY_ITEM_STATES" :key="st.code" :value="st.code">{{ st.label }}</option>
+            </select>
+            <input v-model="item.comment" placeholder="Remarque (facultatif)" class="col-span-2 h-10 w-full rounded-sm border border-[var(--border-default)] bg-white px-2.5 text-[13px] outline-none sm:col-span-1">
+          </div>
+          <div v-else class="flex items-start gap-2.5">
+            <div class="min-w-0 flex-1">
+              <p class="m-0 text-[13.5px] font-semibold">{{ item.name || 'Élément' }}</p>
+              <p v-if="item.comment" class="mb-0 mt-0.5 text-[12.5px] text-[var(--text-muted)] [overflow-wrap:anywhere]">{{ item.comment }}</p>
+            </div>
+            <span class="flex-none text-[12.5px] font-bold text-[var(--text-secondary)]">{{ itemStateLabel(item.state) }}</span>
+          </div>
+          <p v-if="comparison(room, item)?.entryState" class="mb-0 mt-1 text-[11.5px]" :class="comparison(room, item)?.degraded ? 'font-bold text-danger-fg' : 'text-[var(--text-faint)]'">
+            À l'entrée : {{ itemStateLabel(comparison(room, item)?.entryState ?? '') }}{{ comparison(room, item)?.degraded ? ' (dégradé depuis)' : '' }}
+          </p>
+          <EdlPhotoStrip
+            :api="photos"
+            :inventory-id="detail.id"
+            :origin="item._origin ?? null"
+            :existing="item._existing ?? []"
+            :urls="item.photos ?? []"
+            :editable="editable"
+            @added="item.photos = [...(item.photos ?? []), $event]"
+            @remove-existing="removeExisting(item, $event)"
+            @remove-url="removeUrl(item, $event)"
+          />
+        </div>
+        <p v-if="!room.items.length" class="mb-0 mt-2 text-[12.5px] text-[var(--text-faint)]">Aucun élément constaté.</p>
+        <button v-if="editable" type="button" class="mt-3 inline-flex items-center gap-1 text-[12.5px] font-bold text-green-700" @click="addItem(room)"><Plus class="h-3.5 w-3.5" :stroke-width="1.9" />Ajouter un élément</button>
+      </div>
+
+      <template v-if="editable">
+        <p class="mb-2 mt-5 text-[12.5px] font-bold">Ajouter une pièce</p>
+        <div class="flex flex-wrap gap-2">
+          <button v-for="p in ROOM_PRESETS" :key="p.name" type="button" class="inline-flex items-center gap-1 rounded-pill border border-[var(--border-default)] bg-white px-3.5 py-2 text-[12.5px] font-bold hover:border-green-600" @click="addPreset(p)"><Plus class="h-3.5 w-3.5" :stroke-width="1.9" />{{ p.name }}</button>
+        </div>
+        <div class="mt-2.5 flex gap-2">
+          <input v-model="newRoomName" placeholder="Autre pièce (ex. Bureau)" class="h-10 min-w-0 flex-1 rounded-sm border border-[var(--border-default)] bg-white px-3 text-[13.5px] outline-none" @keydown.enter="addRoom">
+          <CoreButton size="sm" tone="secondary" @click="addRoom">Ajouter</CoreButton>
+        </div>
+      </template>
+      <p v-else-if="!rooms.length" class="mt-4 text-[13.5px] text-[var(--text-muted)]">Aucune pièce.</p>
+    </template>
+
+    <template v-if="detail" #footer>
+      <CoreInlineConfirm
+        v-if="confirmClose"
+        tone="warning"
+        message="Fermer sans enregistrer ? Les pièces, photos, remarques et relevés ajoutés depuis le dernier enregistrement seront perdus."
+        confirm-label="Fermer sans enregistrer"
+        cancel-label="Rester"
+        @confirm="close(true)"
+        @cancel="confirmClose = false"
+      />
+      <CoreInlineConfirm
+        v-else-if="confirmSend"
+        tone="neutral"
+        :message="`Envoyer à ${otherName} pour signature ? Vous pourrez encore corriger tant que personne n'a signé ; après la première signature, le contenu est figé.`"
+        confirm-label="Envoyer"
+        cancel-label="Pas encore"
+        :loading="loading"
+        @confirm="sendForSignature"
+        @cancel="confirmSend = false"
+      />
+      <div v-else class="flex flex-wrap items-center gap-2.5">
+        <button v-if="detail.status !== 'draft'" type="button" class="inline-flex items-center gap-1.5 text-[13px] font-bold text-green-700 disabled:opacity-60" :disabled="doc.loadingKey.value === 'pdf'" @click="openPdf">
+          <FileText class="h-4 w-4" :stroke-width="1.9" />{{ doc.loadingKey.value === 'pdf' ? 'Génération…' : 'PDF' }}
+        </button>
+        <div class="flex-1" />
+        <template v-if="editable">
+          <CoreButton tone="secondary" :disabled="loading" @click="save">{{ loading ? 'Enregistrement…' : 'Enregistrer' }}</CoreButton>
+          <CoreButton v-if="detail.status === 'draft'" :disabled="loading" @click="askSend">Envoyer pour signature</CoreButton>
+        </template>
+        <CoreButton v-if="mustSign" tone="accent" :disabled="loading || !signature" @click="submitSignature">{{ loading ? 'Signature…' : 'Signer' }}</CoreButton>
+      </div>
+    </template>
+  </CoreModal>
 </template>
