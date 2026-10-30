@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { Clock } from '@lucide/vue'
 import type { BookingActionResult, BookingSummary } from '~/types/tenant'
 import type { UnitPricing } from '~/types/property'
 import { ApiRequestError } from '~/utils/authenticatedFetcher'
@@ -70,48 +71,53 @@ function close() {
   if (step.value === 'done') emit('extended')
   emit('close')
 }
+
+function longDay(iso: string) {
+  return new Date(`${iso.slice(0, 10)}T12:00:00`).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })
+}
 </script>
 
 <template>
-  <Teleport to="body">
-    <div class="fixed inset-0 z-[90] grid animate-[im-veil_.22s_ease_both] place-items-center bg-black/50 p-6 backdrop-blur-[3px]" @click="close">
-      <div class="w-[440px] max-w-[calc(100vw-3rem)] animate-[im-rise_.28s_var(--ease-standard)_both] rounded-2xl bg-[var(--surface-page)] p-6.5" @click.stop>
+  <CoreModal :open="true" :title="step === 'done' ? 'Nuits gardées 15 minutes' : 'Prolonger mon séjour'" width="440px" :dirty="step === 'form' && !!newCheckOut" @close="close">
+    <template v-if="step === 'form'">
+      <p class="m-0 text-[13.5px] leading-[1.55] text-[var(--text-muted)]">
+        {{ booking.unit?.name ?? 'Logement' }}, actuellement jusqu'au <span class="font-mono">{{ longDay(booking.check_out) }}</span>.
+        Les nuits ajoutées forment une nouvelle réservation, à payer sous 15 minutes — votre séjour actuel reste inchangé.
+      </p>
+      <label class="mt-4 block">
+        <span class="mb-[7px] block text-[12.5px] font-bold">Nouvelle date de départ</span>
+        <input v-model="newCheckOut" type="date" :min="minDate" class="h-[46px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-[15px] text-[14.5px] outline-none">
+        <span v-if="minStay && minStay > 1" class="mt-[7px] block text-[12.5px] text-[var(--text-faint)]">Au moins {{ minStay }} nuits ajoutées (séjour minimum du logement).</span>
+      </label>
+
+      <div v-if="estimate" class="mt-3.5 rounded-lg border border-[var(--border-subtle)] bg-white px-4 py-3">
+        <DataMoneyLine v-for="l in estimate.lines" :key="l.label" :label="l.label" :value="formatFcfa(l.amount)" />
+        <DataMoneyLine :label="`${addedNights} nuit${addedNights > 1 ? 's' : ''} ajoutée${addedNights > 1 ? 's' : ''}`" :value="formatFcfa(estimate.total)" total />
+        <p class="mb-0 mt-2 text-[12px] text-[var(--text-faint)]">Estimation : le montant exact est calculé à l'étape suivante.</p>
+      </div>
+
+      <p v-if="errorMessage" class="mb-0 mt-3 text-[13px] font-semibold text-danger-fg">{{ errorMessage }}</p>
+    </template>
+
+    <div v-else class="py-1 text-center">
+      <div class="mx-auto grid h-14 w-14 place-items-center rounded-pill bg-warn-bg text-warn-fg"><Clock class="h-7 w-7" :stroke-width="1.9" /></div>
+      <p class="mb-0 mt-4 text-base font-bold">{{ created?.nights }} nuit{{ (created?.nights ?? 0) > 1 ? 's' : '' }} de plus · <span class="font-mono">{{ formatFcfa(Number(created?.total_price ?? 0)) }}</span></p>
+      <p class="mx-auto mb-0 mt-2 max-w-[340px] text-[13.5px] leading-[1.55] text-[var(--text-muted)]">
+        Ces nuits sont gardées 15 minutes. Payez maintenant pour confirmer la prolongation ; sans paiement, elles seront libérées.
+      </p>
+    </div>
+
+    <template #footer>
+      <div class="flex gap-2.5">
         <template v-if="step === 'form'">
-          <h3 class="m-0 font-display text-lg font-bold tracking-[-.02em]">Prolonger mon séjour</h3>
-          <p class="mb-0 mt-2 text-[13px] leading-[1.6] text-[var(--text-muted)]">
-            {{ booking.unit?.name ?? 'Logement' }}, actuellement jusqu'au {{ new Date(booking.check_out).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' }) }}.
-            Les nuits ajoutées forment une nouvelle réservation, à payer sous 15 minutes — votre séjour actuel reste inchangé.
-          </p>
-          <label class="mb-1.5 mt-4.5 block text-[13px] font-bold text-[var(--text-muted)]">Nouvelle date de départ</label>
-          <input v-model="newCheckOut" type="date" :min="minDate" class="h-11 w-full rounded-sm border border-[var(--border-default)] bg-white px-3.5 text-[13.5px] outline-none">
-          <p v-if="minStay && minStay > 1" class="mb-0 mt-1.5 text-[12px] text-[var(--text-faint)]">Au moins {{ minStay }} nuits ajoutées (séjour minimum du logement).</p>
-
-          <div v-if="estimate" class="mt-3.5 rounded-md border border-[var(--border-default)] bg-white px-4 py-3">
-            <DataMoneyLine v-for="l in estimate.lines" :key="l.label" :label="l.label" :value="formatFcfa(l.amount)" />
-            <DataMoneyLine :label="`${addedNights} nuit${addedNights > 1 ? 's' : ''} ajoutée${addedNights > 1 ? 's' : ''}`" :value="formatFcfa(estimate.total)" total />
-          </div>
-
-          <p v-if="errorMessage" class="mb-0 mt-3 rounded-md border border-danger-border bg-danger-bg px-3.5 py-2.5 text-[13px] font-semibold text-danger-fg">{{ errorMessage }}</p>
-          <div class="mt-5 flex gap-2.5">
-            <CoreButton tone="secondary" size="lg" full-width @click="close">Annuler</CoreButton>
-            <CoreButton size="lg" full-width :disabled="loading" @click="submit">{{ loading ? 'Envoi…' : 'Continuer' }}</CoreButton>
-          </div>
+          <CoreButton tone="secondary" full-width @click="close">Annuler</CoreButton>
+          <CoreButton full-width :disabled="loading" @click="submit">{{ loading ? 'Envoi…' : 'Continuer' }}</CoreButton>
         </template>
-
         <template v-else>
-          <div class="px-0.5 py-1 text-center">
-            <div class="mx-auto grid h-15 w-15 animate-[im-pop_.5s_ease] place-items-center rounded-pill bg-green-600 text-[28px] text-white">✓</div>
-            <p class="mb-0 mt-4.5 text-lg font-bold">Nuits réservées pour 15 min</p>
-            <p class="mx-auto mb-0 mt-2.5 max-w-[340px] text-sm leading-[1.6] text-[var(--text-muted)]">
-              {{ created?.nights }} nuit{{ (created?.nights ?? 0) > 1 ? 's' : '' }} supplémentaire{{ (created?.nights ?? 0) > 1 ? 's' : '' }} — {{ formatFcfa(Number(created?.total_price ?? 0)) }}. Payez maintenant pour confirmer la prolongation.
-            </p>
-            <div class="mt-5 flex gap-2.5">
-              <CoreButton tone="secondary" size="lg" full-width @click="close">Plus tard</CoreButton>
-              <CoreButton size="lg" full-width @click="payNow">Payer maintenant</CoreButton>
-            </div>
-          </div>
+          <CoreButton tone="secondary" full-width @click="close">Plus tard</CoreButton>
+          <CoreButton full-width @click="payNow">Payer maintenant</CoreButton>
         </template>
       </div>
-    </div>
-  </Teleport>
+    </template>
+  </CoreModal>
 </template>

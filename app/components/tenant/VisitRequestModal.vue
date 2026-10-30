@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { CalendarCheck, Check } from '@lucide/vue'
 import { ApiRequestError } from '~/utils/authenticatedFetcher'
 import { errorText } from '~/utils/apiErrors'
 import { validateVisitSlot, visitTimeSlots } from '~/utils/visits'
@@ -24,25 +25,45 @@ const slots = visitTimeSlots()
 const loading = ref(false)
 const errorMessage = ref('')
 const duplicate = ref(false)
-const showError = ref(false)
+/** Pas `showError` : nom d'un auto-import Nuxt (voir le piège décrit dans ADMIN-DESIGN.md). */
+const showSlotError = ref(false)
+/** Erreur serveur (5xx) : la visite a pu être enregistrée malgré tout (notification envoyée avant la réponse). */
+const uncertain = ref(false)
 
 const slotError = computed(() => validateVisitSlot(date.value, time.value))
-const chosenLabel = computed(() => date.value
-  ? new Date(`${date.value}T${time.value}:00`).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })
-  : '')
+const chosenLabel = computed(() => {
+  if (!date.value) return ''
+  const label = new Date(`${date.value}T${time.value}:00`).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })
+  return label.charAt(0).toUpperCase() + label.slice(1)
+})
 
 async function submit() {
-  showError.value = true
+  showSlotError.value = true
   if (slotError.value) return
   loading.value = true
   errorMessage.value = ''
   duplicate.value = false
+  uncertain.value = false
+  const requestedAt = new Date(`${date.value}T${time.value}:00`).toISOString()
   try {
-    const requestedAt = new Date(`${date.value}T${time.value}:00`).toISOString()
     await visitsApi.create(props.unitId, requestedAt, note.value.trim() || undefined)
     step.value = 'done'
   } catch (e) {
-    duplicate.value = e instanceof ApiRequestError && e.status === 400 && /déjà une demande de visite/.test(e.mapped.bannerMessage ?? '')
+    const status = e instanceof ApiRequestError ? e.status : 0
+    if (!status || status >= 500) {
+      // Relecture : si la demande figure bien dans « Mes visites », c'est un succès.
+      const mine = await visitsApi.fetchMine('tenant').catch(() => null)
+      if (mine?.some(v => v.unit_id === props.unitId && v.status === 'pending' && new Date(v.requested_at).getTime() === new Date(requestedAt).getTime())) {
+        step.value = 'done'
+        return
+      }
+      uncertain.value = true
+      errorMessage.value = mine
+        ? "Le serveur a répondu par une erreur et la demande n'apparaît pas dans vos visites. Vérifiez dans « Mes visites » avant de réessayer."
+        : 'Le serveur a répondu par une erreur : la demande a peut-être été enregistrée. Vérifiez dans « Mes visites » avant de réessayer.'
+      return
+    }
+    duplicate.value = status === 400 && /déjà une demande de visite/.test((e as ApiRequestError).mapped.bannerMessage ?? '')
     errorMessage.value = e instanceof ApiRequestError ? errorText(e.mapped, 'La demande a échoué.') : 'La demande a échoué.'
   } finally {
     loading.value = false
@@ -53,64 +74,69 @@ function close() {
   if (step.value === 'done') emit('requested')
   emit('close')
 }
+
+const dirty = computed(() => step.value === 'form' && (!!date.value || !!note.value.trim()))
+const title = computed(() => (notVerified.value ? "Vérifiez votre identité d'abord" : step.value === 'done' ? 'Demande envoyée' : 'Demander une visite'))
 </script>
 
 <template>
-  <Teleport to="body">
-    <div class="fixed inset-0 z-[90] grid animate-[im-veil_.22s_ease_both] place-items-center bg-black/50 p-6 backdrop-blur-[3px]" @click="close">
-      <div class="w-[460px] max-w-[calc(100vw-3rem)] animate-[im-rise_.28s_var(--ease-standard)_both] rounded-2xl bg-[var(--surface-page)] p-6.5" @click.stop>
+  <CoreModal :open="true" :title="title" width="460px" :dirty="dirty" @close="close">
+    <template v-if="notVerified">
+      <p class="m-0 text-[13.5px] leading-[1.6] text-[var(--text-muted)]">Pour protéger les propriétaires, seules les personnes dont l'identité a été vérifiée par Immo peuvent demander une visite. La validation prend généralement moins de 24 h.</p>
+    </template>
+
+    <template v-else-if="step === 'form'">
+      <p class="m-0 text-sm font-bold">{{ unitName }}</p>
+      <p class="mb-0 mt-1 text-[13.5px] leading-[1.55] text-[var(--text-muted)]">
+        Le propriétaire reçoit une notification de votre demande. Il la confirme, propose un autre horaire ou la refuse : chaque réponse vous est notifiée.
+      </p>
+
+      <div class="mt-4 grid grid-cols-2 gap-2.5">
+        <label class="block">
+          <span class="mb-[7px] block text-[12.5px] font-bold">Date souhaitée</span>
+          <input v-model="date" type="date" :min="todayIso" class="h-[46px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-3 text-[14px] outline-none">
+        </label>
+        <label class="block">
+          <span class="mb-[7px] block text-[12.5px] font-bold">Heure</span>
+          <select v-model="time" class="h-[46px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-3 font-mono text-[14px]">
+            <option v-for="s in slots" :key="s" :value="s">{{ s.replace(':', ' h ') }}</option>
+          </select>
+        </label>
+      </div>
+      <p v-if="chosenLabel && !slotError" class="mb-0 mt-2 flex items-center gap-1.5 text-[12.5px] font-semibold text-green-800"><CalendarCheck class="h-3.5 w-3.5 flex-none" :stroke-width="1.9" />{{ chosenLabel }}</p>
+
+      <label class="mt-3.5 block">
+        <span class="mb-[7px] flex items-baseline justify-between text-[12.5px] font-bold">Message au propriétaire <span class="font-mono font-normal text-[var(--text-faint)]">{{ note.length }} / 500</span></span>
+        <textarea v-model="note" rows="2" maxlength="500" placeholder="Ex. Je peux aussi passer en fin de journée." class="w-full resize-y rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] p-3 text-sm outline-none" />
+      </label>
+
+      <div v-if="(showSlotError && slotError) || errorMessage" class="mt-3 rounded-md border px-3.5 py-2.5 text-[13px] font-semibold" :class="uncertain ? 'border-warn-border bg-warn-bg text-warn-fg-deep' : 'border-danger-border bg-danger-bg text-danger-fg'">
+        {{ errorMessage || slotError }}
+        <NuxtLink v-if="duplicate || uncertain" to="/locataire/visites" class="mt-1 block font-bold underline">Voir mes visites</NuxtLink>
+      </div>
+    </template>
+
+    <div v-else class="py-1 text-center">
+      <div class="mx-auto grid h-14 w-14 animate-[im-pop_.5s_ease] place-items-center rounded-pill bg-green-600 text-white"><Check class="h-7 w-7" :stroke-width="2.4" /></div>
+      <p class="mb-0 mt-4 text-base font-bold">{{ chosenLabel }}</p>
+      <p class="mx-auto mb-0 mt-2 max-w-[340px] text-[13.5px] leading-[1.55] text-[var(--text-muted)]">Visite demandée pour {{ unitName }}. Le propriétaire reçoit une notification ; sa réponse vous sera notifiée et apparaîtra dans « Mes visites ».</p>
+    </div>
+
+    <template #footer>
+      <div class="flex gap-2.5">
         <template v-if="notVerified">
-          <h3 class="m-0 font-display text-lg font-bold tracking-[-.02em]">Vérifiez votre identité d'abord</h3>
-          <p class="mb-0 mt-2.5 text-[13.5px] leading-[1.6] text-[var(--text-muted)]">Pour protéger les propriétaires, seules les personnes dont l'identité a été vérifiée par Immo peuvent demander une visite. La validation prend généralement moins de 24 h.</p>
-          <div class="mt-5 flex gap-2.5">
-            <CoreButton tone="secondary" size="lg" full-width @click="close">Plus tard</CoreButton>
-            <NuxtLink to="/kyc" class="flex w-full items-center justify-center rounded-md bg-[image:var(--action-primary)] px-4 text-[14px] font-bold text-white">Vérifier mon compte</NuxtLink>
-          </div>
+          <CoreButton tone="secondary" full-width @click="close">Plus tard</CoreButton>
+          <NuxtLink to="/kyc" class="flex w-full items-center justify-center rounded-md bg-[image:var(--action-primary)] px-4 text-[14px] font-bold text-white shadow-action">Vérifier mon compte</NuxtLink>
         </template>
-
         <template v-else-if="step === 'form'">
-          <h3 class="m-0 font-display text-lg font-bold tracking-[-.02em]">Demander une visite</h3>
-          <p class="mb-0 mt-2 text-[13px] leading-[1.6] text-[var(--text-muted)]">
-            {{ unitName }}. Le propriétaire confirme, propose un autre horaire ou refuse — vous êtes notifié à chaque étape.
-          </p>
-
-          <div class="mt-4.5 grid grid-cols-2 gap-2.5">
-            <label class="text-[12.5px] font-bold text-[var(--text-muted)]">Date souhaitée
-              <input v-model="date" type="date" :min="todayIso" class="mt-1.5 h-11 w-full rounded-sm border border-[var(--border-default)] bg-white px-3 text-[13.5px] font-normal text-[var(--text-primary)] outline-none">
-            </label>
-            <label class="text-[12.5px] font-bold text-[var(--text-muted)]">Heure
-              <select v-model="time" class="mt-1.5 h-11 w-full rounded-sm border border-[var(--border-default)] bg-white px-3 text-[13.5px] font-normal text-[var(--text-primary)]">
-                <option v-for="s in slots" :key="s" :value="s">{{ s.replace(':', ' h ') }}</option>
-              </select>
-            </label>
-          </div>
-          <p v-if="chosenLabel && !slotError" class="mb-0 mt-2 text-[12.5px] font-semibold text-green-800 first-letter:uppercase">{{ chosenLabel }}</p>
-
-          <label class="mb-1.5 mt-3.5 flex items-baseline justify-between text-[12.5px] font-bold text-[var(--text-muted)]">Message au propriétaire (optionnel)<span class="font-normal text-[var(--text-faint)]">{{ note.length }} / 500</span></label>
-          <textarea v-model="note" rows="2" maxlength="500" placeholder="Ex. Je peux aussi passer en fin de journée." class="w-full resize-y rounded-md border border-[var(--border-default)] bg-white p-3.5 text-sm outline-none" />
-
-          <div v-if="(showError && slotError) || errorMessage" class="mt-3 rounded-md border border-danger-border bg-danger-bg px-3.5 py-2.5 text-[13px] font-semibold text-danger-fg">
-            {{ errorMessage || slotError }}
-            <NuxtLink v-if="duplicate" to="/locataire/visites" class="mt-1 block font-bold underline">Voir mes visites</NuxtLink>
-          </div>
-          <div class="mt-5 flex gap-2.5">
-            <CoreButton tone="secondary" size="lg" full-width @click="close">Annuler</CoreButton>
-            <CoreButton size="lg" full-width :disabled="loading" @click="submit">{{ loading ? 'Envoi…' : 'Demander' }}</CoreButton>
-          </div>
+          <CoreButton tone="secondary" full-width @click="close">Annuler</CoreButton>
+          <CoreButton full-width :disabled="loading" @click="submit">{{ loading ? 'Envoi…' : uncertain ? 'Réessayer quand même' : 'Demander' }}</CoreButton>
         </template>
-
         <template v-else>
-          <div class="px-0.5 py-1 text-center">
-            <div class="mx-auto grid h-15 w-15 animate-[im-pop_.5s_ease] place-items-center rounded-pill bg-green-600 text-[28px] text-white">✓</div>
-            <p class="mb-0 mt-4.5 text-lg font-bold">Demande envoyée</p>
-            <p class="mx-auto mb-0 mt-2.5 max-w-[340px] text-sm leading-[1.6] text-[var(--text-muted)]">Visite demandée pour <strong>{{ chosenLabel }}</strong>. Le propriétaire a été prévenu ; vous serez notifié de sa réponse.</p>
-            <div class="mt-5 flex gap-2.5">
-              <CoreButton tone="secondary" size="lg" full-width @click="close">Fermer</CoreButton>
-              <NuxtLink to="/locataire/visites" class="flex w-full items-center justify-center rounded-md bg-[image:var(--action-primary)] px-4 text-[14px] font-bold text-white">Mes visites</NuxtLink>
-            </div>
-          </div>
+          <CoreButton tone="secondary" full-width @click="close">Fermer</CoreButton>
+          <NuxtLink to="/locataire/visites" class="flex w-full items-center justify-center rounded-md bg-[image:var(--action-primary)] px-4 text-[14px] font-bold text-white shadow-action">Mes visites</NuxtLink>
         </template>
       </div>
-    </div>
-  </Teleport>
+    </template>
+  </CoreModal>
 </template>

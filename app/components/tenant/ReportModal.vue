@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ArrowLeft, Camera, Check, X } from '@lucide/vue'
 import type { SignalPriority, SignalType } from '~/types/tenant'
 import { ApiRequestError } from '~/utils/authenticatedFetcher'
 import { errorText } from '~/utils/apiErrors'
@@ -51,11 +52,15 @@ watch(open, v => {
 })
 
 const ROOMS = ['Cuisine', 'Salon', 'Chambre 1', 'Chambre 2', 'Douche', 'Entrée']
-const PRIORITIES: SignalPriority[] = ['low', 'medium', 'high', 'urgent']
-const PRIORITY_LABEL: Record<SignalPriority, string> = { low: 'Faible', medium: 'Normal', high: 'Élevée', urgent: 'Urgent' }
+const PRIORITY_OPTIONS: { value: SignalPriority; label: string }[] = [
+  { value: 'low', label: 'Faible' },
+  { value: 'medium', label: 'Normal' },
+  { value: 'high', label: 'Élevée' },
+  { value: 'urgent', label: 'Urgent' }
+]
 
 const category = computed(() => REPORT_CATALOG.find(c => c.id === categoryId.value) ?? REPORT_CATALOG[0]!)
-const titles: Record<Step, string> = { type: 'Signaler un problème', details: 'Décrire le problème', done: "C'est envoyé" }
+const titles: Record<Step, string> = { type: 'Signaler un problème', details: 'Décrire le problème', done: 'Signalement envoyé' }
 const title = computed(() => titles[step.value])
 
 function pickCategory(id: string) {
@@ -119,116 +124,96 @@ async function submit() {
 function close() {
   open.value = false
 }
+function follow() {
+  close()
+  navigateTo('/locataire/signalements')
+}
+
+const dirty = computed(() => step.value === 'details' && (!!desc.value.trim() || uploadedPhotos.value.length > 0))
 </script>
 
 <template>
-  <Teleport to="body">
-    <div v-if="open" class="fixed inset-0 z-[90] grid animate-[im-veil_.22s_ease_both] place-items-center bg-black/50 p-6 backdrop-blur-[3px]" @click="close">
-      <div class="flex max-h-[88vh] w-[520px] max-w-[calc(100vw-3rem)] flex-col overflow-hidden rounded-2xl bg-[var(--surface-page)] shadow-panel animate-[im-rise_.28s_var(--ease-standard)_both]" @click.stop>
-        <div class="flex items-center justify-between border-b border-[var(--border-subtle)] px-6 py-5">
-          <div class="flex items-center gap-2.5">
-            <button v-if="step === 'details'" type="button" class="text-lg text-[var(--text-muted)]" @click="step = 'type'">←</button>
-            <h3 class="m-0 font-display text-[19px] font-bold tracking-[-.02em]">{{ title }}</h3>
-          </div>
-          <button type="button" class="grid h-[34px] w-[34px] place-items-center rounded-pill bg-sand-200 text-[15px] text-sand-800" @click="close">✕</button>
-        </div>
-
-        <div class="overflow-y-auto p-6">
-          <template v-if="step === 'type'">
-            <p v-if="!leases.length" class="mb-4 mt-0 rounded-md border border-info-border bg-info-bg px-3.5 py-3 text-[13px] text-info-fg-deep">
-              Un signalement porte sur le logement que vous occupez : il sera possible dès que votre bail sera actif (signé des deux côtés et paiement d'entrée réglé).
-            </p>
-            <div class="grid grid-cols-2 gap-2.5">
-              <button
-                v-for="c in REPORT_CATALOG"
-                :key="c.id"
-                type="button"
-                class="flex flex-col items-start gap-2.5 rounded-md border border-[var(--border-subtle)] bg-white p-4 text-left transition-colors hover:border-green-600 disabled:cursor-not-allowed disabled:opacity-50"
-                :disabled="!leases.length"
-                @click="pickCategory(c.id)"
-              >
-                <div class="grid h-9 w-9 place-items-center rounded-sm text-base" :class="c.iconBg">{{ c.icon }}</div>
-                <span class="text-sm font-bold">{{ c.label }}</span>
-              </button>
-            </div>
-          </template>
-
-          <template v-else-if="step === 'details'">
-            <template v-if="leases.length > 1">
-              <p class="mb-2 mt-0 text-[12.5px] font-bold uppercase tracking-[.05em] text-[var(--text-faint)]">Logement concerné</p>
-              <div class="mb-4 flex flex-wrap gap-2">
-                <button
-                  v-for="(l, i) in leases"
-                  :key="l.id"
-                  type="button"
-                  class="rounded-pill border px-3.5 py-2 text-[13px] font-semibold transition-all"
-                  :class="leaseIndex === i ? 'border-green-600 bg-green-600 text-white' : 'border-[var(--border-default)] bg-white text-[var(--text-secondary)]'"
-                  @click="leaseIndex = i"
-                >{{ l.unit?.name ?? 'Logement' }}</button>
-              </div>
-            </template>
-
-            <p v-if="category.maintenance" class="mb-2 mt-0 text-[12.5px] font-bold uppercase tracking-[.05em] text-[var(--text-faint)]">Pièce (facultatif)</p>
-            <div v-if="category.maintenance" class="mb-4 flex flex-wrap gap-2">
-              <button
-                v-for="r in ROOMS"
-                :key="r"
-                type="button"
-                class="rounded-pill border px-3.5 py-2 text-[13px] font-semibold transition-all"
-                :class="room === r ? 'border-green-600 bg-green-600 text-white' : 'border-[var(--border-default)] bg-white text-[var(--text-secondary)]'"
-                @click="room = room === r ? '' : r"
-              >{{ r }}</button>
-            </div>
-
-            <p class="mb-2 mt-0 text-[12.5px] font-bold uppercase tracking-[.05em] text-[var(--text-faint)]">Description</p>
-            <textarea v-model="desc" rows="4" maxlength="2000" placeholder="Décrivez le problème constaté : depuis quand, ce qui a déjà été tenté…" class="w-full resize-y rounded-md border border-[var(--border-default)] bg-white p-3.5 text-sm outline-none" />
-
-            <p class="mb-2 mt-4 text-[12.5px] font-bold uppercase tracking-[.05em] text-[var(--text-faint)]">Photos</p>
-            <div class="flex flex-wrap gap-2.5">
-              <div v-for="(p, i) in uploadedPhotos" :key="p.url" class="relative h-[70px] w-[88px] overflow-hidden rounded-sm bg-cover bg-center" :style="{ backgroundImage: `url(${p.url})` }">
-                <button type="button" class="absolute -right-1.5 -top-1.5 grid h-5 w-5 place-items-center rounded-pill bg-sand-800 text-[10px] text-white" @click="removePhoto(i)">✕</button>
-              </div>
-              <label class="grid h-[70px] w-[88px] cursor-pointer place-items-center rounded-sm border-[1.5px] border-dashed border-[var(--border-default)] text-xl text-[var(--text-faint)]">
-                <span v-if="uploading">…</span>
-                <span v-else>＋</span>
-                <input type="file" accept="image/*" class="hidden" :disabled="uploading" @change="addPhoto">
-              </label>
-            </div>
-
-            <p class="mb-2 mt-4 text-[12.5px] font-bold uppercase tracking-[.05em] text-[var(--text-faint)]">Priorité</p>
-            <div class="flex gap-2">
-              <button
-                v-for="p in PRIORITIES"
-                :key="p"
-                type="button"
-                class="flex-1 rounded-md border px-3 py-2.5 text-sm font-bold transition-all"
-                :class="priority === p ? 'border-green-600 bg-green-600 text-white' : 'border-[var(--border-default)] bg-white text-[var(--text-secondary)]'"
-                @click="priority = p"
-              >{{ PRIORITY_LABEL[p] }}</button>
-            </div>
-
-            <p v-if="errorMessage" class="mb-0 mt-3 text-[13px] font-semibold text-danger-fg">{{ errorMessage }}</p>
-            <button
-              type="button"
-              class="mt-5 w-full rounded-md py-3.5 text-[15px] font-bold text-white transition-colors"
-              :class="canSubmit && !loading ? 'cursor-pointer bg-[image:var(--action-primary)] shadow-action' : 'cursor-not-allowed bg-sand-400'"
-              :disabled="!canSubmit || loading"
-              @click="submit"
-            >{{ loading ? 'Envoi…' : 'Envoyer le signalement' }}</button>
-          </template>
-
-          <template v-else>
-            <div class="px-1 py-1 text-center">
-              <div class="mx-auto grid h-16 w-16 animate-[im-pop_.5s_ease] place-items-center rounded-pill bg-green-600 text-[30px] text-white">✓</div>
-              <p class="mb-0 mt-5 text-lg font-bold">Signalement envoyé</p>
-              <p class="mx-auto mb-0 mt-2.5 max-w-[340px] text-sm leading-[1.6] text-[var(--text-muted)]">
-                Le propriétaire est notifié. Vous suivrez l'avancement dans « Signalements », et pourrez y ajouter des photos tant qu'il n'est pas résolu.
-              </p>
-              <CoreButton size="lg" full-width class="mt-6" @click="close(); navigateTo('/locataire/signalements')">Suivre mon signalement</CoreButton>
-            </div>
-          </template>
-        </div>
+  <CoreModal :open="open" :title="title" width="540px" :dirty="dirty" @close="close">
+    <template v-if="step === 'type'">
+      <p v-if="!leases.length" class="mb-4 mt-0 rounded-md border border-info-border bg-info-bg px-3.5 py-3 text-[13px] text-info-fg-deep">
+        Un signalement porte sur le logement que vous occupez : il sera possible dès que votre bail sera actif (signé des deux côtés et paiement d'entrée réglé).
+      </p>
+      <p v-else class="mb-3.5 mt-0 text-[13.5px] text-[var(--text-muted)]">De quoi s'agit-il ?</p>
+      <div class="grid grid-cols-2 gap-2.5">
+        <button
+          v-for="c in REPORT_CATALOG"
+          :key="c.id"
+          type="button"
+          class="flex items-center gap-3 rounded-lg border border-[var(--border-subtle)] bg-white p-3.5 text-left transition-colors hover:border-green-600 disabled:cursor-not-allowed disabled:opacity-50"
+          :disabled="!leases.length"
+          @click="pickCategory(c.id)"
+        >
+          <span class="grid h-9 w-9 flex-none place-items-center rounded-md" :class="c.iconBg"><component :is="c.icon" class="h-[18px] w-[18px]" :stroke-width="1.9" /></span>
+          <span class="text-[13.5px] font-bold leading-snug">{{ c.label }}</span>
+        </button>
       </div>
+    </template>
+
+    <template v-else-if="step === 'details'">
+      <button type="button" class="mb-3.5 inline-flex items-center gap-1.5 text-[13px] font-bold text-[var(--text-muted)] hover:text-green-700" @click="step = 'type'">
+        <ArrowLeft class="h-4 w-4" :stroke-width="1.9" />{{ category.label }} · changer
+      </button>
+
+      <template v-if="leases.length > 1">
+        <p class="mb-2 mt-0 text-[12.5px] font-bold">Logement concerné</p>
+        <div class="mb-4 overflow-x-auto">
+          <FormsSegmentedControl :model-value="String(leaseIndex)" :options="leases.map((l, i) => ({ value: String(i), label: l.unit?.name ?? 'Logement' }))" size="sm" @update:model-value="leaseIndex = Number($event)" />
+        </div>
+      </template>
+
+      <template v-if="category.maintenance">
+        <p class="mb-2 mt-0 text-[12.5px] font-bold">Pièce <span class="font-normal text-[var(--text-faint)]">(facultatif)</span></p>
+        <div class="mb-4 flex flex-wrap gap-2">
+          <FormsChip v-for="r in ROOMS" :key="r" :active="room === r" @click="room = room === r ? '' : r">{{ r }}</FormsChip>
+        </div>
+      </template>
+
+      <label class="block">
+        <span class="mb-[7px] flex items-baseline justify-between text-[12.5px] font-bold">Description <span class="font-mono font-normal text-[var(--text-faint)]">{{ desc.length }} / 2000</span></span>
+        <textarea v-model="desc" rows="4" maxlength="2000" placeholder="Décrivez le problème constaté : depuis quand, ce qui a déjà été tenté…" class="w-full resize-y rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] p-3 text-sm outline-none" />
+      </label>
+
+      <p class="mb-2 mt-4 text-[12.5px] font-bold">Photos</p>
+      <div class="flex flex-wrap gap-2.5">
+        <div v-for="(p, i) in uploadedPhotos" :key="p.url" class="relative h-[70px] w-[88px] overflow-hidden rounded-md bg-sand-200 bg-cover bg-center" :style="{ backgroundImage: `url(${p.url})` }">
+          <button type="button" :aria-label="`Retirer la photo ${i + 1}`" class="absolute right-1 top-1 grid h-6 w-6 place-items-center rounded-pill bg-sand-900/80 text-white" @click="removePhoto(i)"><X class="h-3.5 w-3.5" :stroke-width="2.2" /></button>
+        </div>
+        <label class="grid h-[70px] w-[88px] cursor-pointer place-items-center rounded-md border-[1.5px] border-dashed border-[var(--border-default)] text-[var(--text-faint)] hover:border-green-600 hover:text-green-700" :class="{ 'pointer-events-none opacity-60': uploading }">
+          <span v-if="uploading" class="text-xs font-bold">Envoi…</span>
+          <span v-else class="flex flex-col items-center gap-1 text-[11px] font-bold"><Camera class="h-5 w-5" :stroke-width="1.9" />Ajouter</span>
+          <input type="file" accept="image/*" class="hidden" :disabled="uploading" @change="addPhoto">
+        </label>
+      </div>
+
+      <p class="mb-2 mt-4 text-[12.5px] font-bold">Priorité</p>
+      <FormsSegmentedControl :model-value="priority" :options="PRIORITY_OPTIONS" size="sm" @update:model-value="priority = $event as SignalPriority" />
+
+      <p v-if="errorMessage" class="mb-0 mt-3 text-[13px] font-semibold text-danger-fg">{{ errorMessage }}</p>
+    </template>
+
+    <div v-else class="py-1 text-center">
+      <div class="mx-auto grid h-14 w-14 animate-[im-pop_.5s_ease] place-items-center rounded-pill bg-green-600 text-white"><Check class="h-7 w-7" :stroke-width="2.4" /></div>
+      <p class="mb-0 mt-4 text-base font-bold">{{ category.label }}<template v-if="activeLease?.unit?.name"> · {{ activeLease.unit.name }}</template></p>
+      <p class="mx-auto mb-0 mt-2 max-w-[340px] text-[13.5px] leading-[1.55] text-[var(--text-muted)]">
+        Votre propriétaire reçoit une notification. Suivez l'avancement dans « Signalements » : vous pourrez y ajouter des photos tant qu'il n'est pas résolu.
+      </p>
     </div>
-  </Teleport>
+
+    <template #footer>
+      <CoreButton v-if="step === 'type'" tone="secondary" full-width @click="close">Annuler</CoreButton>
+      <div v-else-if="step === 'details'" class="flex gap-2.5">
+        <CoreButton tone="secondary" full-width @click="close">Annuler</CoreButton>
+        <CoreButton full-width :disabled="!canSubmit || loading || uploading" @click="submit">{{ loading ? 'Envoi…' : 'Envoyer le signalement' }}</CoreButton>
+      </div>
+      <div v-else class="flex gap-2.5">
+        <CoreButton tone="secondary" full-width @click="close">Fermer</CoreButton>
+        <CoreButton full-width @click="follow">Suivre mon signalement</CoreButton>
+      </div>
+    </template>
+  </CoreModal>
 </template>

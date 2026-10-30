@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ExternalLink, MessageSquare } from '@lucide/vue'
 import type { HousingRequestResponse, HousingRequestSummary } from '~/types/tenant'
 import { ApiRequestError } from '~/utils/authenticatedFetcher'
 import { errorText } from '~/utils/apiErrors'
@@ -84,21 +85,12 @@ async function closeRequest() {
 </script>
 
 <template>
-  <Teleport to="body">
-    <div class="fixed inset-0 z-[90] grid animate-[im-veil_.22s_ease_both] place-items-center bg-black/50 p-6 backdrop-blur-[3px]" @click="emit('close')">
-      <div class="flex max-h-[88vh] w-[560px] max-w-[calc(100vw-3rem)] animate-[im-rise_.28s_var(--ease-standard)_both] flex-col overflow-hidden rounded-2xl bg-[var(--surface-page)] shadow-panel" @click.stop>
-        <div class="flex items-center justify-between gap-3 border-b border-[var(--border-subtle)] px-6 py-4.5">
-          <div class="min-w-0">
-            <p class="m-0 text-[16px] font-bold">Ma demande de logement</p>
-            <p class="mb-0 mt-0.5 text-[12.5px] text-[var(--text-faint)]">Publiée le {{ formatDate(request.created_at) }}<template v-if="request.closed_at"> · fermée le {{ formatDate(request.closed_at) }}</template></p>
-          </div>
-          <div class="flex flex-none items-center gap-2.5">
-            <CoreBadge :tone="request.status === 'open' ? 'ok' : 'neutral'">{{ request.status === 'open' ? 'Ouverte' : 'Fermée' }}</CoreBadge>
-            <button type="button" class="grid h-9 w-9 place-items-center rounded-pill bg-sand-200 text-base text-sand-800" aria-label="Fermer la fenêtre" @click="emit('close')">✕</button>
-          </div>
+  <CoreModal :open="true" title="Ma demande de logement" width="560px" @close="emit('close')">
+        <div class="mb-3.5 flex flex-wrap items-center gap-2.5">
+          <CoreBadge :tone="request.status === 'open' ? 'ok' : 'neutral'">{{ request.status === 'open' ? 'Ouverte' : 'Fermée' }}</CoreBadge>
+          <span class="text-xs text-[var(--text-faint)]">Publiée le {{ formatDate(request.created_at) }}<template v-if="request.closed_at"> · fermée le {{ formatDate(request.closed_at) }}</template></span>
         </div>
-
-        <div class="overflow-y-auto p-6">
+        <div>
           <p class="m-0 text-[15px] leading-[1.6] text-[var(--text-primary)] [overflow-wrap:anywhere]">« {{ request.description }} »</p>
 
           <div class="mt-4.5 grid grid-cols-2 gap-2.5">
@@ -111,7 +103,7 @@ async function closeRequest() {
 
           <div class="mt-5 border-t border-sand-200 pt-5">
             <p class="mb-2.5 mt-0 text-[13.5px] font-bold">Logements proposés ({{ request.response_count }})</p>
-            <p v-if="responsesState === 'loading'" class="m-0 text-[13px] text-[var(--text-muted)]">Chargement…</p>
+            <DataSkeletonCard v-if="responsesState === 'loading'" :height="90" :lines="0" />
             <p v-else-if="responsesState === 'error'" class="m-0 text-[13px] text-danger-fg">Impossible de charger les réponses. <button type="button" class="font-bold underline" @click="loadResponses">Réessayer</button></p>
             <p v-else-if="!responses.length" class="m-0 text-[13px] text-[var(--text-muted)]">Aucune réponse pour l'instant. Vous serez notifié dès qu'un propriétaire vous propose un logement.</p>
             <div v-for="resp in responses" :key="resp.id" class="mt-2.5 rounded-md border border-[var(--border-subtle)] bg-white p-3.5">
@@ -130,26 +122,27 @@ async function closeRequest() {
               </div>
               <p v-if="resp.message" class="mb-0 mt-2 text-[12.5px] italic text-[var(--text-secondary)] [overflow-wrap:anywhere]">« {{ resp.message }} »</p>
               <div class="mt-3 flex flex-wrap gap-2">
-                <NuxtLink v-if="resp.unit?.property_id" :to="`/biens/${resp.unit.property_id}`" target="_blank" class="rounded-pill border border-[var(--border-default)] bg-white px-3.5 py-2 text-[12px] font-bold">Voir le logement</NuxtLink>
-                <NuxtLink :to="`/locataire/messages?conversation=${resp.conversation_id}`" class="rounded-pill bg-[image:var(--action-primary)] px-3.5 py-2 text-[12px] font-bold text-white">Répondre au propriétaire</NuxtLink>
+                <NuxtLink v-if="resp.unit?.property_id" :to="`/biens/${resp.unit.property_id}`" target="_blank" class="inline-flex items-center gap-1.5 rounded-pill border border-[var(--border-default)] bg-white px-3.5 py-2 text-[12.5px] font-bold">Voir le logement <ExternalLink class="h-3.5 w-3.5" :stroke-width="1.9" /></NuxtLink>
+                <NuxtLink :to="`/locataire/messages?conversation=${resp.conversation_id}`" class="inline-flex items-center gap-1.5 rounded-pill bg-[image:var(--action-primary)] px-3.5 py-2 text-[12.5px] font-bold text-white"><MessageSquare class="h-3.5 w-3.5" :stroke-width="1.9" />Répondre au propriétaire</NuxtLink>
               </div>
             </div>
           </div>
 
           <template v-if="request.status === 'open'">
-            <div v-if="confirmClose" class="mt-5 rounded-md border border-warn-border bg-warn-bg p-4">
-              <p class="m-0 text-[13.5px] font-bold text-warn-fg-deep">Fermer cette demande ?</p>
-              <p class="mb-3 mt-1 text-[13px] text-[var(--text-secondary)]">Elle disparaît de la liste consultée par les propriétaires et ne peut pas être rouverte. Vos conversations en cours restent accessibles.</p>
-              <div class="flex gap-2.5">
-                <CoreButton tone="danger" :disabled="closing" @click="closeRequest">{{ closing ? 'Fermeture…' : 'Oui, fermer' }}</CoreButton>
-                <CoreButton tone="secondary" @click="confirmClose = false">Annuler</CoreButton>
-              </div>
-            </div>
-            <CoreButton v-else tone="secondary" size="lg" full-width class="mt-5" @click="confirmClose = true">J'ai trouvé / fermer cette demande</CoreButton>
+            <CoreInlineConfirm
+              v-if="confirmClose"
+              class="mt-5"
+              tone="danger"
+              message="Fermer cette demande ? Elle disparaît de la liste consultée par les propriétaires et ne peut pas être rouverte. Vos conversations restent accessibles."
+              confirm-label="Fermer la demande"
+              cancel-label="Garder"
+              :loading="closing"
+              @confirm="closeRequest"
+              @cancel="confirmClose = false"
+            />
+            <CoreButton v-else tone="secondary" full-width class="mt-5" @click="confirmClose = true">J'ai trouvé : fermer cette demande</CoreButton>
             <p v-if="closeError" class="mb-0 mt-3 text-[13px] font-semibold text-danger-fg">{{ closeError }}</p>
           </template>
         </div>
-      </div>
-    </div>
-  </Teleport>
+  </CoreModal>
 </template>
