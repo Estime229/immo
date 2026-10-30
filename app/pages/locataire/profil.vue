@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { Camera, Check, Copy, Plus, ShieldCheck, X } from '@lucide/vue'
 import type { NotificationChannel, NotificationPreferences, ProfileMe } from '~/types/profile'
 import { ApiRequestError } from '~/utils/authenticatedFetcher'
 import { errorText } from '~/utils/apiErrors'
@@ -6,18 +7,32 @@ import { prepareAvatarUpload } from '~/utils/uploadFile'
 
 definePageMeta({ layout: 'locataire' })
 
+const route = useRoute()
+const router = useRouter()
 const currentUser = useAuthUser()
 const authApi = useAuthApi()
 const profileApi = useProfileApi()
 const settingsApi = useSettingsApi()
 const userApi = useUserApi()
+const leasesBlock = useTenantLeases()
+const wallet = useTenantWallet()
 
-const tab = ref<'infos' | 'securite' | 'notifs'>('infos')
+/* ---- Onglets, dans l'URL (?tab=) ---- */
+type TabKey = 'infos' | 'securite' | 'notifs'
 const TABS = [
-  { key: 'infos' as const, label: 'Informations' },
-  { key: 'securite' as const, label: 'Sécurité' },
-  { key: 'notifs' as const, label: 'Notifications' }
+  { value: 'infos', label: 'Informations' },
+  { value: 'securite', label: 'Sécurité' },
+  { value: 'notifs', label: 'Notifications' }
 ]
+function tabFrom(v: unknown): TabKey {
+  return v === 'securite' || v === 'notifs' ? v : 'infos'
+}
+const tab = ref<TabKey>(tabFrom(route.query.tab))
+watch(() => route.query.tab, t => { tab.value = tabFrom(t) })
+function setTab(v: string) {
+  tab.value = tabFrom(v)
+  if (route.query.tab !== tab.value) router.replace({ query: { ...route.query, tab: tab.value } })
+}
 
 const displayName = computed(() => {
   const u = currentUser.value
@@ -25,10 +40,6 @@ const displayName = computed(() => {
   const name = `${u.first_name ?? ''} ${u.last_name ?? ''}`.trim()
   return name || u.email
 })
-
-function maskedStatus(v: string | null) {
-  return v ? 'Renseigné' : 'Non renseigné'
-}
 
 /* ---- Photo de profil ---- */
 const avatarUploading = ref(false)
@@ -41,7 +52,7 @@ async function onAvatarSelected(e: Event) {
   avatarError.value = ''
   try {
     const ready = await prepareAvatarUpload(file)
-    if (ready.error) { avatarError.value = ready.error; return }
+    if (ready.error || !ready.file) { avatarError.value = ready.error ?? "La photo n'a pas pu être préparée."; return }
     await userApi.uploadAvatar(ready.file)
     await authApi.fetchMe()
   } catch (err) {
@@ -66,9 +77,20 @@ async function loadProfile() {
 }
 onMounted(loadProfile)
 
-const fullName = ref('')
-const profession = ref('')
-const emergencyContact = ref('')
+/**
+ * Champs chiffrés (nom légal, profession, contact d'urgence) : jamais réaffichés, seulement « renseigné ».
+ * Laisser vide garde la valeur ; « Effacer » envoie une chaîne vide, que l'API enregistre comme absente
+ * (`update-profile.handler.ts` : valeur vide → null).
+ */
+const SECRET_FIELDS = [
+  { key: 'full_name' as const, label: "Nom légal (pièce d'identité)", placeholder: 'Ex. Sèdjro Aholou', masked: (p: ProfileMe) => p.full_name_masked },
+  { key: 'profession' as const, label: 'Profession', placeholder: 'Ex. Commerçante', masked: (p: ProfileMe) => p.profession_masked },
+  { key: 'emergency_contact' as const, label: "Contact d'urgence", placeholder: 'Ex. +229 97 00 00 00', masked: (p: ProfileMe) => p.emergency_contact_masked }
+]
+type SecretKey = typeof SECRET_FIELDS[number]['key']
+const secretValues = ref<Record<SecretKey, string>>({ full_name: '', profession: '', emergency_contact: '' })
+const secretCleared = ref<Record<SecretKey, boolean>>({ full_name: false, profession: false, emergency_contact: false })
+
 const zones = ref<string[]>([])
 const zoneInput = ref('')
 const budgetMin = ref('')
@@ -82,32 +104,44 @@ watch(profile, p => {
 
 function addZone() {
   const z = zoneInput.value.trim()
-  if (z && !zones.value.includes(z)) zones.value = [...zones.value, z]
+  if (z && !zones.value.some(x => x.toLowerCase() === z.toLowerCase())) zones.value = [...zones.value, z]
   zoneInput.value = ''
 }
 function removeZone(z: string) {
   zones.value = zones.value.filter(x => x !== z)
 }
+function onBudgetInput(which: 'min' | 'max', e: Event) {
+  const digits = (e.target as HTMLInputElement).value.replace(/\D/g, '')
+  if (which === 'min') budgetMin.value = digits
+  else budgetMax.value = digits
+}
+const budgetError = computed(() => (budgetMin.value && budgetMax.value && Number(budgetMin.value) > Number(budgetMax.value)
+  ? 'Le budget minimum dépasse le budget maximum.'
+  : ''))
 
 const savingProfile = ref(false)
 const profileSaveError = ref('')
-const profileSaved = ref(false)
+const profileSaved = ref('')
 async function saveProfile() {
+  if (budgetError.value) return
+  // Une zone tapée mais pas encore validée par Entrée n'est pas perdue.
+  if (zoneInput.value.trim()) addZone()
   savingProfile.value = true
   profileSaveError.value = ''
-  profileSaved.value = false
+  profileSaved.value = ''
   try {
     const payload: Record<string, unknown> = { preferred_zones: zones.value }
-    if (fullName.value.trim()) payload.full_name = fullName.value.trim()
-    if (profession.value.trim()) payload.profession = profession.value.trim()
-    if (emergencyContact.value.trim()) payload.emergency_contact = emergencyContact.value.trim()
-    if (budgetMin.value) payload.budget_min = budgetMin.value
-    if (budgetMax.value) payload.budget_max = budgetMax.value
+    for (const f of SECRET_FIELDS) {
+      if (secretCleared.value[f.key]) payload[f.key] = ''
+      else if (secretValues.value[f.key].trim()) payload[f.key] = secretValues.value[f.key].trim()
+    }
+    // Budget vidé alors qu'il était renseigné : on l'efface côté serveur plutôt que de l'ignorer.
+    if (budgetMin.value || profile.value?.budget_min) payload.budget_min = budgetMin.value
+    if (budgetMax.value || profile.value?.budget_max) payload.budget_max = budgetMax.value
     await profileApi.update(payload)
-    fullName.value = ''
-    profession.value = ''
-    emergencyContact.value = ''
-    profileSaved.value = true
+    secretValues.value = { full_name: '', profession: '', emergency_contact: '' }
+    secretCleared.value = { full_name: false, profession: false, emergency_contact: false }
+    profileSaved.value = 'Profil enregistré. Les champs chiffrés ne sont pas réaffichés : seul « Renseigné » l\'indique.'
     await loadProfile()
   } catch (e) {
     profileSaveError.value = e instanceof ApiRequestError ? errorText(e.mapped, "L'enregistrement a échoué.") : "L'enregistrement a échoué."
@@ -162,19 +196,62 @@ async function submitPassword() {
   }
 }
 
+const codesCopied = ref(false)
+async function copyCodes() {
+  if (!recoveryCodes.value) return
+  try {
+    await navigator.clipboard.writeText(recoveryCodes.value.join('\n'))
+    codesCopied.value = true
+    setTimeout(() => { codesCopied.value = false }, 2500)
+  } catch {
+    codesCopied.value = false
+  }
+}
+
 /* ---- Sécurité : suppression de compte ---- */
-const deleteStep = ref<'idle' | 'confirm' | 'loading'>('idle')
+/**
+ * L'API refuse (sans erreur HTTP : statut `blocked` + motif) tant qu'un bail est actif ou que le solde
+ * n'est pas à zéro (`deletion-eligibility`). On le dit avant, avec les données déjà chargées.
+ */
+onMounted(() => {
+  leasesBlock.ensureLoaded()
+  wallet.ensureLoaded()
+})
+const deletionBlockers = computed(() => {
+  const out: string[] = []
+  const active = leasesBlock.leases.value.filter(l => l.status === 'active')
+  if (active.length) out.push(`${active.length > 1 ? `${active.length} baux sont actifs` : 'un bail est actif'} (${active.map(l => l.unit?.name ?? 'logement').join(', ')}) : il doit être terminé`)
+  if (wallet.state.value === 'success' && wallet.balanceTotal.value !== 0) out.push(`votre solde est de ${formatFcfa(wallet.balanceTotal.value)} : il doit être ramené à zéro (retrait)`)
+  return out
+})
+const deletionCheckState = computed(() => {
+  if (leasesBlock.state.value === 'error' || wallet.state.value === 'error') return 'error'
+  if (['loading', 'idle'].includes(leasesBlock.state.value) || ['loading', 'idle'].includes(wallet.state.value)) return 'loading'
+  return 'ready'
+})
+function retryDeletionCheck() {
+  if (leasesBlock.state.value === 'error') leasesBlock.reload()
+  if (wallet.state.value === 'error') wallet.reload()
+}
+const confirmingDelete = ref(false)
+const deleting = ref(false)
 const deleteError = ref('')
 async function confirmDelete() {
-  deleteStep.value = 'loading'
+  deleting.value = true
   deleteError.value = ''
   try {
-    await userApi.deleteAccount()
+    const result = await userApi.deleteAccount() as { status: string; message: string; blocking_reason?: string | null }
+    // Refus de l'API (bail actif, solde non nul…) : réponse 200 avec un motif — avant, on déconnectait quand même.
+    if (result.status !== 'completed') {
+      deleteError.value = result.blocking_reason ?? 'La suppression est impossible pour le moment.'
+      return
+    }
     await authApi.logout()
     await navigateTo('/')
   } catch (e) {
     deleteError.value = e instanceof ApiRequestError ? errorText(e.mapped, 'La suppression a échoué.') : 'La suppression a échoué.'
-    deleteStep.value = 'confirm'
+  } finally {
+    deleting.value = false
   }
 }
 
@@ -198,15 +275,17 @@ const CHANNEL_DEFS: { key: NotificationChannel; label: string; hint: string }[] 
   { key: 'push', label: 'Notifications push', hint: 'Sur cet appareil, en temps réel' }
 ]
 const togglingChannel = ref<NotificationChannel | null>(null)
+const channelError = ref<{ key: NotificationChannel; text: string } | null>(null)
 async function toggleChannel(channel: NotificationChannel) {
   if (!notifPrefs.value || togglingChannel.value) return
   const next = !notifPrefs.value[channel]
   togglingChannel.value = channel
+  channelError.value = null
   try {
     await settingsApi.toggleNotificationChannel(channel, next)
     notifPrefs.value[channel] = next
-  } catch {
-    // état inchangé, pas de correction optimiste à annuler ici
+  } catch (e) {
+    channelError.value = { key: channel, text: e instanceof ApiRequestError ? errorText(e.mapped, "Le réglage n'a pas pu être enregistré.") : "Le réglage n'a pas pu être enregistré." }
   } finally {
     togglingChannel.value = null
   }
@@ -214,173 +293,199 @@ async function toggleChannel(channel: NotificationChannel) {
 </script>
 
 <template>
-  <div class="animate-[im-fade_.3s_ease_both]">
-    <div class="mb-5 flex flex-wrap items-center gap-1.5">
-      <button
-        v-for="t in TABS"
-        :key="t.key"
-        type="button"
-        class="rounded-pill border px-4 py-2.5 text-[13px] font-bold transition-all"
-        :class="tab === t.key ? 'border-green-900 bg-green-900 text-white' : 'border-[var(--border-default)] bg-white text-[var(--text-secondary)]'"
-        @click="tab = t.key"
-      >{{ t.label }}</button>
-      <NuxtLink to="/kyc" class="rounded-pill border border-[var(--border-default)] bg-white px-4 py-2.5 text-[13px] font-bold text-[var(--text-secondary)]">Vérification</NuxtLink>
+  <div class="animate-[im-fade_.3s_ease_backwards]">
+    <div class="mb-5.5 flex flex-wrap items-center justify-between gap-3">
+      <div class="overflow-x-auto">
+        <FormsSegmentedControl :model-value="tab" :options="TABS" size="sm" @update:model-value="setTab" />
+      </div>
+      <NuxtLink to="/kyc" class="inline-flex items-center gap-1.5 rounded-pill border border-[var(--border-default)] bg-white px-4 py-[9px] text-[13px] font-bold text-sand-900"><ShieldCheck class="h-4 w-4" :stroke-width="1.9" />Vérification d'identité</NuxtLink>
     </div>
 
     <template v-if="tab === 'infos'">
       <LayoutAccountNameForm class="mb-4.5" />
       <div class="grid grid-cols-1 gap-4.5 lg:grid-cols-2">
-        <div class="rounded-2xl border border-[var(--border-subtle)] bg-white p-6">
+        <section class="rounded-2xl border border-[var(--border-subtle)] bg-white p-5.5">
           <div class="flex items-center gap-4">
             <div class="relative flex-none">
               <CoreAvatar :name="displayName" :avatar-url="currentUser?.avatar_url" :size="72" color="var(--color-green-700)" />
-              <label class="absolute -bottom-1 -right-1 grid h-7 w-7 cursor-pointer place-items-center rounded-pill border-2 border-white bg-green-600 text-[12px] text-white shadow-card" :class="{ 'pointer-events-none opacity-60': avatarUploading }">
-                {{ avatarUploading ? '…' : '✎' }}
+              <label class="absolute -bottom-1 -right-1 grid h-7 w-7 cursor-pointer place-items-center rounded-pill border-2 border-white bg-green-600 text-white shadow-card" :class="{ 'pointer-events-none opacity-60': avatarUploading }" aria-label="Changer la photo de profil">
+                <span v-if="avatarUploading" class="text-[11px] font-bold">…</span>
+                <Camera v-else class="h-3.5 w-3.5" :stroke-width="2" />
                 <input ref="avatarInput" type="file" accept="image/*" class="hidden" :disabled="avatarUploading" @change="onAvatarSelected">
               </label>
             </div>
-            <div>
-              <p class="m-0 font-display text-xl font-bold tracking-[-.02em]">{{ displayName }}</p>
-              <p class="mb-0 mt-1 text-[13px] text-[var(--text-muted)]">Locataire</p>
-              <p v-if="avatarError" class="mb-0 mt-1 text-[12px] font-semibold text-danger-fg">{{ avatarError }}</p>
+            <div class="min-w-0">
+              <p class="m-0 truncate font-display text-xl font-bold tracking-[-.02em]">{{ displayName }}</p>
+              <p class="mb-0 mt-1 text-xs text-[var(--text-faint)]">Locataire</p>
+              <p v-if="avatarError" class="mb-0 mt-1 text-[12.5px] font-semibold text-danger-fg">{{ avatarError }}</p>
             </div>
           </div>
-          <div class="mt-5">
-            <div class="flex items-center justify-between border-b border-sand-200 py-3.5">
-              <span class="text-[13.5px] text-[var(--text-faint)]">Téléphone</span>
-              <span class="text-sm font-semibold">{{ currentUser?.phone_number || 'Non renseigné' }}</span>
+          <dl class="m-0 mt-4.5">
+            <div class="flex items-center justify-between gap-3 border-b border-sand-200 py-3">
+              <dt class="text-[13.5px] text-[var(--text-muted)]">Téléphone</dt>
+              <dd class="m-0 font-mono text-sm font-semibold">{{ currentUser?.phone_number || 'Non renseigné' }}</dd>
             </div>
-            <div class="flex items-center justify-between border-b border-sand-200 py-3.5">
-              <span class="text-[13.5px] text-[var(--text-faint)]">E-mail</span>
-              <span class="text-sm font-semibold">{{ currentUser?.email }}</span>
+            <div class="flex items-center justify-between gap-3 border-b border-sand-200 py-3">
+              <dt class="text-[13.5px] text-[var(--text-muted)]">E-mail</dt>
+              <dd class="m-0 truncate text-sm font-semibold">{{ currentUser?.email }}</dd>
             </div>
-            <div v-if="profile" class="flex items-center justify-between border-b border-sand-200 py-3.5">
-              <span class="text-[13.5px] text-[var(--text-faint)]">Nom légal (pièce d'identité)</span>
-              <span class="text-sm font-semibold">{{ maskedStatus(profile.full_name_masked) }}</span>
-            </div>
-            <div v-if="profile" class="flex items-center justify-between py-3.5">
-              <span class="text-[13.5px] text-[var(--text-faint)]">Profession</span>
-              <span class="text-sm font-semibold">{{ maskedStatus(profile.profession_masked) }}</span>
-            </div>
+            <template v-if="profile">
+              <div v-for="f in SECRET_FIELDS" :key="f.key" class="flex items-center justify-between gap-3 border-b border-sand-200 py-3 last:border-b-0">
+                <dt class="text-[13.5px] text-[var(--text-muted)]">{{ f.label }}</dt>
+                <dd class="m-0"><CoreBadge :tone="f.masked(profile) ? 'ok' : 'neutral'">{{ f.masked(profile) ? 'Renseigné' : 'Non renseigné' }}</CoreBadge></dd>
+              </div>
+            </template>
+          </dl>
+        </section>
+        <section class="self-start rounded-2xl border border-green-100 bg-green-50 p-5.5">
+          <h2 class="m-0 text-[15px] font-bold text-green-900">Mon identifiant locataire</h2>
+          <p class="mb-0 mt-1.5 text-[13.5px] leading-[1.55] text-green-800">Communiquez cette adresse à un propriétaire pour qu'il crée votre bail — plus jamais d'identifiant technique à recopier.</p>
+          <div class="mt-3.5 flex items-center gap-2.5 rounded-md border border-green-100 bg-white px-4 py-3">
+            <span class="min-w-0 flex-1 truncate font-mono text-sm font-bold">{{ currentUser?.email }}</span>
+            <CoreButton size="sm" tone="secondary" @click="copyId">
+              <span class="inline-flex items-center gap-1.5"><Check v-if="idCopied" class="h-4 w-4 text-ok-fg" :stroke-width="2.2" /><Copy v-else class="h-4 w-4" :stroke-width="1.9" />{{ idCopied ? 'Copié' : 'Copier' }}</span>
+            </CoreButton>
           </div>
-        </div>
-        <div class="self-start rounded-2xl border border-green-100 bg-green-50 p-6">
-          <p class="m-0 text-[13px] font-black uppercase tracking-[.05em] text-green-700">Mon identifiant locataire</p>
-          <p class="mb-0 mt-3 text-sm leading-[1.55] text-green-800">Communiquez cette adresse à un propriétaire pour qu'il crée votre bail — plus jamais d'identifiant technique à recopier.</p>
-          <div class="mt-3.5 flex items-center gap-2.5 rounded-md border border-green-100 bg-white px-4 py-3.5">
-            <span class="flex-1 truncate font-mono text-sm font-bold">{{ currentUser?.email }}</span>
-            <button type="button" class="flex-none rounded-sm bg-green-600 px-3.5 py-2 text-[12.5px] font-bold text-white" @click="copyId">{{ idCopied ? 'Copié ✓' : 'Copier' }}</button>
-          </div>
-        </div>
+        </section>
       </div>
 
-      <div class="mt-4.5 rounded-2xl border border-[var(--border-subtle)] bg-white p-6">
-        <p class="m-0 text-base font-bold">Modifier mon profil</p>
-        <p class="mb-4 mt-1 text-[13px] text-[var(--text-muted)]">Ces informations sont chiffrées côté serveur — elles ne sont jamais réaffichées en clair, seulement leur présence.</p>
+      <section class="mt-4.5 rounded-2xl border border-[var(--border-subtle)] bg-white p-5.5">
+        <h2 class="m-0 text-[15px] font-bold">Modifier mon profil</h2>
+        <p class="mb-4.5 mt-1 text-[13.5px] text-[var(--text-muted)]">Nom légal, profession et contact d'urgence sont chiffrés côté serveur : ils ne sont jamais réaffichés en clair, seulement leur présence.</p>
 
-        <div v-if="profileState === 'loading'" class="text-[13px] text-[var(--text-muted)]">Chargement…</div>
+        <DataSkeletonCard v-if="profileState === 'loading' || profileState === 'idle'" :height="160" :lines="0" />
+        <FeedbackAlertBanner v-else-if="profileState === 'error'" tone="danger">
+          Impossible de charger votre profil pour le moment.
+          <button type="button" class="ml-2 font-bold underline" @click="loadProfile">Réessayer</button>
+        </FeedbackAlertBanner>
         <template v-else>
-          <div class="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
-            <div>
-              <label class="mb-1.5 block text-[12.5px] font-bold text-[var(--text-muted)]">Nom légal (pièce d'identité)</label>
-              <input v-model="fullName" placeholder="Ex. Sèdjro Aholou" class="h-11 w-full rounded-sm border border-[var(--border-default)] bg-white px-3.5 text-[13.5px] outline-none">
+          <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div v-for="f in SECRET_FIELDS" :key="f.key" :class="f.key === 'emergency_contact' ? 'sm:col-span-2' : ''">
+              <FormsInput
+                v-model="secretValues[f.key]"
+                :label="f.label"
+                :placeholder="secretCleared[f.key] ? 'Sera effacé à l\'enregistrement' : f.placeholder"
+                :hint="profile && f.masked(profile) && !secretCleared[f.key] ? 'Renseigné : laissez vide pour garder la valeur enregistrée.' : undefined"
+                :mono="f.key === 'emergency_contact'"
+              />
+              <button
+                v-if="profile && f.masked(profile)"
+                type="button"
+                class="mt-1 text-[12.5px] font-bold"
+                :class="secretCleared[f.key] ? 'text-green-700' : 'text-[var(--text-muted)] underline'"
+                @click="secretCleared[f.key] = !secretCleared[f.key]; secretValues[f.key] = ''"
+              >{{ secretCleared[f.key] ? 'Ne pas effacer' : 'Effacer la valeur enregistrée' }}</button>
             </div>
-            <div>
-              <label class="mb-1.5 block text-[12.5px] font-bold text-[var(--text-muted)]">Profession</label>
-              <input v-model="profession" placeholder="Ex. Commerçante" class="h-11 w-full rounded-sm border border-[var(--border-default)] bg-white px-3.5 text-[13.5px] outline-none">
-            </div>
-            <div class="sm:col-span-2">
-              <label class="mb-1.5 block text-[12.5px] font-bold text-[var(--text-muted)]">Contact d'urgence</label>
-              <input v-model="emergencyContact" placeholder="Ex. +229 97 xx xx xx" class="h-11 w-full rounded-sm border border-[var(--border-default)] bg-white px-3.5 text-[13.5px] outline-none">
-            </div>
-            <div>
-              <label class="mb-1.5 block text-[12.5px] font-bold text-[var(--text-muted)]">Budget min (FCFA)</label>
-              <input v-model="budgetMin" inputmode="numeric" class="h-11 w-full rounded-sm border border-[var(--border-default)] bg-white px-3.5 text-[13.5px] outline-none">
-            </div>
-            <div>
-              <label class="mb-1.5 block text-[12.5px] font-bold text-[var(--text-muted)]">Budget max (FCFA)</label>
-              <input v-model="budgetMax" inputmode="numeric" class="h-11 w-full rounded-sm border border-[var(--border-default)] bg-white px-3.5 text-[13.5px] outline-none">
+            <label class="block">
+              <span class="mb-[7px] block text-[12.5px] font-bold">Budget min (FCFA / mois)</span>
+              <input :value="budgetMin" inputmode="numeric" placeholder="Ex. 40000" class="h-[46px] w-full rounded-md border bg-[var(--surface-input)] px-[15px] font-mono text-[14.5px] outline-none" :class="budgetError ? 'border-danger-border' : 'border-[var(--border-default)]'" @input="onBudgetInput('min', $event)">
+            </label>
+            <label class="block">
+              <span class="mb-[7px] block text-[12.5px] font-bold">Budget max (FCFA / mois)</span>
+              <input :value="budgetMax" inputmode="numeric" placeholder="Ex. 90000" class="h-[46px] w-full rounded-md border bg-[var(--surface-input)] px-[15px] font-mono text-[14.5px] outline-none" :class="budgetError ? 'border-danger-border' : 'border-[var(--border-default)]'" @input="onBudgetInput('max', $event)">
+            </label>
+          </div>
+          <p v-if="budgetError" class="mb-0 mt-2 text-[12.5px] font-semibold text-danger-fg">{{ budgetError }}</p>
+          <p v-else class="mb-0 mt-2 text-[12.5px] text-[var(--text-faint)]">Videz un budget pour l'effacer.</p>
+
+          <p class="mb-[7px] mt-4.5 text-[12.5px] font-bold">Zones préférées</p>
+          <div class="flex flex-wrap items-center gap-2">
+            <FormsChip v-for="z in zones" :key="z" active removable @remove="removeZone(z)">{{ z }}</FormsChip>
+            <div class="flex items-center gap-1.5">
+              <input v-model="zoneInput" placeholder="Ajouter une zone…" aria-label="Ajouter une zone" class="h-[38px] w-[170px] rounded-pill border border-[var(--border-default)] bg-white px-3.5 text-[13px] font-semibold outline-none" @keydown.enter.prevent="addZone">
+              <button type="button" aria-label="Ajouter la zone" class="grid h-[38px] w-[38px] place-items-center rounded-pill border border-[var(--border-default)] bg-white text-green-700 disabled:opacity-50" :disabled="!zoneInput.trim()" @click="addZone"><Plus class="h-4 w-4" :stroke-width="2.2" /></button>
             </div>
           </div>
 
-          <label class="mb-1.5 mt-3.5 block text-[12.5px] font-bold text-[var(--text-muted)]">Zones préférées</label>
-          <div class="flex flex-wrap gap-2">
-            <span v-for="z in zones" :key="z" class="flex items-center gap-1.5 rounded-pill border border-green-100 bg-green-50 px-3 py-1.5 text-[12.5px] font-bold text-green-800">
-              {{ z }}
-              <button type="button" class="text-green-700" @click="removeZone(z)">✕</button>
-            </span>
-            <input v-model="zoneInput" placeholder="Ajouter une zone…" class="h-9 w-[160px] rounded-pill border border-[var(--border-default)] bg-white px-3.5 text-[12.5px] outline-none" @keydown.enter.prevent="addZone">
-          </div>
-
-          <p v-if="profileSaveError" class="mb-0 mt-3.5 text-[13px] font-semibold text-danger-fg">{{ profileSaveError }}</p>
-          <p v-if="profileSaved" class="mb-0 mt-3.5 text-[13px] font-semibold text-ok-fg">Profil mis à jour.</p>
-          <CoreButton class="mt-4" :disabled="savingProfile" @click="saveProfile">{{ savingProfile ? 'Enregistrement…' : 'Enregistrer' }}</CoreButton>
+          <p v-if="profileSaveError" class="mb-0 mt-4 text-[13px] font-semibold text-danger-fg">{{ profileSaveError }}</p>
+          <p v-if="profileSaved" class="mb-0 mt-4 rounded-md border border-ok-border bg-ok-bg px-3.5 py-2.5 text-[13px] font-semibold text-green-900">{{ profileSaved }}</p>
+          <CoreButton class="mt-4.5" :disabled="savingProfile || !!budgetError" @click="saveProfile">{{ savingProfile ? 'Enregistrement…' : 'Enregistrer' }}</CoreButton>
         </template>
-      </div>
+      </section>
     </template>
 
     <template v-else-if="tab === 'securite'">
-      <div class="flex max-w-[640px] flex-col gap-3.5">
-        <div class="rounded-xl border border-[var(--border-subtle)] bg-white p-5.5">
+      <div class="flex max-w-[640px] flex-col gap-4.5">
+        <section class="rounded-2xl border border-[var(--border-subtle)] bg-white p-5.5">
           <template v-if="pwStep === 'form'">
-            <p class="m-0 text-[15px] font-bold">{{ currentUser?.has_password ? 'Changer mon mot de passe' : 'Créer un mot de passe' }}</p>
-            <p class="mb-3.5 mt-1.5 text-[13.5px] leading-[1.55] text-[var(--text-muted)]">{{ currentUser?.has_password ? 'Modifiez votre mot de passe actuel.' : "Votre compte a été créé par code email. Définissez un mot de passe pour ne plus dépendre d'un aller-retour à chaque connexion." }}</p>
-            <div class="flex flex-col gap-2.5">
-              <input v-if="currentUser?.has_password" v-model="currentPassword" type="password" placeholder="Mot de passe actuel" class="h-11 w-full rounded-sm border border-[var(--border-default)] bg-white px-3.5 text-[13.5px] outline-none">
-              <input v-model="newPassword" type="password" placeholder="Nouveau mot de passe (8 caractères min.)" class="h-11 w-full rounded-sm border border-[var(--border-default)] bg-white px-3.5 text-[13.5px] outline-none">
-              <input v-model="confirmPassword" type="password" placeholder="Confirmer le mot de passe" class="h-11 w-full rounded-sm border border-[var(--border-default)] bg-white px-3.5 text-[13.5px] outline-none">
+            <h2 class="m-0 text-[15px] font-bold">{{ currentUser?.has_password ? 'Changer mon mot de passe' : 'Créer un mot de passe' }}</h2>
+            <p class="mb-4 mt-1 text-[13.5px] leading-[1.55] text-[var(--text-muted)]">{{ currentUser?.has_password ? 'Modifiez votre mot de passe actuel.' : "Votre compte a été créé par code email. Définissez un mot de passe pour ne plus dépendre d'un aller-retour à chaque connexion." }}</p>
+            <div class="flex flex-col gap-3.5">
+              <FormsInput v-if="currentUser?.has_password" v-model="currentPassword" type="password" label="Mot de passe actuel" />
+              <FormsInput v-model="newPassword" type="password" label="Nouveau mot de passe" hint="8 caractères minimum." />
+              <FormsInput v-model="confirmPassword" type="password" label="Confirmer le mot de passe" />
             </div>
             <p v-if="pwError" class="mb-0 mt-3 text-[13px] font-semibold text-danger-fg">{{ pwError }}</p>
-            <CoreButton class="mt-3.5" :disabled="pwLoading || !newPassword" @click="submitPassword">{{ pwLoading ? 'Enregistrement…' : 'Enregistrer' }}</CoreButton>
+            <CoreButton class="mt-4" :disabled="pwLoading || !newPassword" @click="submitPassword">{{ pwLoading ? 'Enregistrement…' : 'Enregistrer' }}</CoreButton>
           </template>
           <template v-else>
-            <p class="m-0 text-[15px] font-bold text-ok-fg">Mot de passe enregistré</p>
+            <p class="m-0 rounded-md border border-ok-border bg-ok-bg px-3.5 py-2.5 text-[13px] font-semibold text-green-900">Mot de passe enregistré.</p>
             <template v-if="recoveryCodes">
-              <p class="mb-3 mt-1.5 text-[13.5px] leading-[1.55] text-[var(--text-muted)]">Conservez ces codes de récupération dans un endroit sûr — ils ne seront plus jamais affichés.</p>
+              <h2 class="mb-0 mt-4 text-[15px] font-bold">Codes de récupération</h2>
+              <p class="mb-3 mt-1 text-[13.5px] leading-[1.55] text-[var(--text-muted)]">Conservez-les dans un endroit sûr : ils ne seront plus jamais affichés.</p>
               <div class="grid grid-cols-2 gap-2 rounded-md border border-[var(--border-default)] bg-[var(--surface-page)] p-3.5 font-mono text-[13px] font-bold">
                 <span v-for="c in recoveryCodes" :key="c">{{ c }}</span>
               </div>
+              <CoreButton size="sm" tone="secondary" class="mt-3" @click="copyCodes">
+                <span class="inline-flex items-center gap-1.5"><Check v-if="codesCopied" class="h-4 w-4 text-ok-fg" :stroke-width="2.2" /><Copy v-else class="h-4 w-4" :stroke-width="1.9" />{{ codesCopied ? 'Codes copiés' : 'Copier les codes' }}</span>
+              </CoreButton>
             </template>
-            <p v-else class="mb-0 mt-1.5 text-[13.5px] text-[var(--text-muted)]">Votre mot de passe a bien été mis à jour.</p>
           </template>
-        </div>
+        </section>
 
-        <div class="rounded-xl border border-danger-border bg-danger-bg p-5.5">
-          <p class="m-0 text-[15px] font-bold text-danger-fg">Supprimer mon compte</p>
-          <p class="mb-3.5 mt-1.5 text-[13.5px] leading-[1.55] text-danger-fg-deep">Votre bail actif et votre caution séquestrée doivent d'abord être clôturés. La suppression est définitive.</p>
-          <p v-if="deleteError" class="mb-3 mt-0 text-[13px] font-semibold text-danger-fg">{{ deleteError }}</p>
-          <button v-if="deleteStep === 'idle'" type="button" class="rounded-md border border-danger-border bg-white px-4.5 py-2.5 text-[13px] font-bold text-danger-fg" @click="deleteStep = 'confirm'">Supprimer le compte</button>
-          <div v-else class="flex items-center gap-2.5">
-            <span class="text-[13px] font-bold text-danger-fg-deep">Confirmer la suppression définitive ?</span>
-            <button type="button" class="rounded-md bg-danger-fg px-4 py-2.5 text-[13px] font-bold text-white disabled:opacity-60" :disabled="deleteStep === 'loading'" @click="confirmDelete">{{ deleteStep === 'loading' ? '…' : 'Oui, supprimer' }}</button>
-            <button type="button" class="rounded-md border border-danger-border bg-white px-4 py-2.5 text-[13px] font-bold text-danger-fg" @click="deleteStep = 'idle'">Annuler</button>
-          </div>
-        </div>
+        <section class="rounded-2xl border border-danger-border bg-white p-5.5">
+          <h2 class="m-0 text-[15px] font-bold text-danger-fg">Supprimer mon compte</h2>
+          <p class="mb-3.5 mt-1 text-[13.5px] leading-[1.55] text-[var(--text-muted)]">La suppression est définitive : vos données personnelles sont anonymisées. Elle n'est possible qu'une fois vos baux terminés et votre solde ramené à zéro.</p>
+          <p v-if="deletionCheckState === 'loading'" class="m-0 text-xs text-[var(--text-faint)]">Vérification de vos baux et de votre solde…</p>
+          <p v-else-if="deletionCheckState === 'error'" class="m-0 text-[13px] font-semibold text-danger-fg">
+            Impossible de vérifier vos baux et votre solde. <button type="button" class="font-bold underline" @click="retryDeletionCheck">Réessayer</button>
+          </p>
+          <template v-else-if="deletionBlockers.length">
+            <ul class="m-0 list-disc pl-5 text-[13px] leading-[1.6] text-warn-fg-deep">
+              <li v-for="b in deletionBlockers" :key="b">{{ b.charAt(0).toUpperCase() + b.slice(1) }}.</li>
+            </ul>
+            <CoreButton class="mt-3.5" size="sm" tone="secondary" disabled>Supprimer le compte</CoreButton>
+          </template>
+          <template v-else>
+            <CoreInlineConfirm
+              v-if="confirmingDelete"
+              tone="danger"
+              message="Supprimer définitivement votre compte ? Vous serez déconnecté et ne pourrez plus y accéder."
+              confirm-label="Supprimer"
+              cancel-label="Garder mon compte"
+              :loading="deleting"
+              @confirm="confirmDelete"
+              @cancel="confirmingDelete = false"
+            />
+            <CoreButton v-else size="sm" tone="secondary" @click="confirmingDelete = true; deleteError = ''">Supprimer le compte</CoreButton>
+          </template>
+          <p v-if="deleteError" class="mb-0 mt-2.5 text-[13px] font-semibold text-danger-fg">{{ deleteError }}</p>
+        </section>
       </div>
     </template>
 
     <template v-else>
-      <div class="max-w-[640px] rounded-2xl border border-[var(--border-subtle)] bg-white p-6">
-        <p v-if="notifState === 'loading'" class="m-0 text-[13px] text-[var(--text-muted)]">Chargement…</p>
-        <p v-else-if="notifState === 'error'" class="m-0 text-[13px] text-danger-fg">Impossible de charger vos préférences.</p>
+      <section class="max-w-[640px] rounded-2xl border border-[var(--border-subtle)] bg-white p-5.5">
+        <h2 class="m-0 text-[15px] font-bold">Canaux de notification</h2>
+        <p class="mb-2 mt-1 text-[13.5px] text-[var(--text-muted)]">Chaque réglage s'applique aussitôt.</p>
+        <DataSkeletonCard v-if="notifState === 'loading' || notifState === 'idle'" :height="140" :lines="0" />
+        <FeedbackAlertBanner v-else-if="notifState === 'error'" tone="danger">
+          Impossible de charger vos préférences.
+          <button type="button" class="ml-2 font-bold underline" @click="loadNotifPrefs">Réessayer</button>
+        </FeedbackAlertBanner>
         <template v-else-if="notifPrefs">
-          <label v-for="c in CHANNEL_DEFS" :key="c.key" class="flex cursor-pointer items-center justify-between gap-4 border-b border-sand-200 py-3.5 last:border-b-0" @click.prevent="toggleChannel(c.key)">
-            <div>
-              <p class="m-0 text-[14.5px] font-semibold">{{ c.label }}</p>
-              <p class="mb-0 mt-1 text-xs text-[var(--text-faint)]">{{ c.hint }}</p>
-            </div>
-            <span
-              class="block h-[27px] w-[46px] flex-none rounded-pill p-[3px] transition-colors"
-              :class="[notifPrefs[c.key] ? 'bg-green-600' : 'bg-[var(--border-default)]', togglingChannel === c.key ? 'opacity-60' : '']"
-            >
-              <span
-                class="block h-[21px] w-[21px] rounded-pill bg-white shadow-[0_1px_3px_rgba(0,0,0,.2)] transition-transform"
-                :style="{ transform: notifPrefs[c.key] ? 'translateX(19px)' : 'translateX(0)' }"
-              />
-            </span>
-          </label>
+          <div v-for="c in CHANNEL_DEFS" :key="c.key" class="border-b border-sand-200 py-3.5 last:border-b-0">
+            <FormsToggle
+              :class="togglingChannel === c.key ? 'pointer-events-none opacity-60' : ''"
+              :model-value="!!notifPrefs[c.key]"
+              :label="c.label"
+              :hint="c.hint"
+              @update:model-value="toggleChannel(c.key)"
+            />
+            <p v-if="channelError?.key === c.key" class="mb-0 mt-1.5 flex items-center gap-1.5 text-[12.5px] font-semibold text-danger-fg"><X class="h-3.5 w-3.5" :stroke-width="2.2" />{{ channelError.text }}</p>
+          </div>
         </template>
-      </div>
+      </section>
     </template>
   </div>
 </template>

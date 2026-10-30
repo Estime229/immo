@@ -1,9 +1,11 @@
 <script setup lang="ts">
+import { Check, ExternalLink } from '@lucide/vue'
 import { ApiRequestError } from '~/utils/authenticatedFetcher'
 import { errorText } from '~/utils/apiErrors'
 import { canTenantSign, entryBreakdown, RENT_SUFFIX } from '~/utils/leases'
 
 const leaseModal = useLeaseModal()
+const leaseFlash = useLeaseFlash()
 const { activeLease, reload } = useTenantLeases()
 const leasesApi = useLeasesApi()
 const doc = useOpenDocument()
@@ -49,11 +51,19 @@ async function submit() {
     await leasesApi.sign(l.id)
     await reload()
     step.value = 'done'
+    leaseFlash.value = { leaseId: l.id, text: "Bail signé. Dernière étape : le paiement d'entrée, qui l'active." }
   } catch (e) {
     errorMessage.value = e instanceof ApiRequestError ? errorText(e.mapped, 'La signature a échoué.') : 'La signature a échoué.'
   } finally {
     loading.value = false
   }
+}
+
+/** Après signature : l'écran du bail montre déjà le paiement d'entrée, on y amène directement. */
+async function goToEntryPayment() {
+  close()
+  await nextTick()
+  document.getElementById('paiement-entree')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
 }
 
 async function readContract() {
@@ -64,44 +74,48 @@ async function readContract() {
 </script>
 
 <template>
-  <Teleport to="body">
-    <div v-if="open" class="fixed inset-0 z-[90] grid animate-[im-veil_.22s_ease_both] place-items-center bg-black/50 p-6 backdrop-blur-[3px]" @click="close">
-      <div class="w-[460px] max-w-[calc(100vw-3rem)] animate-[im-rise_.28s_var(--ease-standard)_both] rounded-2xl bg-[var(--surface-page)] p-6.5" @click.stop>
+  <CoreModal :open="open" :title="step === 'form' ? 'Signer mon bail' : 'Bail signé'" width="460px" :dirty="step === 'form' && agreed" @close="close">
+    <template v-if="step === 'form'">
+      <p class="m-0 text-[13.5px] leading-[1.55] text-[var(--text-muted)]">
+        Votre signature vaut engagement. Le bail devient <strong>actif</strong> une fois l'entrée payée.
+      </p>
+      <div v-if="activeLease && entry" class="mt-4 rounded-lg border border-[var(--border-subtle)] bg-white px-4 py-3.5">
+        <DataMoneyLine label="Loyer" :value="`${formatFcfa(Number(activeLease.signed_rent))} ${RENT_SUFFIX[activeLease.billing_frequency ?? 'monthly']}`" />
+        <DataMoneyLine label="Caution" :value="formatFcfa(entry.deposit)" />
+        <DataMoneyLine v-if="entry.advance" label="Avance sur loyer" :value="formatFcfa(entry.advance)" />
+        <DataMoneyLine v-if="entry.prepaid" label="Loyers prépayés" :value="formatFcfa(entry.prepaid)" />
+        <DataMoneyLine label="À payer à l'entrée, après signature" :value="formatFcfa(entry.total)" total />
+      </div>
+      <button type="button" class="mt-3 inline-flex items-center gap-1.5 text-[13px] font-bold text-green-700 disabled:opacity-60" :disabled="doc.loadingKey.value === 'contract'" @click="readContract">
+        {{ doc.loadingKey.value === 'contract' ? 'Préparation du contrat…' : 'Lire le contrat avant de signer' }}
+        <ExternalLink class="h-3.5 w-3.5" :stroke-width="1.9" />
+      </button>
+      <p v-if="docError" class="mb-0 mt-1.5 text-[12.5px] font-semibold text-danger-fg">{{ docError }}</p>
+      <label class="mt-4 flex cursor-pointer items-start gap-2.5 rounded-md border border-[var(--border-default)] bg-white p-3.5">
+        <input v-model="agreed" type="checkbox" class="mt-0.5 h-4 w-4 flex-none accent-green-600">
+        <span class="text-[13px] leading-[1.5]">J'ai pris connaissance du contrat et je le signe.</span>
+      </label>
+      <p v-if="errorMessage" class="mb-0 mt-3 text-[13px] font-semibold text-danger-fg">{{ errorMessage }}</p>
+    </template>
+    <div v-else class="py-1 text-center">
+      <div class="mx-auto grid h-14 w-14 animate-[im-pop_.5s_ease] place-items-center rounded-pill bg-green-600 text-white"><Check class="h-7 w-7" :stroke-width="2.4" /></div>
+      <p class="mb-0 mt-4 text-base font-bold">Votre signature est enregistrée</p>
+      <p class="mx-auto mb-0 mt-2 max-w-[320px] text-[13.5px] leading-[1.55] text-[var(--text-muted)]">
+        Dernière étape : le paiement d'entrée<template v-if="entry"> (<span class="font-mono">{{ formatFcfa(entry.total) }}</span>)</template>, prélevé sur votre tirelire. Il active le bail.
+      </p>
+    </div>
+
+    <template #footer>
+      <div class="flex gap-2.5">
         <template v-if="step === 'form'">
-          <h3 class="m-0 font-display text-[19px] font-bold tracking-[-.02em]">Signer mon bail</h3>
-          <p class="mb-0 mt-2.5 text-[13.5px] leading-[1.55] text-[var(--text-muted)]">
-            Votre signature vaut engagement. Le bail devient <strong>actif</strong> une fois l'entrée payée.
-          </p>
-          <div v-if="activeLease && entry" class="mt-4 rounded-md border border-[var(--border-default)] bg-white px-4 py-3.5">
-            <DataMoneyLine label="Loyer" :value="`${formatFcfa(Number(activeLease.signed_rent))} ${RENT_SUFFIX[activeLease.billing_frequency ?? 'monthly']}`" />
-            <DataMoneyLine label="Caution" :value="formatFcfa(entry.deposit)" />
-            <DataMoneyLine v-if="entry.advance" label="Avance sur loyer" :value="formatFcfa(entry.advance)" />
-            <DataMoneyLine v-if="entry.prepaid" label="Loyers prépayés" :value="formatFcfa(entry.prepaid)" />
-            <DataMoneyLine label="À payer à l'entrée, après signature" :value="formatFcfa(entry.total)" total />
-          </div>
-          <button type="button" class="mt-3 text-[13px] font-bold text-green-700 underline disabled:opacity-60" :disabled="doc.loadingKey.value === 'contract'" @click="readContract">
-            {{ doc.loadingKey.value === 'contract' ? 'Préparation du contrat…' : 'Lire le contrat avant de signer ↗' }}
-          </button>
-          <p v-if="docError" class="mb-0 mt-1.5 text-[12.5px] font-semibold text-danger-fg">{{ docError }}</p>
-          <label class="mt-4 flex cursor-pointer items-start gap-2.5 rounded-md border border-[var(--border-default)] bg-white p-3.5">
-            <input v-model="agreed" type="checkbox" class="mt-0.5 h-4 w-4 flex-none accent-green-600">
-            <span class="text-[13px] leading-[1.5]">J'ai pris connaissance du contrat et je le signe.</span>
-          </label>
-          <p v-if="errorMessage" class="mb-0 mt-3 rounded-md border border-danger-border bg-danger-bg px-3.5 py-2.5 text-[13px] font-semibold text-danger-fg">{{ errorMessage }}</p>
-          <div class="mt-5 flex gap-2.5">
-            <CoreButton tone="secondary" size="lg" full-width @click="close">Annuler</CoreButton>
-            <CoreButton size="lg" full-width :disabled="!agreed || loading" @click="submit">{{ loading ? 'Signature…' : 'Signer' }}</CoreButton>
-          </div>
+          <CoreButton tone="secondary" full-width @click="close">Annuler</CoreButton>
+          <CoreButton full-width :disabled="!agreed || loading" @click="submit">{{ loading ? 'Signature…' : 'Signer' }}</CoreButton>
         </template>
         <template v-else>
-          <div class="px-0.5 py-1 text-center">
-            <div class="mx-auto grid h-15 w-15 animate-[im-pop_.5s_ease] place-items-center rounded-pill bg-green-600 text-[28px] text-white">✓</div>
-            <p class="mb-0 mt-4.5 text-lg font-bold">Bail signé</p>
-            <p class="mx-auto mb-0 mt-2.5 max-w-[320px] text-sm leading-[1.6] text-[var(--text-muted)]">Votre signature est enregistrée. Reste le paiement d'entrée pour activer le bail.</p>
-            <CoreButton size="lg" full-width class="mt-5" @click="close">Terminé</CoreButton>
-          </div>
+          <CoreButton tone="secondary" full-width @click="close">Plus tard</CoreButton>
+          <CoreButton full-width @click="goToEntryPayment">Passer au paiement d'entrée</CoreButton>
         </template>
       </div>
-    </div>
-  </Teleport>
+    </template>
+  </CoreModal>
 </template>

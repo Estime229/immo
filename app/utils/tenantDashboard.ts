@@ -1,4 +1,5 @@
 import { invoiceView } from './leases'
+import { bookingPhase } from './bookings'
 import type { BookingSummary, HousingRequestSummary, LeaseInvoice, LeaseSummary, NotificationItem, SignalSummary, WaitlistEntry } from '../types/tenant'
 
 export interface LateLeaseInfo {
@@ -19,25 +20,35 @@ export function findLateLeaseInvoice(leases: LeaseSummary[], now: Date = new Dat
   return null
 }
 
+/** Nature de l'étape — choisit l'icône sur le tableau de bord. */
+export type DashboardStepKind = 'sign' | 'pay' | 'stay' | 'waitlist' | 'request' | 'inventory'
+
 export interface DashboardStep {
   key: string
   label: string
   hint: string
   cta: string
   to: string
+  kind?: DashboardStepKind
+}
+
+function shortDay(iso: string) {
+  return new Date(`${iso.slice(0, 10)}T12:00:00`).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
 }
 
 /**
  * Dérive les actions concrètes disponibles à partir des seules données que
  * ce lot (IL1) récupère réellement — pas d'action inventée sur un module non
- * câblé (état des lieux, messagerie…).
+ * câblé (état des lieux, messagerie…). Les séjours courte durée confirmés
+ * (en cours ou à venir) y figurent aussi : sans eux, un voyageur en plein
+ * séjour lisait « Rien de particulier à faire ».
  */
 export function buildNextSteps(input: {
   leases: LeaseSummary[]
   bookings: BookingSummary[]
   housingRequests: HousingRequestSummary[]
   waitlist: WaitlistEntry[]
-}): DashboardStep[] {
+}, now: Date = new Date()): DashboardStep[] {
   const steps: DashboardStep[] = []
 
   for (const lease of input.leases) {
@@ -48,7 +59,8 @@ export function buildNextSteps(input: {
         label: `Signer votre bail — ${unitName}`,
         hint: lease.property?.name ?? '',
         cta: 'Signer',
-        to: `/locataire/bail?lease=${lease.id}`
+        to: `/locataire/bail?lease=${lease.id}`,
+        kind: 'sign'
       })
     } else if (lease.status === 'signed') {
       // La double signature ne rend pas le bail actif : seul le paiement d'entrée le fait (voir IL2).
@@ -57,31 +69,58 @@ export function buildNextSteps(input: {
         label: `Payer l'entrée dans les lieux — ${unitName}`,
         hint: lease.property?.name ?? '',
         cta: 'Payer',
-        to: `/locataire/bail?lease=${lease.id}`
+        to: `/locataire/bail?lease=${lease.id}`,
+        kind: 'pay'
       })
     }
   }
 
   for (const booking of input.bookings) {
-    if (booking.status === 'pending_payment') {
+    const phase = bookingPhase(booking, now)
+    const place = booking.unit?.name ?? 'logement'
+    const dates = `Du ${shortDay(booking.check_in)} au ${shortDay(booking.check_out)}`
+    // Un hold expiré n'est plus payable : on ne le propose pas.
+    if (phase === 'hold') {
       steps.push({
         key: `booking-pay-${booking.id}`,
-        label: `Payer votre réservation — ${booking.unit?.name ?? 'logement'}`,
-        hint: `${booking.check_in} → ${booking.check_out}`,
+        label: `Payer votre réservation — ${place}`,
+        hint: dates,
         cta: 'Payer',
-        to: '/locataire/reservations'
+        to: `/locataire/reservations?booking=${booking.id}`,
+        kind: 'pay'
+      })
+    } else if (phase === 'ongoing') {
+      steps.push({
+        key: `booking-stay-${booking.id}`,
+        label: `Séjour en cours — ${place}`,
+        hint: `Départ le ${shortDay(booking.check_out)}`,
+        cta: 'Voir',
+        to: `/locataire/reservations?booking=${booking.id}`,
+        kind: 'stay'
+      })
+    } else if (phase === 'upcoming') {
+      steps.push({
+        key: `booking-stay-${booking.id}`,
+        label: `Arrivée le ${shortDay(booking.check_in)} — ${place}`,
+        hint: dates,
+        cta: 'Voir',
+        to: `/locataire/reservations?booking=${booking.id}`,
+        kind: 'stay'
       })
     }
   }
 
   for (const entry of input.waitlist) {
     if (entry.notified_at) {
+      // `GET /units/waitlist/mine` joint l'unité complète, `property_id` compris (colonne de l'entité) — absent du type.
+      const propertyId = (entry.unit as { property_id?: string | null }).property_id
       steps.push({
         key: `waitlist-${entry.id}`,
-        label: `Une unité de votre liste d'attente est disponible — ${entry.unit.name}`,
+        label: `Un logement de votre liste d'attente est disponible — ${entry.unit.name}`,
         hint: 'Réagissez vite, la place peut repartir.',
-        cta: 'Voir',
-        to: '/locataire/favoris'
+        cta: "Voir l'annonce",
+        to: propertyId ? `/biens/${propertyId}?unit=${entry.unit_id}` : '/recherche',
+        kind: 'waitlist'
       })
     }
   }
@@ -93,7 +132,8 @@ export function buildNextSteps(input: {
         label: `${hr.response_count} réponse${hr.response_count > 1 ? 's' : ''} reçue${hr.response_count > 1 ? 's' : ''} à votre recherche`,
         hint: hr.description,
         cta: 'Voir',
-        to: `/locataire/demandes?request=${hr.id}`
+        to: `/locataire/demandes?request=${hr.id}`,
+        kind: 'request'
       })
     }
   }
@@ -150,6 +190,7 @@ export function inventorySignSteps(items: { inv: { id: string; type: string; sta
       label: `Signer l'état des lieux ${inv.type === 'exit' ? 'de sortie' : "d'entrée"} — ${place}`,
       hint: 'Relisez-le avant de signer : il sert de référence pour la caution.',
       cta: 'Relire et signer',
-      to: `/locataire/edl?inventory=${inv.id}`
+      to: `/locataire/edl?inventory=${inv.id}`,
+      kind: 'inventory' as const
     }))
 }

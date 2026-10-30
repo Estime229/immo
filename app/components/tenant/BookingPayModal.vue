@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { Check, ExternalLink, Lock, RefreshCw } from '@lucide/vue'
 import type { BookingSummary } from '~/types/tenant'
 import { ApiRequestError } from '~/utils/authenticatedFetcher'
 import { errorText } from '~/utils/apiErrors'
@@ -8,6 +9,7 @@ const props = defineProps<{ booking: BookingSummary }>()
 /** `paid` seulement sur un vrai paiement ; `changed` quand la réservation n'est plus payable (dates prises → annulée par l'API, ou délai dépassé). */
 const emit = defineEmits<{ close: []; paid: []; changed: [] }>()
 
+const route = useRoute()
 const bookingsApi = useBookingsApi()
 const wallet = useTenantWallet()
 onMounted(() => { wallet.reload() })
@@ -22,7 +24,7 @@ const payError = ref('')
 /** Refus définitifs du paiement : on ne propose plus « Payer », mais une sortie utile. */
 const blocking = ref<'taken' | 'expired' | null>(null)
 
-/* ---- Compte à rebours du hold de 15 min, affiché dans la fenêtre même ---- */
+/* ---- Compte à rebours du hold de 15 min, toujours visible dans la fenêtre ---- */
 const now = ref(new Date())
 let timer: ReturnType<typeof setInterval> | undefined
 onMounted(() => { timer = setInterval(() => { now.value = new Date() }, 5000) })
@@ -47,6 +49,28 @@ const displayTotal = computed(() => preview.value?.final_price ?? Number(props.b
 const shortfall = computed(() => wallet.state.value === 'success' ? Math.max(0, displayTotal.value - wallet.spendable.value) : 0)
 const retentionPct = computed(() => Number(props.booking.unit?.booking_retention_percentage ?? 0))
 
+/**
+ * Recharge faite dans un autre onglet (lien ci-dessous) : la tirelire est relue au retour sur
+ * cet onglet, et « J'ai rechargé » la relit à la demande — avant, il fallait fermer et rouvrir.
+ */
+const refreshNote = ref('')
+async function refreshWallet(manual = false) {
+  if (step.value !== 'form' || blocking.value) return
+  await wallet.reload()
+  if (manual) refreshNote.value = wallet.state.value !== 'success' ? 'Solde indisponible pour le moment.' : shortfall.value > 0 ? 'Votre tirelire ne suffit pas encore.' : ''
+}
+function onVisible() {
+  if (document.visibilityState === 'visible' && shortfall.value > 0) refreshWallet()
+}
+onMounted(() => {
+  document.addEventListener('visibilitychange', onVisible)
+  window.addEventListener('focus', onVisible)
+})
+onBeforeUnmount(() => {
+  document.removeEventListener('visibilitychange', onVisible)
+  window.removeEventListener('focus', onVisible)
+})
+
 async function submitPay() {
   payLoading.value = true
   payError.value = ''
@@ -64,6 +88,12 @@ async function submitPay() {
 }
 
 const listingLink = computed(() => props.booking.unit?.property_id ? `/biens/${props.booking.unit.property_id}` : '/recherche?mode=nuit')
+/** Depuis « Mes réservations », la page bascule elle-même sur le séjour : le lien serait redondant. */
+const onReservationsPage = computed(() => route.path.startsWith('/locataire/reservations'))
+
+function shortDay(iso: string) {
+  return new Date(`${iso.slice(0, 10)}T12:00:00`).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
+}
 
 function close() {
   if (step.value === 'done') emit('paid')
@@ -73,74 +103,93 @@ function close() {
 </script>
 
 <template>
-  <Teleport to="body">
-    <div class="fixed inset-0 z-[90] grid animate-[im-veil_.22s_ease_both] place-items-center bg-black/50 p-6 backdrop-blur-[3px]" @click="close">
-      <div class="w-[460px] max-w-[calc(100vw-3rem)] animate-[im-rise_.28s_var(--ease-standard)_both] rounded-2xl bg-[var(--surface-page)] p-6.5" @click.stop>
-        <template v-if="step === 'form'">
-          <h3 class="m-0 font-display text-lg font-bold tracking-[-.02em]">Payer ma réservation</h3>
-          <p class="mb-0 mt-2 text-[13px] text-[var(--text-muted)]">
-            {{ booking.unit?.name ?? 'Logement' }} · {{ new Date(booking.check_in).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }) }} → {{ new Date(booking.check_out).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }) }} · {{ booking.nights }} nuit{{ booking.nights > 1 ? 's' : '' }}
+  <CoreModal :open="true" :title="step === 'done' ? 'Réservation confirmée' : 'Payer ma réservation'" width="460px" :dirty="step === 'form' && (!!promoCode.trim() || payLoading)" @close="close">
+    <template v-if="step === 'form'">
+      <p class="m-0 text-[13.5px] text-[var(--text-muted)]">
+        {{ booking.unit?.name ?? 'Logement' }} · <span class="font-mono">{{ shortDay(booking.check_in) }} – {{ shortDay(booking.check_out) }}</span> · {{ booking.nights }} nuit{{ booking.nights > 1 ? 's' : '' }}
+      </p>
+      <p v-if="hold && !hold.expired && !blocking" class="mb-0 mt-2.5 inline-flex items-center gap-2 rounded-pill bg-danger-bg px-3 py-1.5 text-[12px] font-bold text-danger-fg">
+        <span class="h-[7px] w-[7px] animate-[im-pulse_1.2s_infinite] rounded-pill bg-danger-fg" />Dates gardées encore <span class="font-mono">{{ hold.minutesRemaining }}</span> min
+      </p>
+      <p v-else-if="hold?.expired && !blocking" class="mb-0 mt-2.5 rounded-md border border-danger-border bg-danger-bg px-3.5 py-2.5 text-[13px] font-semibold text-danger-fg">
+        Le délai de 15 minutes est dépassé : les dates ont été libérées. <NuxtLink :to="listingLink" class="underline">Réserver à nouveau</NuxtLink>
+      </p>
+
+      <template v-if="!blocking">
+        <div class="mt-4 flex gap-2">
+          <input
+            v-model="promoCode"
+            placeholder="Code promo (facultatif)"
+            aria-label="Code promo"
+            class="h-[42px] min-w-0 flex-1 rounded-pill border border-[var(--border-default)] bg-white px-3.5 text-[13px] font-semibold outline-none"
+            @keyup.enter="runPreview"
+          >
+          <CoreButton size="sm" tone="secondary" :disabled="previewLoading || !promoCode.trim()" @click="runPreview">{{ previewLoading ? '…' : 'Appliquer' }}</CoreButton>
+        </div>
+        <p v-if="previewError" class="mb-0 mt-2 text-[12.5px] font-semibold text-danger-fg">{{ previewError }}</p>
+        <p v-else-if="preview && !preview.applied && promoCode" class="mb-0 mt-2 text-[12.5px] text-[var(--text-muted)]">Ce code n'apporte pas de réduction sur ce séjour.</p>
+        <p v-else-if="preview?.applied" class="mb-0 mt-2 inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-ok-fg"><Check class="h-3.5 w-3.5" :stroke-width="2.2" />Code appliqué</p>
+
+        <div class="mt-4 rounded-lg border border-[var(--border-subtle)] bg-white px-4.5 py-3.5">
+          <DataMoneyLine label="Séjour" :value="formatFcfa(Number(booking.total_price))" />
+          <DataMoneyLine v-if="preview?.applied" label="Réduction" :value="`-${formatFcfa(preview.discount_amount)}`" tone="credit" />
+          <DataMoneyLine label="Total à payer" :value="formatFcfa(displayTotal)" total />
+          <p class="mb-0 mt-2 text-[12px] text-[var(--text-muted)]">
+            Prélevé sur votre tirelire<template v-if="wallet.state.value === 'success'"> · <span class="font-mono">{{ formatFcfa(wallet.spendable.value) }}</span> disponibles</template><template v-else-if="wallet.state.value === 'loading'"> · lecture du solde…</template>.
           </p>
-          <p v-if="hold && !hold.expired && !blocking" class="mb-0 mt-2.5 inline-flex items-center gap-2 rounded-pill bg-danger-bg px-3 py-1.5 text-[12px] font-bold text-danger-fg">
-            <span class="h-[7px] w-[7px] animate-[im-pulse_1.2s_infinite] rounded-pill bg-danger-fg" />Dates gardées encore {{ hold.minutesRemaining }} min
-          </p>
+        </div>
+        <p v-if="wallet.state.value === 'error'" class="mb-0 mt-2.5 text-[13px] font-semibold text-danger-fg">
+          Votre solde n'a pas pu être lu. <button type="button" class="font-bold underline" @click="refreshWallet(true)">Réessayer</button>
+        </p>
 
-          <template v-if="!blocking">
-            <div class="mt-4 flex gap-2">
-              <input
-                v-model="promoCode"
-                placeholder="Code promo (facultatif)"
-                class="h-10 min-w-0 flex-1 rounded-sm border border-[var(--border-default)] bg-white px-3.5 text-[13.5px] outline-none"
-                @keyup.enter="runPreview"
-              >
-              <button type="button" class="flex-none rounded-sm border border-[var(--border-default)] bg-white px-4 text-[13px] font-bold" :disabled="previewLoading || !promoCode.trim()" @click="runPreview">
-                {{ previewLoading ? '…' : 'Appliquer' }}
-              </button>
-            </div>
-            <p v-if="previewError" class="mb-0 mt-2 text-[12.5px] font-semibold text-danger-fg">{{ previewError }}</p>
-            <p v-else-if="preview && !preview.applied && promoCode" class="mb-0 mt-2 text-[12.5px] text-[var(--text-muted)]">Ce code n'apporte pas de réduction sur ce séjour.</p>
-            <p v-else-if="preview?.applied" class="mb-0 mt-2 text-[12.5px] font-semibold text-ok-fg">Code appliqué ✓</p>
-
-            <div class="mt-4 rounded-md border border-[var(--border-default)] bg-white px-4.5 py-3.5">
-              <DataMoneyLine label="Séjour" :value="formatFcfa(Number(booking.total_price))" />
-              <DataMoneyLine v-if="preview?.applied" label="Réduction" :value="`-${formatFcfa(preview.discount_amount)}`" tone="credit" />
-              <DataMoneyLine label="Total à payer" :value="formatFcfa(displayTotal)" total />
-              <p class="mb-0 mt-2 text-[12px] text-[var(--text-muted)]">
-                Prélevé sur votre tirelire<template v-if="wallet.state.value === 'success'"> ({{ formatFcfa(wallet.spendable.value) }} disponibles)</template>.
-              </p>
-            </div>
-
-            <WalletInconsistencyNote compact />
-            <div v-if="shortfall > 0" class="mt-3 rounded-md border border-warn-border bg-warn-bg px-3.5 py-3 text-[13px] text-warn-fg">
-              <p class="m-0 font-bold">Il vous manque {{ formatFcfa(shortfall) }} dans votre tirelire.</p>
-              <p class="mb-0 mt-1">Rechargez-la en Mobile Money, puis revenez payer avant l'expiration des {{ hold?.minutesRemaining ?? 15 }} minutes.</p>
-              <NuxtLink to="/locataire/wallet" target="_blank" class="mt-2 inline-block font-bold underline">Recharger ma tirelire ↗</NuxtLink>
-            </div>
-            <p v-if="retentionPct > 0" class="mb-0 mt-3 text-[12px] leading-[1.5] text-[var(--text-muted)]">🔒 {{ retentionPct }} % du montant est gardé par Immo jusqu'à votre départ, puis versé à l'hôte<template v-if="booking.unit?.requires_booking_inventory"> après l'état des lieux d'arrivée</template>.</p>
-          </template>
-
-          <div v-if="payError" class="mt-3 rounded-md border border-danger-border bg-danger-bg px-3.5 py-2.5 text-[13px] font-semibold text-danger-fg">
-            {{ payError }}
-            <NuxtLink v-if="blocking" :to="listingLink" class="mt-1 block font-bold underline">{{ blocking === 'taken' ? 'Choisir d\'autres dates' : 'Réserver à nouveau' }}</NuxtLink>
+        <WalletInconsistencyNote compact />
+        <div v-if="shortfall > 0" class="mt-3 rounded-md border border-warn-border bg-warn-bg px-3.5 py-3 text-[13px] text-warn-fg-deep">
+          <p class="m-0 font-bold">Il vous manque <span class="font-mono">{{ formatFcfa(shortfall) }}</span> dans votre tirelire.</p>
+          <p class="mb-0 mt-1">Rechargez-la en Mobile Money dans un nouvel onglet, puis revenez ici<template v-if="hold && !hold.expired"> avant la fin des <span class="font-mono">{{ hold.minutesRemaining }}</span> minutes</template> : le solde est relu à votre retour.</p>
+          <div class="mt-2.5 flex flex-wrap gap-2">
+            <NuxtLink to="/locataire/wallet" target="_blank" class="inline-flex items-center gap-1.5 rounded-pill border border-warn-border bg-white px-3.5 py-2 text-[12.5px] font-bold text-warn-fg-deep">
+              Recharger ma tirelire <ExternalLink class="h-3.5 w-3.5" :stroke-width="1.9" />
+            </NuxtLink>
+            <button type="button" class="inline-flex items-center gap-1.5 rounded-pill px-3 py-2 text-[12.5px] font-bold text-warn-fg-deep underline disabled:opacity-60" :disabled="wallet.state.value === 'loading'" @click="refreshWallet(true)">
+              <RefreshCw class="h-3.5 w-3.5" :stroke-width="1.9" />{{ wallet.state.value === 'loading' ? 'Lecture…' : "J'ai rechargé" }}
+            </button>
           </div>
-          <div class="mt-5 flex gap-2.5">
-            <CoreButton tone="secondary" size="lg" full-width @click="close">{{ blocking ? 'Fermer' : 'Plus tard' }}</CoreButton>
-            <CoreButton v-if="!blocking" size="lg" full-width :disabled="payLoading || shortfall > 0 || hold?.expired" @click="submitPay">{{ payLoading ? 'Paiement…' : `Payer ${formatFcfa(displayTotal)}` }}</CoreButton>
-          </div>
-          <p v-if="hold?.expired && !blocking" class="mb-0 mt-2.5 text-center text-[12.5px] font-semibold text-danger-fg">Le délai de 15 minutes est dépassé : <NuxtLink :to="listingLink" class="underline">réservez à nouveau</NuxtLink>.</p>
+          <p v-if="refreshNote" class="mb-0 mt-1.5 text-[12px] font-semibold">{{ refreshNote }}</p>
+        </div>
+        <p v-if="retentionPct > 0" class="mb-0 mt-3 flex items-start gap-2 text-[12px] leading-[1.5] text-[var(--text-muted)]">
+          <Lock class="mt-px h-3.5 w-3.5 flex-none text-clay-700" :stroke-width="1.9" />
+          <span><span class="font-mono">{{ retentionPct }} %</span> du montant est gardé par Immo jusqu'à votre départ, puis versé à l'hôte<template v-if="booking.unit?.requires_booking_inventory"> après l'état des lieux d'arrivée</template>.</span>
+        </p>
+      </template>
+
+      <div v-if="payError" class="mt-3 rounded-md border border-danger-border bg-danger-bg px-3.5 py-2.5 text-[13px] font-semibold text-danger-fg">
+        {{ payError }}
+        <NuxtLink v-if="blocking" :to="listingLink" class="mt-1 block font-bold underline">{{ blocking === 'taken' ? 'Choisir d\'autres dates' : 'Réserver à nouveau' }}</NuxtLink>
+      </div>
+    </template>
+
+    <div v-else class="py-1 text-center">
+      <div class="mx-auto grid h-14 w-14 animate-[im-pop_.5s_ease] place-items-center rounded-pill bg-green-600 text-white"><Check class="h-7 w-7" :stroke-width="2.4" /></div>
+      <p class="mb-0 mt-4 text-base font-bold"><span class="font-mono">{{ formatFcfa(displayTotal) }}</span> payés</p>
+      <p class="mx-auto mb-0 mt-2 max-w-[340px] text-[13.5px] leading-[1.55] text-[var(--text-muted)]">
+        Séjour du <span class="font-mono">{{ shortDay(booking.check_in) }}</span> au <span class="font-mono">{{ shortDay(booking.check_out) }}</span> confirmé. L'hôte reçoit une notification du paiement ; le reçu est disponible dans « Mes réservations ».
+      </p>
+    </div>
+
+    <template #footer>
+      <div v-if="step === 'form'" class="flex gap-2.5">
+        <CoreButton tone="secondary" full-width @click="close">{{ blocking || hold?.expired ? 'Fermer' : 'Plus tard' }}</CoreButton>
+        <CoreButton v-if="!blocking && !hold?.expired" full-width :disabled="payLoading || shortfall > 0 || wallet.state.value !== 'success'" @click="submitPay">{{ payLoading ? 'Paiement…' : `Payer ${formatFcfaShort(displayTotal)}` }}</CoreButton>
+      </div>
+      <div v-else class="flex gap-2.5">
+        <template v-if="onReservationsPage">
+          <CoreButton full-width @click="close">Voir mon séjour</CoreButton>
         </template>
         <template v-else>
-          <div class="px-0.5 py-1 text-center">
-            <div class="mx-auto grid h-15 w-15 animate-[im-pop_.5s_ease] place-items-center rounded-pill bg-green-600 text-[28px] text-white">✓</div>
-            <p class="mb-0 mt-4.5 text-lg font-bold">Réservation confirmée</p>
-            <p class="mx-auto mb-0 mt-2.5 max-w-[340px] text-sm leading-[1.6] text-[var(--text-muted)]">Vos dates sont bloquées et l'hôte est prévenu. Retrouvez le séjour et son reçu dans « Mes réservations ».</p>
-            <div class="mt-5 flex gap-2.5">
-              <CoreButton tone="secondary" size="lg" full-width @click="close">Fermer</CoreButton>
-              <NuxtLink to="/locataire/reservations" class="flex w-full items-center justify-center rounded-md bg-[image:var(--action-primary)] px-4 text-[14px] font-bold text-white">Mes réservations</NuxtLink>
-            </div>
-          </div>
+          <CoreButton tone="secondary" full-width @click="close">Fermer</CoreButton>
+          <NuxtLink :to="`/locataire/reservations?booking=${booking.id}`" class="flex w-full items-center justify-center rounded-md bg-[image:var(--action-primary)] px-4 text-[14px] font-bold text-white shadow-action" @click="close">Mes réservations</NuxtLink>
         </template>
       </div>
-    </div>
-  </Teleport>
+    </template>
+  </CoreModal>
 </template>
