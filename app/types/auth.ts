@@ -33,7 +33,7 @@ export interface AuthUser {
   role: UserRole
   /** Présent sur GET /auth/me uniquement — absent des payloads de login/verify-otp/google. */
   status?: UserStatus
-  admin_level?: string | null
+  admin_level?: number | string | null
   is_profile_complete: boolean
   is_verified: boolean
   preferred_lang?: string

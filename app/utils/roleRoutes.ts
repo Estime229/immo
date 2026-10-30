@@ -7,7 +7,7 @@ export const ROLE_ROUTES: Record<UserRole, string> = {
   agent: '/pro',
   agency: '/pro',
   artisan: '/artisan',
-  admin: '/'
+  admin: '/admin'
 }
 
 export function roleHomePath(role: UserRole): string {
