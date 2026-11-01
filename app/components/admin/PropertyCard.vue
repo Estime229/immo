@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Carte d'un bien dans la liste admin — même anatomie que les cartes de bien d'Immo
+ * Carte d'un bien dans la liste admin — même anatomie que les cartes de bien de Bayo
  * (photo, nom, quartier · ville, loyer) plus ce que la modération doit voir d'un coup
  * d'œil : suspension, statut, logements, propriétaire.
  * Le nom est un lien étiré sur toute la carte ; le lien propriétaire passe au-dessus.

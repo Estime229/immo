@@ -1,5 +1,5 @@
 <script setup lang="ts">
-/** Champ texte Immo — fond crème, bordure sable, jamais de fond blanc pur. */
+/** Champ texte Bayo — fond crème, bordure sable, jamais de fond blanc pur. */
 interface InputProps {
   label?: string
   hint?: string

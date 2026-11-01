@@ -329,21 +329,21 @@ const DOCS_SUBTITLE: Record<UserRole, string> = {
  * les blocages réels de l'API (`VerifiedUserGuard`, voir utils/kycStatus.ts).
  */
 const DONE_TEXT: Record<UserRole, string> = {
-  locataire: 'L\'équipe Immo examine votre dossier. La demande de visite et la candidature à un logement s\'ouvriront dès sa validation ; en attendant, vous pouvez parcourir les annonces et réserver un séjour.',
-  bailleur: 'L\'équipe Immo examine votre dossier. Dès sa validation, vous pourrez publier et modifier vos biens, et demander un artisan.',
-  artisan: 'L\'équipe Immo examine votre dossier. Une fois validées, vos certifications s\'afficheront sur votre vitrine avec le badge « Vérifié ».'
+  locataire: 'L\'équipe Bayo examine votre dossier. La demande de visite et la candidature à un logement s\'ouvriront dès sa validation ; en attendant, vous pouvez parcourir les annonces et réserver un séjour.',
+  bailleur: 'L\'équipe Bayo examine votre dossier. Dès sa validation, vous pourrez publier et modifier vos biens, et demander un artisan.',
+  artisan: 'L\'équipe Bayo examine votre dossier. Une fois validées, vos certifications s\'afficheront sur votre vitrine avec le badge « Vérifié ».'
 }
 const DONE_CTA: Record<UserRole, string> = { locataire: 'Aller à mon espace locataire', bailleur: 'Aller à mon espace pro', artisan: 'Aller à mon espace artisan' }
 const NEXT_STEPS: Record<UserRole, string[]> = {
-  locataire: ['Examen de votre dossier par l\'équipe Immo', 'Dès la validation : demandez une visite ou déposez une candidature', 'Signez votre bail et payez depuis votre wallet'],
-  bailleur: ['Examen de votre dossier par l\'équipe Immo', 'Dès la validation : publiez votre premier bien et ses logements', 'Recevez et acceptez des demandes de location'],
-  artisan: ['Examen de votre dossier par l\'équipe Immo', 'Complétez votre vitrine et vos zones d\'intervention', 'Répondez aux demandes et faites vos premières offres']
+  locataire: ['Examen de votre dossier par l\'équipe Bayo', 'Dès la validation : demandez une visite ou déposez une candidature', 'Signez votre bail et payez depuis votre wallet'],
+  bailleur: ['Examen de votre dossier par l\'équipe Bayo', 'Dès la validation : publiez votre premier bien et ses logements', 'Recevez et acceptez des demandes de location'],
+  artisan: ['Examen de votre dossier par l\'équipe Bayo', 'Complétez votre vitrine et vos zones d\'intervention', 'Répondez aux demandes et faites vos premières offres']
 }
 const introTitle = computed(() => (isVerified.value ? 'Votre compte est vérifié' : isRejected.value ? 'Votre vérification doit être reprise' : inReview.value ? 'Vérification en cours' : 'Vérifiez votre compte'))
 const introText = computed(() => {
-  if (isVerified.value) return 'L\'équipe Immo a validé votre identité. Vous pouvez mettre à jour vos documents à tout moment, par exemple pour ajouter un titre de propriété.'
+  if (isVerified.value) return 'L\'équipe Bayo a validé votre identité. Vous pouvez mettre à jour vos documents à tout moment, par exemple pour ajouter un titre de propriété.'
   if (isRejected.value) return 'Un ou plusieurs documents ont été refusés, souvent parce qu\'ils étaient illisibles. Reprenez les étapes et déposez des photos nettes.'
-  if (inReview.value) return 'Votre dossier est complet et en cours d\'examen par l\'équipe Immo. Vous pouvez encore le compléter.'
+  if (inReview.value) return 'Votre dossier est complet et en cours d\'examen par l\'équipe Bayo. Vous pouvez encore le compléter.'
   return 'Trois étapes, environ 5 minutes. Préparez votre pièce d\'identité et un ou deux justificatifs.'
 })
 const introCta = computed(() => (isVerified.value ? 'Mettre à jour mes documents' : isRejected.value ? 'Reprendre la vérification' : progressItems.value.some(i => i.done) ? 'Continuer' : 'Commencer'))
@@ -361,9 +361,9 @@ const segment = computed(() => progressIndex(step.value))
 <template>
   <div class="flex min-h-screen flex-col bg-white">
     <header class="sticky top-0 z-30 flex h-[68px] items-center justify-between border-b border-[var(--border-subtle)] bg-white px-5 sm:px-10">
-      <NuxtLink to="/" class="flex items-center gap-2.5" aria-label="Accueil Immo">
+      <NuxtLink to="/" class="flex items-center gap-2.5" aria-label="Accueil Bayo">
         <img src="/images/logo.png" alt="" class="h-8 w-8 rounded-[9px]" width="32" height="32">
-        <span class="hidden font-display text-[20px] font-extrabold tracking-[-.025em] text-green-900 sm:inline">Immo</span>
+        <span class="hidden font-display text-[20px] font-extrabold tracking-[-.025em] text-green-900 sm:inline">Bayo</span>
       </NuxtLink>
       <button
         v-if="step !== 'envoye'"
@@ -406,7 +406,7 @@ const segment = computed(() => progressIndex(step.value))
 
           <p class="mb-0 mt-5 flex items-start gap-2.5 text-[13px] leading-[1.55] text-[var(--text-muted)]">
             <Lock class="mt-0.5 h-4 w-4 flex-none text-green-700" aria-hidden="true" :stroke-width="1.9" />
-            <span>Seule l'équipe de vérification d'Immo a accès à vos documents : ils ne sont jamais montrés aux propriétaires, aux locataires ni aux artisans.</span>
+            <span>Seule l'équipe de vérification de Bayo a accès à vos documents : ils ne sont jamais montrés aux propriétaires, aux locataires ni aux artisans.</span>
           </p>
           <CoreButton size="lg" class="mt-8 w-full sm:w-auto" @click="startWizard">{{ introCta }}</CoreButton>
         </template>
@@ -605,7 +605,7 @@ const segment = computed(() => progressIndex(step.value))
         <!-- ===== Récapitulatif ===== -->
         <template v-else-if="step === 'recap'">
           <h1 class="m-0 font-display text-[28px] font-bold leading-[1.15] tracking-[-.03em] sm:text-[32px]">Vérifiez avant d'envoyer</h1>
-          <p class="mb-0 mt-3 text-[15px] text-[var(--text-muted)]">L'équipe Immo examinera ces éléments. Le résultat s'affichera sur cette page et dans votre espace.</p>
+          <p class="mb-0 mt-3 text-[15px] text-[var(--text-muted)]">L'équipe Bayo examinera ces éléments. Le résultat s'affichera sur cette page et dans votre espace.</p>
           <div class="mt-6 overflow-hidden rounded-2xl border border-[var(--border-subtle)] bg-white">
             <div class="flex items-start gap-4 px-5 py-4">
               <img v-if="idCardOnFile" :src="idCardPreview.objectUrl.value ?? undefined" alt="" class="h-14 w-20 flex-none rounded-md bg-[var(--surface-page)] object-cover">

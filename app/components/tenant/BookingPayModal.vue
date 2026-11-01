@@ -158,7 +158,7 @@ function close() {
         </div>
         <p v-if="retentionPct > 0" class="mb-0 mt-3 flex items-start gap-2 text-[12px] leading-[1.5] text-[var(--text-muted)]">
           <Lock class="mt-px h-3.5 w-3.5 flex-none text-clay-700" :stroke-width="1.9" />
-          <span><span class="font-mono">{{ retentionPct }} %</span> du montant est gardé par Immo jusqu'à votre départ, puis versé à l'hôte<template v-if="booking.unit?.requires_booking_inventory"> après l'état des lieux d'arrivée</template>.</span>
+          <span><span class="font-mono">{{ retentionPct }} %</span> du montant est gardé par Bayo jusqu'à votre départ, puis versé à l'hôte<template v-if="booking.unit?.requires_booking_inventory"> après l'état des lieux d'arrivée</template>.</span>
         </p>
       </template>
 

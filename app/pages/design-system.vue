@@ -8,7 +8,7 @@ const search = ref('')
 <template>
   <div class="mx-auto max-w-[1240px] px-[26px] py-12">
     <header class="mb-14">
-      <p class="m-0 text-label font-bold tracking-label uppercase text-[var(--text-faint)]">Immo — Design System</p>
+      <p class="m-0 text-label font-bold tracking-label uppercase text-[var(--text-faint)]">Bayo — Design System</p>
       <h1 class="mb-0 mt-2 font-display text-title-1 font-extrabold tracking-title-1 text-[var(--text-primary)]">
         Refonte moderne des interfaces immobilières
       </h1>
@@ -90,7 +90,7 @@ const search = ref('')
           Votre loyer de septembre, 75 000 FCFA, était dû le 5 septembre.
         </FeedbackAlertBanner>
         <FeedbackEscrowNotice amount="Dont 13 662 FCFA retenus en garantie">
-          Séquestrée veut dire que ces fonds sont détenus par Immo : ni vous ni le locataire ne pouvez y toucher
+          Séquestrée veut dire que ces fonds sont détenus par Bayo : ni vous ni le locataire ne pouvez y toucher
           pendant le bail. Libérée à l'état des lieux de sortie.
         </FeedbackEscrowNotice>
         <FeedbackStepper :steps="['Dossier', 'État des lieux', 'Signature', 'Paiement']" :current="stepperCurrent" />

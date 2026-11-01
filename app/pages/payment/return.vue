@@ -88,9 +88,9 @@ const amountLabel = computed(() => (amount.value ? formatFcfa(amount.value) : ''
 
 <template>
   <div class="flex min-h-screen flex-col items-center justify-center bg-[var(--surface-page)] p-6">
-    <NuxtLink to="/" class="mb-6 flex items-center gap-2.5" aria-label="Accueil Immo">
+    <NuxtLink to="/" class="mb-6 flex items-center gap-2.5" aria-label="Accueil Bayo">
       <img src="/images/logo.png" alt="" class="h-8 w-8 rounded-[9px]" width="32" height="32">
-      <span class="font-display text-xl font-extrabold tracking-[-.025em] text-green-900">Immo</span>
+      <span class="font-display text-xl font-extrabold tracking-[-.025em] text-green-900">Bayo</span>
     </NuxtLink>
 
     <div class="w-full max-w-[460px] animate-[im-fade_.3s_ease_backwards] rounded-2xl border border-[var(--border-subtle)] bg-white p-5.5 text-center sm:p-8">
@@ -112,7 +112,7 @@ const amountLabel = computed(() => (amount.value ? formatFcfa(amount.value) : ''
         </p>
 
         <div class="mt-5 rounded-md border border-info-border bg-info-bg px-3.5 py-3 text-left text-[13px] leading-[1.55] text-info-fg-deep">
-          Vous aviez lancé ce paiement depuis un autre onglet Immo ? Revenez-y et touchez « J'ai terminé le paiement » : votre loyer ou votre réservation vous y attend.
+          Vous aviez lancé ce paiement depuis un autre onglet Bayo ? Revenez-y et touchez « J'ai terminé le paiement » : votre loyer ou votre réservation vous y attend.
         </div>
 
         <div class="mt-5 flex flex-col gap-2.5">

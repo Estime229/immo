@@ -24,7 +24,7 @@ export interface ContactQuery {
 
 /** Lien « Répondre par email » : l'API n'envoie pas de réponse, l'admin écrit depuis sa messagerie. */
 export function contactReplyHref(m: Pick<ContactMessage, 'email' | 'subject'>): string {
-  const subject = m.subject?.trim() ? `Re : ${m.subject.trim()}` : 'Votre message à Immo'
+  const subject = m.subject?.trim() ? `Re : ${m.subject.trim()}` : 'Votre message à Bayo'
   return `mailto:${m.email}?subject=${encodeURIComponent(subject)}`
 }
 

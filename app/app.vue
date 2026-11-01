@@ -16,7 +16,11 @@ useHead({
     { name: 'theme-color', content: '#14532d' },
     { name: 'robots', content: computed(() => (isPrivatePath(route.path) ? 'noindex, nofollow' : 'index, follow')) }
   ],
-  link: [{ rel: 'icon', href: '/favicon.ico' }]
+  link: [
+    { rel: 'icon', type: 'image/svg+xml', href: '/images/bayo/bayo-favicon.svg' },
+    { rel: 'icon', href: '/favicon.ico', sizes: 'any' },
+    { rel: 'apple-touch-icon', href: '/images/logo.png' }
+  ]
 })
 useSeoMeta({
   description: DEFAULT_DESCRIPTION,

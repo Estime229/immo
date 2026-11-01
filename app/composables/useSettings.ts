@@ -13,10 +13,10 @@ export interface ConfigItem {
 export type SettingGroupKey = 'plateforme' | 'comptes' | 'argent' | 'notifications' | 'autres'
 
 export const SETTING_GROUPS: Array<{ key: SettingGroupKey; title: string; hint: string }> = [
-  { key: 'plateforme', title: 'Accès à la plateforme', hint: "Ouverture d'Immo aux utilisateurs et limites d'usage." },
+  { key: 'plateforme', title: 'Accès à la plateforme', hint: "Ouverture de Bayo aux utilisateurs et limites d'usage." },
   { key: 'comptes', title: 'Comptes et vérifications', hint: "Vérification d'identité, comptes inactifs et effacement des comptes supprimés." },
   { key: 'argent', title: 'Loyers, taxes et frais', hint: 'Délais et montants appliqués à la facturation.' },
-  { key: 'notifications', title: 'Notifications', hint: 'Canaux par lesquels Immo prévient les utilisateurs.' },
+  { key: 'notifications', title: 'Notifications', hint: 'Canaux par lesquels Bayo prévient les utilisateurs.' },
   { key: 'autres', title: 'Autres réglages', hint: "Réglages que cette page ne sait pas encore classer : la description vient de l'API." }
 ]
 
@@ -38,8 +38,8 @@ const KNOWN_SETTINGS: Record<string, SettingMeta> = {
   maintenance_mode: {
     group: 'plateforme',
     label: 'Mode maintenance',
-    help: "Tant qu'il est activé, les utilisateurs ne peuvent plus accéder à Immo.",
-    confirm: { value: 'true', message: "Activer le mode maintenance ? Les utilisateurs ne pourront plus accéder à Immo jusqu'à ce qu'il soit désactivé.", label: 'Activer' }
+    help: "Tant qu'il est activé, les utilisateurs ne peuvent plus accéder à Bayo.",
+    confirm: { value: 'true', message: "Activer le mode maintenance ? Les utilisateurs ne pourront plus accéder à Bayo jusqu'à ce qu'il soit désactivé.", label: 'Activer' }
   },
   ai_search_daily_quota: { group: 'plateforme', label: 'Recherche assistée par IA', help: 'Nombre maximum de recherches par jour et par adresse IP.', unit: 'par jour', integer: true, min: 0 },
   kyc_auto_approve_tenant: { group: 'comptes', label: 'Validation automatique du KYC des locataires', help: "Les dossiers d'identité des locataires sont validés sans examen par un admin." },

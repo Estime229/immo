@@ -44,9 +44,9 @@ const QUICK_LINKS = [
 <template>
   <div class="grid min-h-screen place-items-center bg-[var(--surface-page)] px-[26px] py-10">
     <div class="w-full max-w-[560px] animate-[im-fade_.3s_ease_backwards] text-center">
-      <button type="button" class="mb-[30px] inline-flex items-center gap-2.5" aria-label="Accueil Immo" @click="goHome">
+      <button type="button" class="mb-[30px] inline-flex items-center gap-2.5" aria-label="Accueil Bayo" @click="goHome">
         <img src="/images/logo.png" alt="" class="h-8 w-8 rounded-[9px]" width="32" height="32">
-        <span class="font-display text-xl font-extrabold tracking-[-.025em] text-green-900">Immo</span>
+        <span class="font-display text-xl font-extrabold tracking-[-.025em] text-green-900">Bayo</span>
       </button>
 
       <div class="rounded-2xl border border-[var(--border-subtle)] bg-white p-5.5 sm:p-8">

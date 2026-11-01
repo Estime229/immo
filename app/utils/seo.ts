@@ -3,8 +3,8 @@
  * <title> ni de langue déclarée — onglets vides, partages WhatsApp et
  * résultats de recherche sans libellé.
  */
-export const SITE_NAME = 'Immo'
-export const DEFAULT_TITLE = 'Immo — Louer en toute confiance au Bénin'
+export const SITE_NAME = 'Bayo'
+export const DEFAULT_TITLE = 'Bayo — Louer en toute confiance au Bénin'
 export const DEFAULT_DESCRIPTION = 'Logements à louer au mois ou à la nuit à Cotonou et au Bénin : annonces vérifiées, loyers payés en Mobile Money, caution protégée jusqu\'à l\'état des lieux de sortie.'
 
 export function formatTitle(title: string | null | undefined): string {

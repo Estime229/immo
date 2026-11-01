@@ -37,7 +37,7 @@ export function useApi() {
   /**
    * Contrat repris de l'ancien projet immo-admin : `apiFetch(url, opts)` lève une `Error`
    * dont le message est déjà lisible et qui porte `status`. Les composables admin
-   * (useUsers, useWallet…) s'en servent tels quels ; le reste d'Immo utilise get/post/….
+   * (useUsers, useWallet…) s'en servent tels quels ; le reste de Bayo utilise get/post/….
    */
   async function apiFetch<T = unknown>(url: string, opts: RequestInitLike = {}): Promise<T> {
     try {

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Check, House, LoaderCircle, RefreshCw, Search, SearchX, SlidersHorizontal, X } from '@lucide/vue'
+import { BedDouble, ChevronDown, Droplets, House, LoaderCircle, MapPin, RefreshCw, Search, SearchX, SlidersHorizontal, Wallet, X, Zap } from '@lucide/vue'
 import type { PropertySearchFilters, PropertySearchResult } from '~/types/property'
 import { flattenSearchResults, type ListingCard } from '~/utils/propertyListing'
 import { resolveLocation, type MapMarker } from '~/utils/geo'
@@ -88,6 +88,7 @@ const budgetSlider = computed({
   get: () => Number(budget.value) || 0,
   set: (v: number) => { budget.value = v === 0 ? '' : String(v) }
 })
+const budgetMax = computed(() => (rentalMode.value === 'nuit' ? 100000 : 500000))
 const budgetRangeLabel = computed(() => (budget.value ? `jusqu'à ${formatFcfa(Number(budget.value))}` : 'Tous les budgets'))
 
 const activeChips = computed(() => {
@@ -479,155 +480,166 @@ function onMapSelect(id: string) {
 
 <template>
   <div class="mx-auto max-w-[1240px] animate-[im-fade_.3s_ease_backwards] px-4 pb-[60px] pt-6 sm:px-[26px]">
-    <div class="rounded-2xl border border-[var(--border-subtle)] bg-white p-4 shadow-card sm:p-6">
-      <div class="mb-4 flex flex-wrap items-center justify-between gap-x-5 gap-y-3">
-        <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <h1 class="m-0 font-display text-2xl font-bold tracking-[-.03em]">Rechercher un logement</h1>
-          <span v-if="resultCount" class="text-[13.5px] font-semibold text-[var(--text-muted)]">{{ resultCount }}</span>
-        </div>
-        <FormsSegmentedControl v-model="searchMode" :options="SEARCH_TABS" size="sm" />
-      </div>
+    <!-- En-tête de recherche : fond doux, sans cadre ; les halos ne sont que décoratifs. -->
+    <div class="relative overflow-hidden rounded-[28px] bg-[linear-gradient(155deg,var(--color-green-50)_0%,var(--color-sand-50)_55%,var(--color-clay-50)_100%)] px-4 py-6 sm:px-8 sm:py-9">
+      <span aria-hidden="true" class="pointer-events-none absolute -right-20 -top-24 h-72 w-72 rounded-pill bg-green-200/40 blur-3xl" />
+      <span aria-hidden="true" class="pointer-events-none absolute -bottom-32 left-1/3 h-64 w-64 rounded-pill bg-clay-200/60 blur-3xl" />
 
-      <div class="mb-4 grid grid-cols-3 gap-2 sm:gap-3" role="radiogroup" aria-label="Type de location">
-        <button
-          v-for="t in RENTAL_TILES"
-          :key="t.key"
-          type="button"
-          role="radio"
-          :aria-checked="rentalMode === t.key"
-          class="group relative flex min-h-[64px] items-stretch overflow-hidden rounded-xl border-[1.5px] bg-white text-left transition-all sm:min-h-[82px]"
-          :class="rentalMode === t.key ? 'border-green-600 shadow-[0_0_0_3px_var(--color-green-100)]' : 'border-[var(--border-default)] hover:border-green-400'"
-          @click="pickRental(t.key)"
-        >
-          <span class="relative hidden w-[82px] flex-none overflow-hidden sm:block">
-            <span v-if="t.image" class="absolute inset-0 bg-cover bg-no-repeat transition-transform duration-500 group-hover:scale-105" :style="{ backgroundImage: t.image, backgroundPosition: t.pos }" />
-            <span v-else class="absolute inset-0 grid grid-cols-2">
-              <span class="bg-cover bg-no-repeat" style="background-image: url(/images/hero/hero-3.jpg); background-position: 30% 70%" />
-              <span class="bg-cover bg-no-repeat" style="background-image: url(/images/hero/hero-1.jpg); background-position: 70% center" />
-            </span>
-            <span class="absolute inset-x-0 bottom-0 h-[5px]" :class="t.swatch" />
-          </span>
-          <span class="flex min-w-0 flex-1 flex-col justify-center px-3 py-2.5 sm:px-4">
-            <span class="flex items-center gap-1.5">
-              <span class="h-2 w-2 flex-none rounded-pill sm:hidden" :class="t.swatch" />
-              <span class="truncate text-[13px] font-bold text-[var(--text-primary)] sm:text-[15px]"><span class="sm:hidden">{{ t.short }}</span><span class="hidden sm:inline">{{ t.label }}</span></span>
-            </span>
-            <span class="mt-0.5 hidden truncate text-[12.5px] text-[var(--text-muted)] sm:block">{{ t.hint }}</span>
-          </span>
-          <span v-if="rentalMode === t.key" class="absolute right-2 top-2 hidden h-5 w-5 place-items-center rounded-pill bg-green-600 text-white sm:grid">
-            <Check class="h-3 w-3" :stroke-width="3" />
-          </span>
-        </button>
-      </div>
-
-      <template v-if="searchMode === 'filtres'">
-        <div class="flex flex-col gap-1.5 rounded-2xl border border-[var(--border-default)] bg-[var(--surface-page)] p-[5px] shadow-hairline sm:flex-row sm:items-stretch sm:gap-0 sm:rounded-pill">
-          <label class="flex flex-1 items-center gap-[11px] px-5">
-            <Search class="h-[18px] w-[18px] flex-none text-clay-500" :stroke-width="2.2" />
-            <input v-model="query" type="search" enterkeyhint="search" placeholder="Nom, ville, description…" aria-label="Mots-clés" class="h-[46px] w-full border-0 bg-transparent text-[15px] font-semibold outline-none" @keydown.enter="search">
-          </label>
-          <div class="mx-2 h-px bg-[var(--border-default)] sm:mx-0 sm:my-2 sm:h-auto sm:w-px" />
-          <select v-model="sortModel" aria-label="Trier les résultats" class="h-[46px] cursor-pointer border-0 bg-transparent px-5 text-[13.5px] font-bold text-sand-900 outline-none sm:h-auto sm:px-4">
-            <option value="newest">Plus récents</option>
-            <option value="oldest">Plus anciens</option>
-            <option value="price_asc">Prix croissant</option>
-            <option value="price_desc">Prix décroissant</option>
-          </select>
-          <div class="flex gap-1.5 sm:contents">
-            <button type="button" class="flex h-[46px] flex-1 items-center justify-center gap-2 rounded-pill px-4 text-sm font-bold transition-all sm:flex-none sm:justify-start sm:px-5" :class="filtersOpen ? 'bg-green-600 text-white' : 'bg-transparent text-sand-900'" @click="filtersOpen = true">
-              <SlidersHorizontal class="h-4 w-4" :stroke-width="2" />
-              Filtres
-              <span v-if="filterCount" class="grid h-5 min-w-[20px] place-items-center rounded-pill bg-green-600 px-1.5 font-mono text-[11.5px] font-bold text-white">{{ filterCount }}</span>
-            </button>
-            <button type="button" class="flex h-[46px] flex-1 items-center justify-center gap-2 rounded-pill bg-[image:var(--action-primary)] px-4 text-sm font-bold text-white shadow-action sm:flex-none sm:px-6" @click="search">
-              <Search class="h-4 w-4" :stroke-width="2.2" />Rechercher
-            </button>
+      <div class="relative">
+        <div class="flex flex-wrap items-end justify-between gap-x-5 gap-y-3">
+          <div class="min-w-0">
+            <h1 class="m-0 font-display text-[26px] font-bold tracking-[-.03em] sm:text-[32px]">Rechercher un logement</h1>
+            <p v-if="resultCount" class="mb-0 mt-1 text-[14px] text-[var(--text-muted)]">{{ resultCount }}</p>
           </div>
+          <FormsSegmentedControl v-model="searchMode" :options="SEARCH_TABS" size="sm" />
         </div>
-        <div v-if="activeChips.length" class="mt-3.5 flex flex-wrap items-center gap-2">
-          <span v-for="chip in activeChips" :key="chip.key" class="inline-flex items-center gap-1.5 rounded-pill border border-green-100 bg-green-50 py-1.5 pl-3.5 pr-1.5 text-[13px] font-bold text-green-800">
-            {{ chip.label }}
-            <button type="button" class="grid h-6 w-6 place-items-center rounded-pill text-green-600 hover:bg-green-100" :aria-label="`Retirer ${chip.label}`" @click="chip.remove(); search()">
-              <X class="h-3.5 w-3.5" :stroke-width="2.4" />
-            </button>
-          </span>
-          <button type="button" class="text-[13px] font-bold text-[var(--text-muted)] underline" @click="resetFilters(); search()">Tout effacer</button>
+
+        <div class="-mx-4 mt-5 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0" role="radiogroup" aria-label="Type de location">
+          <button
+            v-for="t in RENTAL_TILES"
+            :key="t.key"
+            type="button"
+            role="radio"
+            :aria-checked="rentalMode === t.key"
+            class="group flex flex-none items-center gap-2.5 rounded-pill py-1.5 pl-1.5 pr-4 text-left transition-all duration-200"
+            :class="rentalMode === t.key ? 'bg-white shadow-[0_6px_20px_rgba(26,93,62,.12)] ring-1 ring-green-200' : 'bg-white/50 hover:bg-white/90'"
+            @click="pickRental(t.key)"
+          >
+            <span class="relative h-9 w-9 flex-none overflow-hidden rounded-pill sm:h-10 sm:w-10">
+              <span v-if="t.image" class="absolute inset-0 bg-cover bg-no-repeat transition-transform duration-500 group-hover:scale-110" :style="{ backgroundImage: t.image, backgroundPosition: t.pos }" />
+              <span v-else class="absolute inset-0 grid grid-cols-2">
+                <span class="bg-cover bg-no-repeat" style="background-image: url(/images/hero/hero-3.jpg); background-position: 30% 70%" />
+                <span class="bg-cover bg-no-repeat" style="background-image: url(/images/hero/hero-1.jpg); background-position: 70% center" />
+              </span>
+            </span>
+            <span class="flex min-w-0 flex-col leading-tight">
+              <span class="text-[13.5px] font-bold" :class="rentalMode === t.key ? 'text-green-800' : 'text-[var(--text-secondary)]'"><span class="sm:hidden">{{ t.short }}</span><span class="hidden sm:inline">{{ t.label }}</span></span>
+              <span class="mt-0.5 hidden text-[11.5px] text-[var(--text-faint)] sm:block">{{ t.hint }}</span>
+            </span>
+          </button>
         </div>
-      </template>
+
+        <template v-if="searchMode === 'filtres'">
+          <div class="mt-4 flex flex-col gap-1.5 rounded-[22px] bg-white p-1.5 shadow-[0_12px_40px_rgba(26,61,41,.10)] ring-1 ring-black/[.03] sm:flex-row sm:items-center sm:gap-0 sm:rounded-pill">
+            <label class="flex flex-1 items-center gap-3 px-4 sm:px-5">
+              <Search class="h-[18px] w-[18px] flex-none text-[var(--text-faint)]" :stroke-width="2" />
+              <input v-model="query" type="search" enterkeyhint="search" placeholder="Nom, ville, description…" aria-label="Mots-clés" class="h-[50px] w-full border-0 bg-transparent text-[15px] font-medium outline-none placeholder:text-[var(--text-faint)]" @keydown.enter="search">
+            </label>
+            <div class="mx-3 h-px bg-sand-200 sm:mx-1 sm:h-7 sm:w-px" />
+            <select v-model="sortModel" aria-label="Trier les résultats" class="h-[46px] cursor-pointer rounded-pill border-0 bg-transparent px-4 text-[13.5px] font-semibold text-[var(--text-secondary)] outline-none hover:bg-sand-100 sm:h-11">
+              <option value="newest">Plus récents</option>
+              <option value="oldest">Plus anciens</option>
+              <option value="price_asc">Prix croissant</option>
+              <option value="price_desc">Prix décroissant</option>
+            </select>
+            <div class="flex gap-1.5 sm:contents">
+              <button type="button" class="flex h-[46px] flex-1 items-center justify-center gap-2 rounded-pill px-4 text-[13.5px] font-semibold transition-colors sm:h-11 sm:flex-none" :class="filtersOpen || filterCount ? 'bg-green-50 text-green-800' : 'text-[var(--text-secondary)] hover:bg-sand-100'" @click="filtersOpen = true">
+                <SlidersHorizontal class="h-4 w-4" :stroke-width="2" />
+                Filtres
+                <span v-if="filterCount" class="grid h-5 min-w-[20px] place-items-center rounded-pill bg-green-700 px-1.5 font-mono text-[11px] font-bold text-white">{{ filterCount }}</span>
+              </button>
+              <button type="button" class="flex h-[46px] flex-1 items-center justify-center gap-2 rounded-pill bg-green-700 px-5 text-sm font-bold text-white shadow-[0_6px_16px_rgba(26,93,62,.22)] transition-colors hover:bg-green-800 sm:ml-1 sm:h-11 sm:flex-none sm:px-6" @click="search">
+                <Search class="h-4 w-4" :stroke-width="2.2" />Rechercher
+              </button>
+            </div>
+          </div>
+          <div v-if="activeChips.length" class="mt-3.5 flex flex-wrap items-center gap-2">
+            <span v-for="chip in activeChips" :key="chip.key" class="inline-flex items-center gap-1 rounded-pill bg-white/80 py-1 pl-3.5 pr-1 text-[13px] font-semibold text-green-800 ring-1 ring-green-100">
+              {{ chip.label }}
+              <button type="button" class="grid h-6 w-6 place-items-center rounded-pill text-green-600 hover:bg-green-50" :aria-label="`Retirer ${chip.label}`" @click="chip.remove(); search()">
+                <X class="h-3.5 w-3.5" :stroke-width="2.2" />
+              </button>
+            </span>
+            <button type="button" class="px-1 text-[13px] font-semibold text-[var(--text-muted)] hover:text-[var(--text-primary)]" @click="resetFilters(); search()">Tout effacer</button>
+          </div>
+        </template>
 
       <template v-if="filtersOpen">
-        <div class="fixed inset-0 z-[80] animate-[im-veil_.25s_ease_both] bg-black/[.42] backdrop-blur-[3px]" @click="filtersOpen = false" />
-        <aside class="fixed inset-y-0 left-0 z-[81] flex w-[430px] max-w-[90vw] animate-[im-slide-left_.32s_var(--ease-standard)_both] flex-col bg-[var(--surface-page)] shadow-[20px_0_60px_rgba(26,23,20,.24)]" role="dialog" aria-modal="true" aria-label="Affiner la recherche">
-          <div class="flex items-center justify-between border-b border-[var(--border-subtle)] px-7 py-6">
+        <div class="fixed inset-0 z-[80] animate-[im-veil_.25s_ease_both] bg-[rgba(18,60,41,.28)] backdrop-blur-[6px]" @click="filtersOpen = false" />
+        <!-- Feuille du bas sur mobile, panneau flottant à gauche dès sm. -->
+        <aside class="fixed inset-x-0 bottom-0 z-[81] flex max-h-[90dvh] animate-[im-sheet-up_.36s_var(--ease-standard)_both] flex-col overflow-hidden rounded-t-[28px] bg-[var(--surface-page)] shadow-[0_-12px_48px_rgba(18,60,41,.18)] sm:inset-y-3 sm:bottom-3 sm:left-3 sm:right-auto sm:max-h-none sm:w-[420px] sm:animate-[im-slide-left_.32s_var(--ease-standard)_both] sm:rounded-[28px] sm:shadow-[0_24px_64px_rgba(18,60,41,.22)]" role="dialog" aria-modal="true" aria-label="Affiner la recherche">
+          <span aria-hidden="true" class="mx-auto mt-2.5 h-1 w-10 flex-none rounded-pill bg-sand-300 sm:hidden" />
+          <div class="flex items-start justify-between gap-4 px-6 pb-2 pt-4 sm:px-7 sm:pt-7">
             <div>
-              <h2 class="m-0 font-display text-[22px] font-bold tracking-[-.025em]">Affiner la recherche</h2>
+              <h2 class="m-0 flex items-center gap-2 font-display text-[21px] font-bold tracking-[-.025em]">
+                Affiner la recherche
+                <span v-if="filterCount" class="rounded-pill bg-green-50 px-2.5 py-0.5 font-body text-xs font-bold tracking-normal text-green-800">{{ filterCount }} actif{{ filterCount > 1 ? 's' : '' }}</span>
+              </h2>
               <p class="mb-0 mt-1 text-[13px] text-[var(--text-muted)]">Les résultats se mettent à jour quand vous validez.</p>
             </div>
-            <button type="button" class="grid h-[38px] w-[38px] place-items-center rounded-pill bg-sand-200 text-sand-800 hover:bg-sand-300" aria-label="Fermer" @click="filtersOpen = false">
-              <X class="h-[18px] w-[18px]" :stroke-width="2" />
+            <button type="button" class="grid h-9 w-9 flex-none place-items-center rounded-pill bg-white text-sand-800 ring-1 ring-sand-200 transition-colors hover:bg-sand-100" aria-label="Fermer" @click="filtersOpen = false">
+              <X class="h-4 w-4" :stroke-width="2" />
             </button>
           </div>
 
-          <div class="flex flex-1 flex-col gap-[30px] overflow-y-auto px-7 py-[26px]">
-            <div>
-              <p class="mb-[13px] mt-0 text-[13px] font-black tracking-[.03em]">Ville</p>
-              <select v-model="cityName" class="h-11 w-full rounded-sm border border-[var(--border-default)] bg-white px-3.5 text-[13.5px] outline-none">
-                <option value="">Toutes les villes</option>
-                <option v-for="c in cities" :key="c.id" :value="c.name">{{ c.name }}</option>
-              </select>
-            </div>
-
-            <div v-if="neighborhoodChips.length">
-              <p class="mb-[13px] mt-0 text-[13px] font-black tracking-[.03em]">Quartier</p>
-              <div class="flex flex-wrap gap-[9px]">
-                <button v-for="c in neighborhoodChips" :key="c.label" type="button" class="rounded-pill border px-[15px] py-[9px] text-[13px] font-semibold transition-all" :class="c.active ? 'border-green-600 bg-green-600 text-white' : 'border-[var(--border-default)] bg-white text-[var(--text-secondary)]'" @click="c.pick">{{ c.label }}</button>
+          <div class="flex flex-1 flex-col gap-3 overflow-y-auto px-4 pb-4 pt-3 sm:px-5">
+            <!-- Où -->
+            <section class="rounded-[22px] bg-white p-4 ring-1 ring-black/[.03] sm:p-5">
+              <p class="mb-3 mt-0 flex items-center gap-2 text-[13.5px] font-bold"><MapPin class="h-4 w-4 text-green-700" :stroke-width="2" />Ville</p>
+              <div class="relative">
+                <select v-model="cityName" aria-label="Ville" class="h-12 w-full cursor-pointer appearance-none rounded-2xl border-0 bg-sand-50 pl-4 pr-10 text-[14px] font-semibold text-[var(--text-primary)] outline-none ring-1 ring-sand-200 transition-shadow focus:ring-2 focus:ring-green-300">
+                  <option value="">Toutes les villes</option>
+                  <option v-for="c in cities" :key="c.id" :value="c.name">{{ c.name }}</option>
+                </select>
+                <ChevronDown class="pointer-events-none absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-faint)]" :stroke-width="2" />
               </div>
-            </div>
+              <template v-if="neighborhoodChips.length">
+                <p class="mb-2.5 mt-4 text-[12.5px] font-semibold text-[var(--text-muted)]">Quartier</p>
+                <div class="flex flex-wrap gap-2">
+                  <button v-for="c in neighborhoodChips" :key="c.label" type="button" :aria-pressed="c.active" class="rounded-pill px-3.5 py-2 text-[13px] font-semibold transition-all" :class="c.active ? 'bg-green-50 text-green-800 ring-1 ring-green-300' : 'bg-white text-[var(--text-secondary)] ring-1 ring-sand-200 hover:ring-sand-300'" @click="c.pick">{{ c.label }}</button>
+                </div>
+              </template>
+            </section>
 
-            <div>
-              <div class="mb-3.5 flex items-baseline justify-between">
-                <p class="m-0 text-[13px] font-black tracking-[.03em]">{{ rentalMode === 'nuit' ? 'Budget par nuit' : 'Budget mensuel' }}</p>
-                <span class="font-mono text-[13.5px] font-bold text-green-700">{{ budgetRangeLabel }}</span>
+            <!-- Budget -->
+            <section class="rounded-[22px] bg-white p-4 ring-1 ring-black/[.03] sm:p-5">
+              <div class="mb-4 flex items-center justify-between gap-3">
+                <p class="m-0 flex items-center gap-2 text-[13.5px] font-bold"><Wallet class="h-4 w-4 text-green-700" :stroke-width="2" />{{ rentalMode === 'nuit' ? 'Budget par nuit' : 'Budget mensuel' }}</p>
+                <span class="rounded-pill px-3 py-1 text-[12.5px] font-bold" :class="budget ? 'bg-green-50 text-green-800' : 'bg-sand-100 text-[var(--text-muted)]'">{{ budgetRangeLabel }}</span>
               </div>
-              <input v-model.number="budgetSlider" type="range" min="0" :max="rentalMode === 'nuit' ? 100000 : 500000" :step="rentalMode === 'nuit' ? 1000 : 10000" aria-label="Budget maximum" class="w-full accent-green-600">
-              <div class="mt-1.5 flex justify-between font-mono text-[11px] text-[var(--text-faint)]"><span>0 F</span><span>{{ rentalMode === 'nuit' ? '100 000 F' : '500 000 F' }}</span></div>
-            </div>
+              <input v-model.number="budgetSlider" type="range" min="0" :max="budgetMax" :step="rentalMode === 'nuit' ? 1000 : 10000" aria-label="Budget maximum" class="soft-range w-full" :style="{ '--fill': `${(budgetSlider / budgetMax) * 100}%` }">
+              <div class="mt-2 flex justify-between text-[11.5px] font-semibold text-[var(--text-faint)]"><span>0 F</span><span>{{ rentalMode === 'nuit' ? '100 000 F' : '500 000 F' }}</span></div>
+            </section>
 
-            <div>
-              <p class="mb-[13px] mt-0 text-[13px] font-black tracking-[.03em]">Chambres minimum</p>
-              <div class="flex gap-[9px]">
-                <button v-for="c in bedChips" :key="c.label" type="button" class="flex-1 rounded-md border py-3 text-sm font-bold transition-all" :class="c.active ? 'border-green-600 bg-green-600 text-white' : 'border-[var(--border-default)] bg-white text-[var(--text-secondary)]'" @click="c.pick">{{ c.label }}</button>
+            <!-- Logement -->
+            <section class="rounded-[22px] bg-white p-4 ring-1 ring-black/[.03] sm:p-5">
+              <p class="mb-3 mt-0 flex items-center gap-2 text-[13.5px] font-bold"><BedDouble class="h-4 w-4 text-green-700" :stroke-width="2" />Chambres minimum</p>
+              <div class="flex gap-1 rounded-pill bg-sand-100 p-1" role="radiogroup" aria-label="Chambres minimum">
+                <button v-for="c in bedChips" :key="c.label" type="button" role="radio" :aria-checked="c.active" class="h-10 flex-1 rounded-pill text-[13.5px] font-bold transition-all" :class="c.active ? 'bg-white text-green-800 shadow-[0_2px_8px_rgba(26,23,20,.08)]' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'" @click="c.pick">{{ c.label }}</button>
               </div>
-            </div>
+            </section>
 
-            <div>
-              <p class="mb-[13px] mt-0 text-[13px] font-black tracking-[.03em]">Source d'eau</p>
-              <div class="flex flex-wrap gap-[9px]">
-                <button v-for="c in waterChips" :key="c.label" type="button" class="rounded-md border px-3 py-[11px] text-[13px] font-semibold transition-all" :class="c.active ? 'border-green-600 bg-green-600 text-white' : 'border-[var(--border-default)] bg-white text-[var(--text-secondary)]'" @click="c.pick">{{ c.label }}</button>
+            <!-- Équipements -->
+            <section class="rounded-[22px] bg-white p-4 ring-1 ring-black/[.03] sm:p-5">
+              <p class="mb-3 mt-0 flex items-center gap-2 text-[13.5px] font-bold"><Droplets class="h-4 w-4 text-green-700" :stroke-width="2" />Source d'eau</p>
+              <div class="flex flex-wrap gap-2">
+                <button v-for="c in waterChips" :key="c.label" type="button" :aria-pressed="c.active" class="rounded-pill px-3.5 py-2 text-[13px] font-semibold transition-all" :class="c.active ? 'bg-green-50 text-green-800 ring-1 ring-green-300' : 'bg-white text-[var(--text-secondary)] ring-1 ring-sand-200 hover:ring-sand-300'" @click="c.pick">{{ c.label }}</button>
               </div>
-            </div>
-
-            <div>
-              <p class="mb-[13px] mt-0 text-[13px] font-black tracking-[.03em]">Compteur électrique</p>
-              <div class="flex flex-wrap gap-[9px]">
-                <button v-for="c in meterChips" :key="c.label" type="button" class="rounded-md border px-3 py-[11px] text-[13px] font-semibold transition-all" :class="c.active ? 'border-green-600 bg-green-600 text-white' : 'border-[var(--border-default)] bg-white text-[var(--text-secondary)]'" @click="c.pick">{{ c.label }}</button>
+              <div class="my-4 h-px bg-sand-200" />
+              <p class="mb-3 mt-0 flex items-center gap-2 text-[13.5px] font-bold"><Zap class="h-4 w-4 text-green-700" :stroke-width="2" />Compteur électrique</p>
+              <div class="flex flex-wrap gap-2">
+                <button v-for="c in meterChips" :key="c.label" type="button" :aria-pressed="c.active" class="rounded-pill px-3.5 py-2 text-[13px] font-semibold transition-all" :class="c.active ? 'bg-green-50 text-green-800 ring-1 ring-green-300' : 'bg-white text-[var(--text-secondary)] ring-1 ring-sand-200 hover:ring-sand-300'" @click="c.pick">{{ c.label }}</button>
               </div>
-            </div>
+            </section>
           </div>
 
-          <div class="flex items-center gap-3.5 border-t border-[var(--border-subtle)] bg-[var(--surface-page)] px-7 py-[18px] pb-[calc(18px+env(safe-area-inset-bottom))]">
-            <button type="button" class="text-sm font-bold text-[var(--text-muted)] underline" @click="resetFilters">Tout effacer</button>
-            <CoreButton size="lg" full-width class="flex-1" @click="filtersOpen = false; search()">Voir les résultats</CoreButton>
+          <div class="flex items-center gap-3 border-t border-sand-200/70 bg-[var(--surface-page)] px-5 py-4 pb-[calc(16px+env(safe-area-inset-bottom))] sm:px-6">
+            <button type="button" class="rounded-pill px-4 py-3 text-sm font-semibold text-[var(--text-muted)] transition-colors hover:bg-sand-100 hover:text-[var(--text-primary)] disabled:opacity-40" :disabled="!filterCount" @click="resetFilters">Tout effacer</button>
+            <button type="button" class="flex h-12 flex-1 items-center justify-center gap-2 rounded-pill bg-green-700 px-6 text-[15px] font-bold text-white shadow-[0_8px_20px_rgba(26,93,62,.25)] transition-colors hover:bg-green-800" @click="filtersOpen = false; search()">
+              <Search class="h-4 w-4" :stroke-width="2.2" />Voir les résultats
+            </button>
           </div>
         </aside>
       </template>
 
-      <div v-if="searchMode === 'naturel'" class="mt-1 rounded-2xl border border-clay-200 bg-white p-4 sm:p-[18px]">
-        <div class="flex flex-col gap-2.5 sm:flex-row">
-          <input v-model="natural" placeholder="studio calme à Calavi vers 40 000" aria-label="Décrivez le logement recherché" class="h-[54px] min-w-0 flex-1 rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] px-[18px] text-base outline-none" @keydown="onNaturalKey">
-          <CoreButton size="lg" @click="runNatural">Rechercher</CoreButton>
+      <div v-if="searchMode === 'naturel'" class="mt-4 rounded-[22px] bg-white p-1.5 shadow-[0_12px_40px_rgba(26,61,41,.10)] ring-1 ring-black/[.03]">
+        <div class="flex flex-col gap-1.5 sm:flex-row sm:items-center">
+          <input v-model="natural" placeholder="studio calme à Calavi vers 40 000" aria-label="Décrivez le logement recherché" class="h-[50px] min-w-0 flex-1 rounded-pill border-0 bg-transparent px-5 text-[15px] font-medium outline-none placeholder:text-[var(--text-faint)]" @keydown="onNaturalKey">
+          <button type="button" class="flex h-[46px] items-center justify-center gap-2 rounded-pill bg-green-700 px-6 text-sm font-bold text-white shadow-[0_6px_16px_rgba(26,93,62,.22)] transition-colors hover:bg-green-800 sm:h-11" @click="runNatural">
+            <Search class="h-4 w-4" :stroke-width="2.2" />Rechercher
+          </button>
         </div>
-        <div v-if="naturalUnderstood" class="mt-4 flex flex-wrap items-center gap-2">
+        <div v-if="naturalUnderstood" class="flex flex-wrap items-center gap-2 px-3.5 pb-2.5 pt-2">
           <span class="text-[13.5px] text-[var(--text-muted)]">Nous avons compris :</span>
           <span v-for="c in criteria" :key="c.label" class="inline-flex items-center gap-1.5 rounded-pill border border-green-100 bg-green-50 py-1.5 pl-3.5 pr-1.5 text-[13px] font-bold text-green-800">
             {{ c.label }}
@@ -636,12 +648,13 @@ function onMapSelect(id: string) {
             </button>
           </span>
         </div>
-        <div v-if="naturalFailed" class="mt-4 rounded-2xl border border-dashed border-[var(--border-default)] bg-[var(--surface-page)] px-6 py-8 text-center">
+        <div v-if="naturalFailed" class="m-1.5 mt-2 rounded-[18px] bg-sand-50 px-6 py-8 text-center">
           <div class="mx-auto grid h-[46px] w-[46px] place-items-center rounded-pill bg-green-50 text-green-700"><SearchX class="h-5 w-5" :stroke-width="1.9" /></div>
           <p class="mb-0 mt-3.5 text-[15px] font-bold">Nous n'avons pas compris votre demande</p>
           <p class="mx-auto mb-4 mt-1.5 max-w-[440px] text-[13.5px] text-[var(--text-muted)]">Précisez une ville, un nombre de chambres ou un budget — par exemple « 2 chambres à Cotonou sous 100 000 ».</p>
           <CoreButton tone="secondary" size="sm" @click="searchMode = 'filtres'">Utiliser plutôt les filtres</CoreButton>
         </div>
+      </div>
       </div>
     </div>
 
@@ -736,3 +749,55 @@ function onMapSelect(id: string) {
     </template>
   </div>
 </template>
+
+<style scoped>
+/* Curseur de budget : piste fine, partie remplie en vert jusqu'au pouce (--fill). */
+.soft-range {
+  height: 22px;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+.soft-range::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(to right, var(--color-green-600) var(--fill, 0%), var(--color-sand-200) var(--fill, 0%));
+}
+.soft-range::-moz-range-track {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--color-sand-200);
+}
+.soft-range::-moz-range-progress {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--color-green-600);
+}
+.soft-range::-webkit-slider-thumb {
+  appearance: none;
+  width: 22px;
+  height: 22px;
+  margin-top: -8px;
+  border-radius: 999px;
+  background: #fff;
+  border: 2px solid var(--color-green-600);
+  box-shadow: 0 2px 8px rgba(26, 93, 62, 0.25);
+  transition: transform 0.15s ease;
+}
+.soft-range::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: #fff;
+  border: 2px solid var(--color-green-600);
+  box-shadow: 0 2px 8px rgba(26, 93, 62, 0.25);
+}
+.soft-range:active::-webkit-slider-thumb {
+  transform: scale(1.12);
+}
+.soft-range:focus-visible {
+  outline: 2px solid var(--color-green-300);
+  outline-offset: 4px;
+  border-radius: 999px;
+}
+</style>

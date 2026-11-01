@@ -10,7 +10,7 @@ import { validateIfu, validateRccm } from './onboarding'
  * fichier** (`POST /user/id-card`, sans type ni recto/verso) — le recto et le
  * verso sont donc assemblés en une image avant l'envoi ; les justificatifs
  * passent par `POST /kyc/documents` avec leur type ; il n'existe pas de route
- * « soumettre le dossier » : l'équipe Immo examine ce qui a été déposé.
+ * « soumettre le dossier » : l'équipe Bayo examine ce qui a été déposé.
  */
 export type KycRole = 'locataire' | 'bailleur' | 'artisan'
 export type KycStep = 'intro' | 'piece' | 'photos' | 'documents' | 'coordonnees' | 'recap' | 'envoye'

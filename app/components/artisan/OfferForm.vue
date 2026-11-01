@@ -44,7 +44,7 @@ const split = computed(() => paymentSplit(priceNum.value, Math.min(100, Math.max
 
     <div class="mt-4 grid grid-cols-2 gap-3">
       <FormsInput v-model="warrantyDays" type="number" label="Garantie (jours)" hint="De 0 à 90 jours" mono />
-      <FormsInput v-model="retention" type="number" label="Retenue (%)" hint="Gardée par Immo pendant la garantie" mono />
+      <FormsInput v-model="retention" type="number" label="Retenue (%)" hint="Gardée par Bayo pendant la garantie" mono />
     </div>
 
     <div v-if="priceNum > 0" class="mt-4 rounded-md border border-[var(--border-escrow)] bg-[var(--surface-escrow)] px-4 py-3">

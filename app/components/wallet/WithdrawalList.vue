@@ -28,7 +28,7 @@ async function confirmCancel(id: string) {
 <template>
   <section class="rounded-2xl border border-[var(--border-subtle)] bg-white p-5.5">
     <h2 class="m-0 text-[15px] font-bold">Demandes de retrait</h2>
-    <p class="mb-3 mt-1 text-xs text-[var(--text-faint)]">Minimum 500 FCFA · une seule demande en attente à la fois · validées par Immo avant virement.</p>
+    <p class="mb-3 mt-1 text-xs text-[var(--text-faint)]">Minimum 500 FCFA · une seule demande en attente à la fois · validées par Bayo avant virement.</p>
     <div v-if="withdrawals.state.value === 'loading' && !withdrawals.list.value.length" class="flex flex-col gap-2">
       <DataSkeletonCard v-for="i in 2" :key="i" :height="46" :lines="0" />
     </div>

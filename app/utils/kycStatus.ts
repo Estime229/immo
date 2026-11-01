@@ -89,8 +89,8 @@ export function deriveVerificationNotice(stage: VerificationStage, space: Verifi
       tone: 'info',
       title: 'Vérification en cours',
       text: blocked
-        ? `L'équipe Immo examine vos documents, généralement sous 24 h. D'ici là, vous ne pouvez pas ${blocked}.`
-        : "L'équipe Immo examine vos documents, généralement sous 24 h.",
+        ? `L'équipe Bayo examine vos documents, généralement sous 24 h. D'ici là, vous ne pouvez pas ${blocked}.`
+        : "L'équipe Bayo examine vos documents, généralement sous 24 h.",
       cta: 'Suivre ma vérification'
     }
   }
@@ -122,7 +122,7 @@ export function verificationGateCopy(stage: VerificationStage, action: string) {
   }
   return {
     title: 'Vérifiez votre compte',
-    text: `Pour la sécurité de tous, Immo vérifie l'identité de chacun avant de ${action}. Quelques minutes suffisent, la validation prend généralement moins de 24 h.`,
+    text: `Pour la sécurité de tous, Bayo vérifie l'identité de chacun avant de ${action}. Quelques minutes suffisent, la validation prend généralement moins de 24 h.`,
     cta: 'Vérifier mon compte'
   }
 }

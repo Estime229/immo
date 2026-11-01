@@ -123,7 +123,7 @@ async function copyLink(link: string) {
 <template>
   <CoreModal :open="true" title="Inviter un membre" width="560px" :dirty="dirty" @close="emit('close')">
     <div v-if="!result" class="flex flex-col gap-4">
-      <FormsInput v-model="email" type="email" label="Adresse e-mail" placeholder="prenom@exemple.bj" hint="Avec ou sans compte Immo : la personne reçoit un lien pour rejoindre votre équipe." />
+      <FormsInput v-model="email" type="email" label="Adresse e-mail" placeholder="prenom@exemple.bj" hint="Avec ou sans compte Bayo : la personne reçoit un lien pour rejoindre votre équipe." />
       <FormsInput v-if="!team?.team" v-model="teamName" label="Nom de votre équipe (facultatif)" placeholder="ex. Agence Étoile Cotonou" />
 
       <label class="block">

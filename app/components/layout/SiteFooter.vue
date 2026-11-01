@@ -26,7 +26,7 @@ const FOOTER_COLUMNS = [
     ]
   },
   {
-    title: 'Immo',
+    title: 'Bayo',
     links: [
       { to: '/contact', label: 'Nous contacter' },
       { to: { path: '/legal', query: { doc: 'conditions' } }, label: "Conditions d'utilisation" },
@@ -45,14 +45,14 @@ const year = new Date().getFullYear()
       <span
         class="font-display font-extrabold leading-[.8] tracking-[-.04em] text-transparent"
         style="font-size: 19vw; -webkit-text-stroke: 1.5px rgba(255,255,255,.09)"
-      >Immo</span>
+      >Bayo</span>
     </div>
 
     <div class="relative mx-auto grid max-w-[1240px] grid-cols-1 gap-7 px-8 pt-14 sm:grid-cols-[1.6fr_1fr_1fr_1fr]">
       <div>
         <div class="flex items-center gap-2.5">
-          <img src="/images/logo.png" alt="Immo" class="h-[30px] w-[30px] rounded-[9px]" width="30" height="30">
-          <span class="font-display text-2xl font-extrabold tracking-[-.03em] text-white">Immo</span>
+          <img src="/images/logo.png" alt="Bayo" class="h-[30px] w-[30px] rounded-[9px]" width="30" height="30">
+          <span class="font-display text-2xl font-extrabold tracking-[-.03em] text-white">Bayo</span>
         </div>
         <p class="mb-0 mt-4 font-display text-[19px] font-bold tracking-[-.02em] text-white">Louez sans vous faire avoir</p>
         <p class="mb-0 mt-[26px] text-label font-black uppercase tracking-label text-white/50">Adresse</p>
@@ -80,7 +80,7 @@ const year = new Date().getFullYear()
     </div>
 
     <div class="relative mx-auto mt-10 flex max-w-[1240px] flex-wrap items-center justify-between gap-[18px] px-8 pb-[30px] pt-10">
-      <p class="m-0 font-display text-[15px] font-bold text-white/90">Immo © {{ year }}</p>
+      <p class="m-0 font-display text-[15px] font-bold text-white/90">Bayo © {{ year }}</p>
       <div class="flex flex-wrap items-center gap-6">
         <NuxtLink :to="{ path: '/legal', query: { doc: 'mentions' } }" class="text-sm text-white/[.72] transition-colors hover:text-white">Mentions légales</NuxtLink>
         <NuxtLink :to="{ path: '/legal', query: { doc: 'confidentialite' } }" class="text-sm text-white/[.72] transition-colors hover:text-white">Confidentialité</NuxtLink>

@@ -283,7 +283,7 @@ const countLabel = computed(() => {
       Seuls les {{ SCAN_LIMIT }} premiers biens de la recherche ont été examinés ({{ unscanned }} non vus) : affinez avec la recherche ou les filtres.
     </p>
     <p v-if="state === 'ready'" class="mb-0 mt-4 text-xs leading-[1.5] text-[var(--text-faint)]">
-      La liste s'appuie sur la recherche d'Immo : un bien dont tous les logements sont occupés, ou un bien suspendu en entier, n'y figure pas. Sa fiche reste accessible depuis le litige ou la demande de maintenance qui le concerne.
+      La liste s'appuie sur la recherche de Bayo : un bien dont tous les logements sont occupés, ou un bien suspendu en entier, n'y figure pas. Sa fiche reste accessible depuis le litige ou la demande de maintenance qui le concerne.
     </p>
   </div>
 </template>

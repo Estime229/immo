@@ -299,7 +299,7 @@ function toggleInvite() {
           </div>
           <p class="mb-0 mt-3.5 text-[13.5px] leading-[1.6] text-[var(--text-secondary)] [overflow-wrap:anywhere]">{{ r.description }}</p>
           <p v-if="r.status === 'in_progress' && r.retained_amount !== null && r.retained_amount !== undefined" class="mb-0 mt-2.5 text-[13px] leading-[1.55] text-[var(--text-muted)]">
-            Payée : la part retenue (<span class="font-mono">{{ formatFcfa(Number(r.retained_amount)) }}</span>) est conservée par Immo jusqu'à la fin de la garantie. L'artisan marque l'intervention terminée une fois le travail fait.
+            Payée : la part retenue (<span class="font-mono">{{ formatFcfa(Number(r.retained_amount)) }}</span>) est conservée par Bayo jusqu'à la fin de la garantie. L'artisan marque l'intervention terminée une fois le travail fait.
           </p>
 
           <CoreInlineConfirm

@@ -405,15 +405,15 @@ async function submitReset() {
       />
       <div class="absolute inset-0 bg-[image:linear-gradient(180deg,rgba(18,60,41,.15)_35%,rgba(18,60,41,.82)_100%)]" />
       <NuxtLink to="/" class="absolute left-11 top-9 z-10 flex items-center gap-2.5">
-        <img src="/images/logo.png" alt="Immo" class="h-8 w-8 rounded-[9px]" width="32" height="32">
-        <span class="font-display text-[22px] font-extrabold tracking-[-.025em] text-white">Immo</span>
+        <img src="/images/logo.png" alt="Bayo" class="h-8 w-8 rounded-[9px]" width="32" height="32">
+        <span class="font-display text-[22px] font-extrabold tracking-[-.025em] text-white">Bayo</span>
       </NuxtLink>
       <div class="relative z-10">
         <p class="m-0 max-w-[440px] font-display text-[34px] font-bold leading-[1.12] tracking-[-.03em] text-white">
           La caution du locataire ne dort jamais chez le bailleur.
         </p>
         <p class="mb-0 mt-3.5 max-w-[400px] text-[15px] text-white/[.82]">
-          Elle est versée à Immo, pas au bailleur, et reste séquestrée pendant tout le bail.
+          Elle est versée à Bayo, pas au bailleur, et reste séquestrée pendant tout le bail.
         </p>
       </div>
       <div class="absolute bottom-11 right-11 z-10 flex gap-1.5">
@@ -430,13 +430,13 @@ async function submitReset() {
 
     <div class="flex flex-col justify-center overflow-y-auto bg-white px-6 py-11 sm:px-[52px]">
       <!-- Mobile : le panneau photo est masqué, la marque (et le retour à l'accueil) passe en tête du formulaire. -->
-      <NuxtLink to="/" class="mb-9 flex w-fit items-center gap-2.5 lg:hidden" aria-label="Accueil Immo">
+      <NuxtLink to="/" class="mb-9 flex w-fit items-center gap-2.5 lg:hidden" aria-label="Accueil Bayo">
         <img src="/images/logo.png" alt="" class="h-8 w-8 rounded-[9px]" width="32" height="32">
-        <span class="font-display text-[22px] font-extrabold tracking-[-.025em] text-green-900">Immo</span>
+        <span class="font-display text-[22px] font-extrabold tracking-[-.025em] text-green-900">Bayo</span>
       </NuxtLink>
       <div class="animate-[im-fade_.3s_ease_backwards]">
         <template v-if="step === 'email'">
-          <h1 class="m-0 font-display text-[29px] font-bold tracking-[-.03em]">Entrer sur Immo</h1>
+          <h1 class="m-0 font-display text-[29px] font-bold tracking-[-.03em]">Entrer sur Bayo</h1>
           <p class="mb-6 mt-2.5 text-[14.5px] text-[var(--text-muted)]">Saisissez votre email : nous vous dirons ensuite s'il faut un mot de passe ou un code.</p>
           <label class="block">
             <span :class="LABEL_CLASS">Adresse email</span>
@@ -515,7 +515,7 @@ async function submitReset() {
             <FormsInput v-model="firstName" label="Prénom" placeholder="Sèdjro" />
             <FormsInput v-model="lastName" label="Nom" placeholder="Aholou" />
           </div>
-          <p class="mb-2.5 mt-5.5 text-[12.5px] font-bold">Vous venez sur Immo pour…</p>
+          <p class="mb-2.5 mt-5.5 text-[12.5px] font-bold">Vous venez sur Bayo pour…</p>
           <div class="flex flex-col gap-2.5" role="radiogroup" aria-label="Votre profil">
             <button
               v-for="r in ROLES"

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Confirmation en ligne, posée à l'endroit de l'action — le principe des espaces Immo
+ * Confirmation en ligne, posée à l'endroit de l'action — le principe des espaces Bayo
  * (fin de mandat, suppression de compte) plutôt qu'une modale qui coupe le contexte.
  * Une phrase qui dit ce qui va se passer, puis Confirmer / Non. Le slot accueille un
  * champ quand l'action en demande un (motif, référence de virement…).

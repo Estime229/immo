@@ -9,6 +9,7 @@ export const ENFORCED_PERMISSIONS: Record<string, string> = {
   'team:leases:create': 'créer et modifier les brouillons de bail',
   'team:leases:sign': 'envoyer, signer, annuler ou résilier les baux',
   'team:units:edit': 'modifier les logements et leur calendrier',
+  'team:units:create': 'ajouter des logements à un bien',
   'team:properties:edit': 'modifier le bien et ses photos',
   'team:requests:handle': 'répondre aux demandes de logement'
 }
@@ -24,8 +25,12 @@ export function groupPermissions(perms: TeamPermission[]): { category: string; i
   return out
 }
 
+/**
+ * Le nom d'un poste nommé ne vaut que tant que le membre est en `custom` : l'API garde
+ * `custom_preset_id` quand on le repasse sur un poste standard (update-member.handler).
+ */
 export function roleLabel(registry: TeamRegistry | null, preset: string, customName?: string | null): string {
-  if (customName) return customName
+  if (customName && preset === 'custom') return customName
   if (preset === 'custom') return 'Poste personnalisé'
   return registry?.presets[preset]?.label ?? preset
 }

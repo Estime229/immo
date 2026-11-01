@@ -47,9 +47,9 @@ export function pickStoreUrl(platform: MobilePlatform, urls: StoreUrls): string 
 }
 
 export function platformSubtitle(platform: MobilePlatform): string {
-  if (platform === 'ios') return 'Accès facile et rapide à Immo, sur iPhone et iPad'
-  if (platform === 'android') return 'Accès facile et rapide à Immo, sur Android'
-  return 'Accès facile et rapide à Immo, sur iOS et Android'
+  if (platform === 'ios') return 'Accès facile et rapide à Bayo, sur iPhone et iPad'
+  if (platform === 'android') return 'Accès facile et rapide à Bayo, sur Android'
+  return 'Accès facile et rapide à Bayo, sur iOS et Android'
 }
 
 export interface TabMatch {

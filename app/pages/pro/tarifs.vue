@@ -496,7 +496,7 @@ function sameBlock(a: AvailabilityBlock | null, b: AvailabilityBlock) {
               <CoreButton v-if="missingFreqs.length && !showAdd" size="sm" tone="secondary" class="inline-flex items-center gap-1.5" @click="openAdd"><Plus class="h-4 w-4" :stroke-width="1.9" />Ajouter un tarif</CoreButton>
             </div>
             <p class="mb-3.5 mt-0 text-[13.5px] leading-[1.55] text-[var(--text-muted)]">
-              <template v-if="hasDaily">Réservation en ligne <strong class="text-ok-fg">ouverte</strong> : le voyageur paie le prix de la nuit, et Immo applique vos tarifs semaine/mois dès que le séjour est assez long (la combinaison la moins chère).</template>
+              <template v-if="hasDaily">Réservation en ligne <strong class="text-ok-fg">ouverte</strong> : le voyageur paie le prix de la nuit, et Bayo applique vos tarifs semaine/mois dès que le séjour est assez long (la combinaison la moins chère).</template>
               <template v-else>Sans tarif « À la nuit » actif, ce logement ne peut pas être réservé en ligne : il se loue uniquement avec un bail.</template>
             </p>
             <p v-if="example" class="mb-3.5 mt-0 rounded-md bg-green-50 px-3.5 py-2.5 text-[12.5px] text-green-900">
@@ -529,6 +529,9 @@ function sameBlock(a: AvailabilityBlock | null, b: AvailabilityBlock) {
               <button type="button" class="ml-2 font-bold underline" @click="loadPricing">Réessayer</button>
             </FeedbackAlertBanner>
             <p v-else-if="!pricing.length" class="m-0 rounded-md border border-dashed border-[var(--border-default)] px-4 py-6 text-center text-[13.5px] text-[var(--text-muted)]">Aucun tarif : le logement se loue au prix affiché sur l'annonce, avec un bail. Ajoutez un tarif « À la nuit » pour ouvrir la réservation en ligne.</p>
+            <LayoutGuideHint v-if="pricing.length" title="Suspendre ou retirer ?" class="mb-2">
+              Suspendre met le tarif en pause : il ne s'applique plus, et se réactive d'un clic. Retirer le supprime. Suspendre ou retirer le tarif « À la nuit » ferme la réservation en ligne du logement.
+            </LayoutGuideHint>
             <div v-for="p in sortedPricing" v-else :key="p.id" class="border-b border-sand-200 py-3 last:border-b-0">
               <div v-if="editingId !== p.id" class="flex flex-wrap items-center gap-x-3 gap-y-2">
                 <div class="min-w-0 flex-1">
@@ -583,6 +586,7 @@ function sameBlock(a: AvailabilityBlock | null, b: AvailabilityBlock) {
           <section class="min-w-0 rounded-2xl border border-[var(--border-subtle)] bg-white p-4 sm:p-5.5">
             <h2 class="m-0 text-[15px] font-bold">Durée de séjour</h2>
             <p class="mb-3.5 mt-1 text-[13.5px] text-[var(--text-muted)]">Appliquée à chaque réservation en ligne. Laissez vide pour ne rien imposer.</p>
+            <LayoutGuideHint class="mb-3.5">Le minimum et le maximum de nuits s'imposent au voyageur au moment de réserver. Une durée vide n'impose rien.</LayoutGuideHint>
             <div class="grid grid-cols-2 items-start gap-3 sm:grid-cols-[1fr_1fr_auto] [&_input]:min-w-0">
               <FormsInput :model-value="minStay" label="Minimum (nuits)" type="number" mono placeholder="1" @update:model-value="onStayInput('min', $event)" />
               <FormsInput :model-value="maxStay" label="Maximum (nuits)" type="number" mono placeholder="Aucun" @update:model-value="onStayInput('max', $event)" />
@@ -595,7 +599,7 @@ function sameBlock(a: AvailabilityBlock | null, b: AvailabilityBlock) {
           <!-- Liste d'attente -->
           <section class="min-w-0 rounded-2xl border border-[var(--border-subtle)] bg-white p-4 sm:p-5.5">
             <h2 class="m-0 text-[15px] font-bold">Liste d'attente</h2>
-            <p class="mb-3 mt-1 text-[13.5px] text-[var(--text-muted)]">Immo ne prévient pas encore automatiquement ces personnes quand le logement se libère : contactez-les.</p>
+            <p class="mb-3 mt-1 text-[13.5px] text-[var(--text-muted)]">Bayo ne prévient pas encore automatiquement ces personnes quand le logement se libère : contactez-les.</p>
             <DataSkeletonCard v-if="waitlistState === 'loading'" :height="44" :lines="0" />
             <FeedbackAlertBanner v-else-if="waitlistState === 'error'" tone="danger">
               Impossible de charger la liste d'attente.

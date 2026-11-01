@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ArrowRight, Building, ChevronRight, CircleCheck, Lock, ShieldCheck } from '@lucide/vue'
 import type { LandlordStats } from '~/types/landlord'
+import type { GuideStep } from '~/components/layout/GuideChecklist.vue'
 import { alertTarget, severityCountLabel } from '~/utils/proAlerts'
 import { verificationLink } from '~/utils/kycStatus'
 
@@ -24,6 +25,12 @@ onMounted(load)
 /* ---- Démarrage : compte sans aucun bien ---- */
 const { canAct, requireVerified } = useVerification()
 const isNewAccount = computed(() => !!stats.value && stats.value.totalProperties === 0)
+const guideSteps = computed<GuideStep[]>(() => [
+  { key: 'kyc', title: 'Vérifier mon identité', text: "Une pièce d'identité suffit pour publier et louer.", to: verificationLink('/pro'), cta: 'Vérifier', done: canAct.value },
+  { key: 'property', title: 'Ajouter un bien', text: "Le bâtiment, ses photos et son adresse.", to: '/pro/biens/ajouter', cta: 'Ajouter', done: (stats.value?.totalProperties ?? 0) > 0 },
+  { key: 'unit', title: 'Créer un logement et son prix', text: 'Un bien se loue logement par logement.', to: '/pro/biens', cta: 'Mes biens', done: (stats.value?.totalUnits ?? 0) > 0 },
+  { key: 'lease', title: 'Conclure un premier bail', text: 'Depuis une candidature ou en créant le bail vous-même.', to: '/pro/baux', cta: 'Mes baux', done: (stats.value?.activeLeases ?? 0) > 0 }
+])
 function addFirstProperty() {
   if (requireVerified('publier un bien')) navigateTo('/pro/biens/ajouter')
 }
@@ -140,6 +147,7 @@ const topBiens = computed(() => {
     </section>
 
     <template v-else>
+      <LayoutGuideChecklist space="pro" :steps="guideSteps" />
       <!-- À traiter -->
       <section class="mb-5.5 rounded-2xl border border-[var(--border-subtle)] bg-white px-5 py-4.5">
         <div class="mb-3.5 flex flex-wrap items-center gap-3">

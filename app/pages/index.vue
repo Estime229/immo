@@ -165,7 +165,7 @@ const RENTAL_META: Record<RentalKey, { label: string; eyebrow: string; tagline: 
   mois: {
     label: 'Au mois',
     eyebrow: 'Longue durée',
-    tagline: 'Location classique : bail signé en ligne, caution séquestrée par Immo.',
+    tagline: 'Location classique : bail signé en ligne, caution séquestrée par Bayo.',
     suffix: '/ mois',
     main: { bg: 'url(/images/hero/hero-1.jpg)', size: 'cover', pos: '62% center' },
     detail: { bg: 'url(/images/hero/hero-2.jpg)', size: 'cover', pos: 'center' },
@@ -341,12 +341,12 @@ function ideaLink(city: string) {
 
 /* ---- Confiance (contenu éditorial, aligné sur ce que l'application fait réellement) ---- */
 const TRUST_ITEMS = [
-  { tint: 'bg-green-50', ink: 'text-green-700', icon: ShieldCheck, title: 'Caution séquestrée', text: "La caution est versée à Immo, pas au propriétaire : ni lui ni vous ne pouvez y toucher pendant le bail. Son montant est visible des deux côtés." },
+  { tint: 'bg-green-50', ink: 'text-green-700', icon: ShieldCheck, title: 'Caution séquestrée', text: "La caution est versée à Bayo, pas au propriétaire : ni lui ni vous ne pouvez y toucher pendant le bail. Son montant est visible des deux côtés." },
   { tint: 'bg-clay-100', ink: 'text-clay-700', icon: ClipboardCheck, title: 'État des lieux signé', text: "Pièce par pièce, photos à l'appui, signé par le locataire et le propriétaire dans l'application." },
   { tint: 'bg-info-bg', ink: 'text-info-fg', icon: Smartphone, title: 'Mobile Money suivi', text: 'MTN et Moov acceptés ; chaque paiement laisse une trace consultable des deux côtés.' }
 ]
 
-const LANDLORD_POINTS = ['Publiez votre bien', 'Loyers encaissés par Mobile Money', 'Caution séquestrée par Immo pendant le bail']
+const LANDLORD_POINTS = ['Publiez votre bien', 'Loyers encaissés par Mobile Money', 'Caution séquestrée par Bayo pendant le bail']
 </script>
 
 <template>
@@ -366,7 +366,7 @@ const LANDLORD_POINTS = ['Publiez votre bien', 'Loyers encaissés par Mobile Mon
             Louez en toute confiance au Bénin.
           </h1>
           <p class="mb-0 mt-3.5 max-w-[500px] text-[15px] leading-[1.5] text-white/90 sm:text-[16.5px]">
-            Caution séquestrée par Immo pendant le bail, état des lieux signé des deux côtés, propriétaires vérifiés.
+            Caution séquestrée par Bayo pendant le bail, état des lieux signé des deux côtés, propriétaires vérifiés.
           </p>
         </div>
         <div class="absolute bottom-[38px] right-6 z-[3] flex gap-2 sm:bottom-[34px] sm:right-[30px]">
@@ -630,7 +630,7 @@ const LANDLORD_POINTS = ['Publiez votre bien', 'Loyers encaissés par Mobile Mon
     <section class="mx-auto max-w-[1240px] px-[26px] pt-14">
       <div class="grid grid-cols-1 gap-8 rounded-3xl border border-[var(--border-subtle)] bg-white p-6 sm:p-10 lg:grid-cols-[minmax(0,.85fr)_minmax(0,1.15fr)] lg:gap-14">
         <div>
-          <p class="m-0 text-[12.5px] font-black uppercase tracking-[.08em] text-clay-500">Pourquoi Immo</p>
+          <p class="m-0 text-[12.5px] font-black uppercase tracking-[.08em] text-clay-500">Pourquoi Bayo</p>
           <h2 class="mb-0 mt-2.5 font-display text-title-2 font-bold tracking-title-2 text-[var(--text-primary)]">Louer, sans la peur de se faire avoir</h2>
           <p class="mb-0 mt-3 max-w-[420px] text-[15.5px] leading-[1.6] text-[var(--text-secondary)]">
             Trois protections concrètes contre la caution gardée par le bailleur et l'état des lieux contesté.

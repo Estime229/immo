@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ArrowRight, SearchX, Star, Wrench } from '@lucide/vue'
 import type { ArtisanRequestSummary } from '~/types/artisan'
+import type { GuideStep } from '~/components/layout/GuideChecklist.vue'
+import { verificationLink } from '~/utils/kycStatus'
 import { interventionPhase, PHASE_LABEL_ARTISAN } from '~/utils/artisanRequests'
 import { useArtisanProfile } from '~/composables/useArtisanProfile'
 
@@ -15,6 +17,7 @@ onMounted(() => {
   artisan.ensureTrades()
 })
 
+const { canAct: identityVerified } = useVerification()
 const firstName = computed(() => currentUser.value?.first_name?.trim() || '')
 
 const mineBlock = useFetchBlock(() => artisanApi.listMine())
@@ -38,6 +41,15 @@ const ratingTile = computed(() => {
   return { value: p.reputation_score.toFixed(1).replace('.', ','), label: `${p.review_count} avis` }
 })
 
+/* ---- Parcours « Bien démarrer » : chaque étape se coche d'après les données réelles ---- */
+const guideReady = computed(() => artisan.state.value === 'success' && mineSettled.value)
+const guideSteps = computed<GuideStep[]>(() => [
+  { key: 'kyc', title: 'Vérifier mon identité', text: "Une pièce d'identité suffit pour candidater aux missions.", to: verificationLink('/artisan'), cta: 'Vérifier', done: identityVerified.value },
+  { key: 'trade', title: 'Choisir mon métier', text: 'Il sert à vous montrer les demandes de votre domaine.', to: '/artisan/profil', cta: 'Mon profil', done: !!artisan.tradeId.value },
+  { key: 'offer', title: 'Répondre à une première demande', text: 'Proposez votre prix, votre garantie et vos dates.', to: '/artisan/missions', cta: 'Les demandes', done: mineBlock.items.value.length > 0 },
+  { key: 'done', title: 'Terminer une première mission', text: "Le paiement est versé à la fin, selon la retenue de garantie de l'offre.", to: '/artisan/missions', cta: 'Mes missions', done: completed.value.length > 0 }
+])
+
 /* ---- Nouvelles demandes de son métier, sans les postes déjà candidatés ---- */
 const openBlock = useFetchBlock(() => artisanApi.listOpen(artisan.tradeId.value ?? undefined).then(r => r.data))
 watch(artisan.tradeId, id => { if (id && import.meta.client) openBlock.load() }, { immediate: true })
@@ -55,6 +67,7 @@ function formatDay(iso: string) {
 <template>
   <div class="animate-[im-fade_.3s_ease_backwards]">
     <LayoutKycNotice space="artisan" />
+    <LayoutGuideChecklist space="artisan" :steps="guideSteps" :ready="guideReady" />
 
     <!-- Mission la plus urgente, ou accueil -->
     <section class="mb-4.5 rounded-2xl bg-[image:var(--gradient-balance)] p-5.5 text-white sm:p-6">

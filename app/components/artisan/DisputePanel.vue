@@ -121,7 +121,7 @@ function formatLong(iso: string) {
     <div v-if="request.status === 'completed' && !disputed" class="rounded-md border border-ok-border bg-ok-bg px-3.5 py-3 text-[13px] leading-[1.55] text-green-900">
       <p class="m-0 inline-flex items-center gap-1.5 font-bold"><ShieldCheck class="h-4 w-4 flex-none" :stroke-width="1.9" aria-hidden="true" />Terminée le {{ request.completed_at ? formatLong(request.completed_at) : '—' }}<template v-if="warrantyLine(request)"> · {{ warrantyLine(request) }}</template></p>
       <p v-if="retained" class="mb-0 mt-1">
-        <span class="font-mono font-bold">{{ formatFcfa(retained) }}</span> restent retenus par Immo : {{ side === 'requester' ? 'ils seront versés à l\'artisan à la fin de la garantie, sauf si vous signalez un problème d\'ici là.' : 'ils vous seront versés à la fin de la garantie, sauf si le demandeur signale un problème.' }}
+        <span class="font-mono font-bold">{{ formatFcfa(retained) }}</span> restent retenus par Bayo : {{ side === 'requester' ? 'ils seront versés à l\'artisan à la fin de la garantie, sauf si vous signalez un problème d\'ici là.' : 'ils vous seront versés à la fin de la garantie, sauf si le demandeur signale un problème.' }}
       </p>
       <template v-if="side === 'requester' && canDispute(request)">
         <div v-if="opening" class="mt-2.5">
@@ -180,8 +180,8 @@ function formatLong(iso: string) {
         <p v-if="refund" class="mb-0 mt-1 text-[12px] text-[var(--text-muted)]">Demandeur : <span class="font-mono">{{ formatFcfa(split.requester) }}</span> · artisan : <span class="font-mono">{{ formatFcfa(split.artisan) }}</span></p>
       </div>
       <p class="mb-0 mt-2 text-[12px] text-danger-fg-deep">
-        Sans accord, l'équipe Immo peut trancher :
-        <NuxtLink :to="{ path: '/contact', query: { sujet: 'Problème de paiement' } }" class="font-bold underline">contacter Immo</NuxtLink>.
+        Sans accord, l'équipe Bayo peut trancher :
+        <NuxtLink :to="{ path: '/contact', query: { sujet: 'Problème de paiement' } }" class="font-bold underline">contacter Bayo</NuxtLink>.
       </p>
     </div>
 

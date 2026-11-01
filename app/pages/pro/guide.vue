@@ -18,19 +18,19 @@ const GUIDE_CARDS = [
   {
     icon: Landmark,
     title: 'Le séquestre de la caution',
-    text: "Le locataire règle le paiement d'entrée (caution, avance et loyers prépayés éventuels) depuis son wallet : c'est ce paiement qui rend le bail actif. La caution n'arrive pas sur votre solde, Immo la conserve en séquestre pendant tout le bail. Sa restitution en fin de bail n'est pas encore gérée dans l'application. La loi 2022-30 la plafonne à 3 mois de loyer ; au-delà, les deux parties doivent l'accepter explicitement.",
+    text: "Le locataire règle le paiement d'entrée (caution, avance et loyers prépayés éventuels) depuis son wallet : c'est ce paiement qui rend le bail actif. La caution n'arrive pas sur votre solde, Bayo la conserve en séquestre pendant tout le bail. Sa restitution en fin de bail n'est pas encore gérée dans l'application. La loi 2022-30 la plafonne à 3 mois de loyer ; au-delà, les deux parties doivent l'accepter explicitement.",
     link: { to: '/pro/baux', label: 'Voir mes baux' }
   },
   {
     icon: ShieldCheck,
     title: 'La retenue de garantie des artisans',
-    text: "Dans son offre, l'artisan fixe son prix, une garantie (jusqu'à 90 jours) et la part retenue. Vous payez depuis votre solde : une partie lui est versée tout de suite, Immo conserve le reste jusqu'à la fin de la garantie. Un problème pendant la garantie ? Signalez-le : chacun propose un partage de la retenue, que l'autre accepte. Sans signalement, elle revient à l'artisan à la fin de la garantie.",
+    text: "Dans son offre, l'artisan fixe son prix, une garantie (jusqu'à 90 jours) et la part retenue. Vous payez depuis votre solde : une partie lui est versée tout de suite, Bayo conserve le reste jusqu'à la fin de la garantie. Un problème pendant la garantie ? Signalez-le : chacun propose un partage de la retenue, que l'autre accepte. Sans signalement, elle revient à l'artisan à la fin de la garantie.",
     link: { to: '/pro/artisans', label: 'Mes interventions' }
   },
   {
     icon: Wallet,
     title: 'Le wallet, la tirelire et les retraits',
-    text: "Votre solde disponible reçoit vos revenus locatifs et se retire vers Mobile Money (MTN ou Moov), à partir de 500 FCFA. Une seule demande à la fois : un administrateur Immo la valide avant le virement, et vous pouvez l'annuler tant qu'elle est en attente. La tirelire est la part réservée aux paiements de logement : elle ne vous sert que si ce compte loue aussi un logement.",
+    text: "Votre solde disponible reçoit vos revenus locatifs et se retire vers Mobile Money (MTN ou Moov), à partir de 500 FCFA. Une seule demande à la fois : un administrateur Bayo la valide avant le virement, et vous pouvez l'annuler tant qu'elle est en attente. La tirelire est la part réservée aux paiements de logement : elle ne vous sert que si ce compte loue aussi un logement.",
     link: { to: '/pro/wallet', label: 'Ouvrir mon wallet' }
   },
   {
@@ -53,6 +53,7 @@ const GUIDE_CARDS = [
     <p class="mb-4.5 mt-0 max-w-[720px] text-[13.5px] leading-[1.55] text-[var(--text-muted)]">
       Ce que fait l'application pour vous, et ce qu'elle ne fait pas encore. Chaque carte mène à la page concernée.
     </p>
+    <LayoutGuideRestore space="pro" home="/pro" class="mb-4.5 max-w-[960px]" />
     <div class="grid max-w-[960px] grid-cols-1 gap-4.5 sm:grid-cols-2">
       <section v-for="g in GUIDE_CARDS" :key="g.title" class="flex flex-col rounded-2xl border border-[var(--border-subtle)] bg-white p-5.5">
         <span class="grid h-[42px] w-[42px] place-items-center rounded-md bg-green-50 text-green-700"><component :is="g.icon" class="h-[18px] w-[18px]" :stroke-width="1.9" /></span>

@@ -289,7 +289,7 @@ const PANEL_TONE: Record<string, string> = {
             </template>
             <template v-else>
               <DataMoneyLine :label="RENT_LABEL[lease.billing_frequency ?? 'monthly']" :value="`${formatFcfa(Number(lease.signed_rent))} ${rentSuffix}`" />
-              <DataMoneyLine label="Caution (séquestre Immo)" :value="formatFcfa(entry?.deposit ?? 0)" />
+              <DataMoneyLine label="Caution (séquestre Bayo)" :value="formatFcfa(entry?.deposit ?? 0)" />
               <DataMoneyLine v-if="entry?.advance" label="Avance sur loyer" :value="formatFcfa(entry.advance)" />
               <DataMoneyLine v-if="entry?.prepaid" label="Loyers prépayés" :value="formatFcfa(entry.prepaid)" />
               <DataMoneyLine label="Paiement d'entrée" :value="lease.entry_paid_at ? `payé le ${formatDate(lease.entry_paid_at)}` : formatFcfa(entry?.total ?? 0)" total />
@@ -366,7 +366,7 @@ const PANEL_TONE: Record<string, string> = {
               </template>
               <template v-else-if="phase === 'awaiting_entry' && entry">
                 <p class="m-0 text-sm font-bold text-clay-700">Signé par les deux parties. En attente du paiement d'entrée de <span class="font-mono">{{ formatFcfa(entry.total) }}</span>.</p>
-                <p class="mb-0 mt-1.5 text-[13px] leading-[1.55] text-clay-900">Le bail devient actif dès que {{ tenantName }} paie. La caution est conservée par Immo, l'avance et le prépayé couvrent les loyers.</p>
+                <p class="mb-0 mt-1.5 text-[13px] leading-[1.55] text-clay-900">Le bail devient actif dès que {{ tenantName }} paie. La caution est conservée par Bayo, l'avance et le prépayé couvrent les loyers.</p>
                 <p v-if="unpaid && !unpaid.allowed" class="mb-0 mt-2 text-[12.5px] text-clay-900">Si l'entrée n'est toujours pas payée, vous pourrez annuler le bail dans <span class="font-mono">{{ unpaid.hoursLeft }}</span> h.</p>
               </template>
               <template v-else-if="phase === 'active'">
@@ -379,7 +379,7 @@ const PANEL_TONE: Record<string, string> = {
               </template>
               <template v-else-if="phase === 'terminated'">
                 <p class="m-0 text-sm font-bold">Bail terminé le {{ formatDate(lease.end_date) }}.</p>
-                <p class="mb-0 mt-1.5 text-[13px] leading-[1.55] text-[var(--text-muted)]">La caution (<span class="font-mono">{{ formatFcfa(Number(lease.deposit_amount)) }}</span>) est en séquestre chez Immo. Sa restitution ne se fait pas encore depuis l'application : le support s'en charge avec vous, d'après l'état des lieux de sortie.</p>
+                <p class="mb-0 mt-1.5 text-[13px] leading-[1.55] text-[var(--text-muted)]">La caution (<span class="font-mono">{{ formatFcfa(Number(lease.deposit_amount)) }}</span>) est en séquestre chez Bayo. Sa restitution ne se fait pas encore depuis l'application : le support s'en charge avec vous, d'après l'état des lieux de sortie.</p>
               </template>
               <template v-else-if="phase === 'cancelled_unpaid'">
                 <p class="m-0 text-sm font-bold">Bail annulé</p>
@@ -440,7 +440,7 @@ const PANEL_TONE: Record<string, string> = {
             >
               <p v-if="exitInv?.status !== 'signed'" class="mb-2.5 mt-0 text-[12.5px] font-semibold text-danger-fg-deep">L'état des lieux de sortie n'est pas signé : sans lui, rien ne documente l'état du logement au départ.</p>
               <p class="mb-2.5 mt-0 text-[12.5px] text-danger-fg-deep">
-                La caution reste en séquestre Immo ; sa restitution passe par le support.
+                La caution reste en séquestre Bayo ; sa restitution passe par le support.
                 <NuxtLink :to="SUPPORT_LINK" class="font-bold underline">Contacter le support</NuxtLink>
               </p>
               <textarea v-model="reason" rows="2" maxlength="300" :placeholder="`Motif, transmis à ${tenantName} (5 caractères minimum)`" class="w-full resize-none rounded-sm border border-[var(--border-default)] bg-white p-2.5 text-[13px] outline-none" />

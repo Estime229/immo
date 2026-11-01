@@ -924,7 +924,7 @@ async function onFavoriteSimilar(l: { propertyId: string | null }) {
                     <DataMoneyLine v-for="l in entryLines" :key="l.label" :label="l.label" :value="l.value" />
                     <DataMoneyLine label="Total à l'entrée" :value="entryTotal" total />
                     <FeedbackEscrowNotice v-if="cautionLabel" :amount="`Dont ${cautionLabel} de caution séquestrée`" class="mt-3.5">
-                      Versée à Immo, pas au propriétaire : personne n'y touche pendant le bail. Sa restitution en fin de bail n'est pas encore gérée dans l'application.
+                      Versée à Bayo, pas au propriétaire : personne n'y touche pendant le bail. Sa restitution en fin de bail n'est pas encore gérée dans l'application.
                     </FeedbackEscrowNotice>
                   </template>
                   <p v-else class="m-0 text-[13px] text-[var(--text-muted)]">Détail des frais d'entrée communiqué par le propriétaire.</p>

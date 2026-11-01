@@ -1,5 +1,5 @@
 <script setup lang="ts">
-/** Couple étiquette + montant : le bloc de donnée chiffrée d'Immo. */
+/** Couple étiquette + montant : le bloc de donnée chiffrée de Bayo. */
 interface StatValueProps {
   /** Étiquette en capitales espacées */
   label: string

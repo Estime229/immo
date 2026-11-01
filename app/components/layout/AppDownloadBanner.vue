@@ -43,7 +43,7 @@ function dismiss() {
     v-if="!dismissed && storeUrl"
     class="flex items-center gap-2.5 border-b border-[var(--border-subtle)] bg-white py-3 pl-2 pr-4 lg:hidden"
     role="region"
-    aria-label="Application mobile Immo"
+    aria-label="Application mobile Bayo"
   >
     <button
       type="button"

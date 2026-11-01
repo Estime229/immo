@@ -177,7 +177,7 @@ async function submitRecharge() {
     const res = await paymentApi.checkout({
       gatewayId: selectedGateway.value.id,
       amount: amountNum.value,
-      description: 'Recharge wallet Immo',
+      description: 'Recharge wallet Bayo',
       ...(needsPhone.value ? { phoneNumber: normalizeBeninPhone(phone.value) ?? undefined } : {})
     })
     checkoutResult.value = res

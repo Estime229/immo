@@ -1,5 +1,5 @@
 <script setup lang="ts">
-/** Bouton d'action Immo. */
+/** Bouton d'action Bayo. */
 interface ButtonProps {
   /** primary = dégradé vert (une seule par vue) ; accent = terracotta ; secondary = contour ; danger = impayé/litige ; ghost = tertiaire */
   tone?: 'primary' | 'accent' | 'secondary' | 'danger' | 'ghost'

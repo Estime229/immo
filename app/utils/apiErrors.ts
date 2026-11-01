@@ -81,7 +81,7 @@ export const FIELD_RULE_MESSAGES: Record<string, string> = {
 
 const BUSINESS_CODE_MESSAGES: Record<string, string> = {
   IFU_ALREADY_EXISTS: 'Cet IFU est déjà utilisé par un autre compte. Vérifiez le numéro ou contactez le support.',
-  'error.KYC_REQUIRED': "Votre identité doit être vérifiée par Immo pour cette action (publier un bien, demander une visite…). Déposez vos pièces depuis « Vérifier mon compte » : la validation prend généralement moins de 24 h.",
+  'error.KYC_REQUIRED': "Votre identité doit être vérifiée par Bayo pour cette action (publier un bien, demander une visite…). Déposez vos pièces depuis « Vérifier mon compte » : la validation prend généralement moins de 24 h.",
   RCCM_ALREADY_EXISTS: 'Ce RCCM est déjà utilisé par un autre compte. Vérifiez le numéro ou contactez le support.',
   CPI_ALREADY_EXISTS: 'Cette carte professionnelle (CPI) est déjà utilisée par un autre compte.'
 }

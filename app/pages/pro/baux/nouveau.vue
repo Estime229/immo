@@ -214,7 +214,7 @@ function fmtDate(iso: string) {
           <div v-if="candidatesState === 'loading'" class="h-[72px] animate-pulse rounded-md bg-sand-100" />
           <template v-else-if="tenantCandidates.length">
             <FormsSelect v-model="tenantId" label="Locataire" placeholder="Choisir parmi vos candidatures, visites et conversations" :options="tenantOptions" class="[&_select]:w-full" />
-            <p class="mb-0 mt-[7px] text-[12.5px] text-[var(--text-faint)]">Le locataire doit avoir un compte Immo : il signera et paiera son entrée en ligne.</p>
+            <p class="mb-0 mt-[7px] text-[12.5px] text-[var(--text-faint)]">Le locataire doit avoir un compte Bayo : il signera et paiera son entrée en ligne.</p>
           </template>
           <div v-else class="flex items-start gap-3 rounded-md border border-dashed border-[var(--border-default)] p-4">
             <span class="grid h-[46px] w-[46px] flex-none place-items-center rounded-pill bg-green-50 text-green-700"><UserRound class="h-5 w-5" :stroke-width="1.9" /></span>
@@ -253,7 +253,7 @@ function fmtDate(iso: string) {
           <div class="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
             <FormsSelect v-model="frequencyModel" label="Fréquence de paiement" :options="FREQUENCY_OPTIONS" class="[&_select]:w-full" />
             <FormsInput :model-value="monthlyRent" label="Loyer par période (FCFA)" type="number" mono :hint="rentHint || undefined" @update:model-value="onRentInput" />
-            <FormsInput v-model="depositAmount" label="Caution (FCFA)" type="number" mono hint="Conservée par Immo pendant tout le bail. 0 si aucune." />
+            <FormsInput v-model="depositAmount" label="Caution (FCFA)" type="number" mono hint="Conservée par Bayo pendant tout le bail. 0 si aucune." />
             <div>
               <FormsSelect v-model="contractModel" label="Modèle de contrat" :options="CONTRACT_OPTIONS" class="[&_select]:w-full" />
               <p class="mb-0 mt-[7px] text-[12.5px] text-[var(--text-faint)]">{{ CONTRACT_TYPE_HINT[contractType] }}</p>

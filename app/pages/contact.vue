@@ -14,7 +14,7 @@ const SUBJECTS = [
   'Problème de paiement',
   'Caution ou état des lieux',
   'Vérification de mon compte',
-  'Publier un bien sur Immo',
+  'Publier un bien sur Bayo',
   'Conditions et données personnelles',
   'Signaler un abus',
   'Autre'
@@ -123,7 +123,7 @@ const CHANNELS = [
           <span class="mx-auto grid h-[62px] w-[62px] animate-[im-pop_.5s_ease_both] place-items-center rounded-pill bg-ok-bg text-ok-fg"><CircleCheck class="h-7 w-7" :stroke-width="1.9" /></span>
           <p class="mb-0 mt-5 font-display text-[23px] font-bold tracking-[-.025em]">Message envoyé</p>
           <p class="mx-auto mb-0 mt-2.5 max-w-[400px] text-[13.5px] leading-[1.6] text-[var(--text-muted)]">
-            La réponse de l'équipe Immo arrivera à <strong class="text-[var(--text-primary)]">{{ email }}</strong>. Pensez à vérifier vos indésirables.
+            La réponse de l'équipe Bayo arrivera à <strong class="text-[var(--text-primary)]">{{ email }}</strong>. Pensez à vérifier vos indésirables.
           </p>
           <div class="mt-6 flex flex-wrap justify-center gap-2.5">
             <CoreButton tone="secondary" size="sm" @click="resetContact">Envoyer un autre message</CoreButton>

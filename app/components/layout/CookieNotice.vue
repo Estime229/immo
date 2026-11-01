@@ -2,7 +2,7 @@
 import { Cookie } from '@lucide/vue'
 
 /**
- * Information cookies, sur tout le site. Immo ne dépose que des cookies nécessaires (connexion,
+ * Information cookies, sur tout le site. Bayo ne dépose que des cookies nécessaires (connexion,
  * préférences d'affichage) : aucun choix à proposer, donc pas de « Refuser ». Si un outil de mesure
  * d'audience ou de publicité est ajouté un jour, ce bandeau devra devenir un vrai consentement
  * (accepter / refuser) et le script ne se charger qu'après acceptation.
@@ -30,7 +30,7 @@ const acknowledged = useCookie<string | null>('immo_cookie_notice', {
       <div class="min-w-0">
         <p class="m-0 font-display text-[16px] font-bold tracking-[-.01em] text-[var(--text-primary)]">Seulement les cookies nécessaires</p>
         <p class="mb-0 mt-1.5 text-[13.5px] leading-[1.55] text-[var(--text-secondary)]">
-          Immo utilise uniquement les cookies indispensables au site : rester connecté et retenir vos préférences d'affichage. Aucun cookie publicitaire ni de mesure d'audience.
+          Bayo utilise uniquement les cookies indispensables au site : rester connecté et retenir vos préférences d'affichage. Aucun cookie publicitaire ni de mesure d'audience.
         </p>
       </div>
     </div>

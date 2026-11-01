@@ -42,7 +42,7 @@ const SECTIONS = [
     "Vous disposez d'un droit d'accès, de rectification et de suppression de vos données, ainsi que d'un droit d'opposition. Écrivez-nous pour exercer ces droits."
   ] },
   { id: 'cookies', heading: '7. Cookies', paras: [
-    "Immo n'utilise que des cookies nécessaires au fonctionnement du site : des cookies de connexion, qui vous gardent connecté à votre compte, et des cookies de préférences, qui retiennent vos choix d'affichage (mode « à la nuit » ou « au mois », bandeaux et messages déjà fermés). Quelques préférences d'affichage des espaces sont aussi gardées dans le stockage local de votre navigateur.",
+    "Bayo n'utilise que des cookies nécessaires au fonctionnement du site : des cookies de connexion, qui vous gardent connecté à votre compte, et des cookies de préférences, qui retiennent vos choix d'affichage (mode « à la nuit » ou « au mois », bandeaux et messages déjà fermés). Quelques préférences d'affichage des espaces sont aussi gardées dans le stockage local de votre navigateur.",
     "Aucun cookie publicitaire ni de mesure d'audience n'est déposé. Vous pouvez supprimer ces cookies depuis les réglages de votre navigateur : vous serez alors déconnecté et vos préférences d'affichage reviendront à leur état par défaut."
   ] }
 ]
@@ -107,8 +107,8 @@ const contactLink = { path: '/contact', query: { sujet: 'Conditions et données 
             <h2 class="m-0 text-[15px] font-bold">Document en cours de rédaction</h2>
             <p class="mb-0 mt-1.5 text-[13.5px] leading-[1.6] text-[var(--text-muted)]">
               {{ docKey === 'conditions'
-                ? "Les conditions d'utilisation d'Immo seront publiées sur cette page. Pour toute question sur l'usage du service d'ici là, écrivez-nous."
-                : "Les mentions légales d'Immo (éditeur, hébergeur) seront publiées sur cette page. Pour toute question d'ici là, écrivez-nous." }}
+                ? "Les conditions d'utilisation de Bayo seront publiées sur cette page. Pour toute question sur l'usage du service d'ici là, écrivez-nous."
+                : "Les mentions légales de Bayo (éditeur, hébergeur) seront publiées sur cette page. Pour toute question d'ici là, écrivez-nous." }}
             </p>
             <div class="mt-4 flex flex-wrap gap-2.5">
               <NuxtLink :to="contactLink" class="inline-flex items-center gap-1.5 rounded-pill border border-[var(--border-default)] bg-white px-4 py-[9px] text-[13px] font-bold text-sand-900 hover:border-green-600">

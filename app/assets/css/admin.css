@@ -1,4 +1,4 @@
-/* Jetons de l'espace admin (/admin/*). Ce ne sont que des alias vers les jetons d'Immo (main.css) :
+/* Jetons de l'espace admin (/admin/*). Ce ne sont que des alias vers les jetons de Bayo (main.css) :
    les pages admin gardent leurs noms courts (bg-app, text-text-primary, border-border, bg-primary…)
    mais rendent exactement les surfaces, bordures, textes et rayons des espaces locataire/pro/artisan.
    Aucun de ces noms n'existe ailleurs, donc les autres espaces ne changent pas. */

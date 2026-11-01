@@ -70,9 +70,9 @@ const listingTile = computed(() => `${listings.value.length}${hasMore.value ? '+
 
 useSeoMeta({
   title: () => storefront.value?.profile.display_name ?? 'Vitrine',
-  description: () => storefront.value?.profile.bio || (storefront.value ? `Les logements de ${storefront.value.profile.display_name} sur Immo.` : undefined),
-  ogTitle: () => (storefront.value ? `${storefront.value.profile.display_name} · Immo` : undefined),
-  ogDescription: () => storefront.value?.profile.bio || (storefront.value ? `${listingCount.value} sur Immo.` : undefined),
+  description: () => storefront.value?.profile.bio || (storefront.value ? `Les logements de ${storefront.value.profile.display_name} sur Bayo.` : undefined),
+  ogTitle: () => (storefront.value ? `${storefront.value.profile.display_name} · Bayo` : undefined),
+  ogDescription: () => storefront.value?.profile.bio || (storefront.value ? `${listingCount.value} sur Bayo.` : undefined),
   ogUrl: () => `${requestUrl.origin}${route.path}`
 })
 
@@ -143,7 +143,7 @@ async function onFavorite(l: (typeof listings.value)[number]) {
   await favorites.toggleProperty(l.propertyId)
 }
 
-/* ---- Contacter le propriétaire (avant : lien vers le formulaire de contact d'Immo) ---- */
+/* ---- Contacter le propriétaire (avant : lien vers le formulaire de contact de Bayo) ---- */
 const isSelf = computed(() => !!currentUser.value && currentUser.value.id === ownerId)
 const contactLoading = ref(false)
 const contactError = ref('')
@@ -247,7 +247,7 @@ async function copyLink() {
         </div>
         <div v-if="storefront.profile.is_verified" class="mt-3 flex items-start gap-2.5 rounded-md border border-ok-border bg-ok-bg px-3.5 py-3">
           <ShieldCheck class="mt-px h-4 w-4 flex-none text-ok-fg" :stroke-width="1.9" />
-          <p class="m-0 text-[13px] leading-[1.5] text-green-900">Ce compte a passé la vérification d'identité Immo.</p>
+          <p class="m-0 text-[13px] leading-[1.5] text-green-900">Ce compte a passé la vérification d'identité Bayo.</p>
         </div>
       </aside>
 

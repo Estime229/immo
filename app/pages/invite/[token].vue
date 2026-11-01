@@ -118,7 +118,7 @@ async function switchAccount() {
             <span class="text-xs text-[var(--text-faint)]">Poste</span>
             <span class="text-right text-sm font-bold">{{ posteLabel }}</span>
           </div>
-          <div class="flex items-baseline justify-between gap-3 border-b border-sand-200 py-3">
+          <div v-if="invitation.properties" class="flex items-baseline justify-between gap-3 border-b border-sand-200 py-3">
             <span class="flex-none text-xs text-[var(--text-faint)]">Biens confiés</span>
             <span class="text-right text-[13.5px] text-[var(--text-secondary)]">{{ invitation.properties.map(p => p.name).join(', ') || "Aucun pour l'instant" }}</span>
           </div>

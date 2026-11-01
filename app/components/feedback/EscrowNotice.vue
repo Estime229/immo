@@ -1,5 +1,5 @@
 <script setup lang="ts">
-/** Encadré séquestre — le motif signature d'Immo. */
+/** Encadré séquestre — le motif signature de Bayo. */
 interface EscrowNoticeProps {
   /** Phrase-montant en mono, ex. "Dont 13 662 FCFA retenus en garantie" */
   amount: string

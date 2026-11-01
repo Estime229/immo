@@ -3,7 +3,7 @@
 /* Jetons de l'espace admin (/admin/*) — importés ici pour partager le même @theme. */
 @import "./admin.css";
 
-/* Design tokens transcrits depuis le projet Claude Design "Immo — Refonte moderne
+/* Design tokens transcrits depuis le projet Claude Design "Bayo — Refonte moderne
    interfaces immobilières" (tokens/*.css). Vert forêt = confiance/marque, terracotta =
    argent immobilisé, neutres toujours sable chaud — jamais de gris-bleu froid. */
 @theme {
@@ -45,7 +45,7 @@
   --text-label: 11.5px;
   --tracking-label: 0.06em;
 
-  /* ---- Vert Immo — marque, confiance, validation ---- */
+  /* ---- Vert Bayo — marque, confiance, validation ---- */
   --color-green-50: #eef5ef;
   --color-green-100: #d7e8da;
   --color-green-200: #bfdfc7;
@@ -196,6 +196,11 @@ body {
 }
 @keyframes im-spin {
   to { transform: rotate(360deg); }
+}
+/* Défilement continu d'une liste dupliquée : -50 % ramène exactement au début de la copie. */
+@keyframes im-marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
 }
 @keyframes im-slide-left {
   from { transform: translateX(-100%); }

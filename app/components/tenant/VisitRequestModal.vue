@@ -82,7 +82,7 @@ const title = computed(() => (notVerified.value ? "Vérifiez votre identité d'a
 <template>
   <CoreModal :open="true" :title="title" width="460px" :dirty="dirty" @close="close">
     <template v-if="notVerified">
-      <p class="m-0 text-[13.5px] leading-[1.6] text-[var(--text-muted)]">Pour protéger les propriétaires, seules les personnes dont l'identité a été vérifiée par Immo peuvent demander une visite. La validation prend généralement moins de 24 h.</p>
+      <p class="m-0 text-[13.5px] leading-[1.6] text-[var(--text-muted)]">Pour protéger les propriétaires, seules les personnes dont l'identité a été vérifiée par Bayo peuvent demander une visite. La validation prend généralement moins de 24 h.</p>
     </template>
 
     <template v-else-if="step === 'form'">

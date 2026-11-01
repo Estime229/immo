@@ -1,5 +1,5 @@
 /**
- * Relais serveur vers l'API Immo réelle.
+ * Relais serveur vers l'API Bayo réelle.
  *
  * Le backend ne renvoie pas d'en-tête Access-Control-Allow-Origin pour
  * l'origine de ce front (confirmé le 2026-09-17 : un appel direct depuis le

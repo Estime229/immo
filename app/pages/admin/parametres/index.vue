@@ -115,7 +115,7 @@ function formatDay(iso: string) {
 
     <template v-else>
       <FeedbackAlertBanner v-if="maintenanceOn" tone="danger" class="mb-4.5">
-        Le mode maintenance est activé : les utilisateurs ne peuvent pas accéder à Immo.
+        Le mode maintenance est activé : les utilisateurs ne peuvent pas accéder à Bayo.
       </FeedbackAlertBanner>
 
       <p v-if="dirtyCount" class="sticky top-[82px] z-10 mb-4.5 mt-0 rounded-md border border-warn-border bg-warn-bg px-3.5 py-2.5 text-[13px] font-semibold text-warn-fg-deep">

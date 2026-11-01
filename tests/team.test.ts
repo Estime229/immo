@@ -23,6 +23,8 @@ describe('registre des permissions', () => {
     expect(roleLabel(reg, 'gestionnaire')).toBe('Gestionnaire')
     expect(roleLabel(reg, 'custom', 'Gardien')).toBe('Gardien')
     expect(roleLabel(reg, 'custom')).toBe('Poste personnalisé')
+    // Repassé sur un poste standard : l'API garde l'ancien poste nommé, il ne doit plus s'afficher.
+    expect(roleLabel(reg, 'gestionnaire', 'Gardien')).toBe('Gestionnaire')
     expect(memberName(team.members[0]!)).toBe('tenant@example.com')
   })
 })
@@ -54,7 +56,7 @@ describe('mandats', () => {
   const base: Mandate = { id: 'm', agent_id: 'a', mandator_type: 'landlord', landlord_id: 'l', agency_id: null, status: 'active', created_at: '', updated_at: '' }
   it('noms avec repli quand l\'API ne renvoie ni nom ni e-mail (constaté en live)', () => {
     expect(mandatorName({ ...base, landlord: { id: 'l', first_name: null, last_name: null } })).toBe('Un propriétaire (nom non renseigné)')
-    expect(mandatorName({ ...base, mandator_type: 'agency', agency: { id: 'g', first_name: 'Awa', last_name: null, company_name: 'Immo Plus' } })).toBe('Immo Plus')
+    expect(mandatorName({ ...base, mandator_type: 'agency', agency: { id: 'g', first_name: 'Awa', last_name: null, company_name: 'Bayo Plus' } })).toBe('Bayo Plus')
     expect(agentName({ ...base, agent: { id: 'a', first_name: 'Agathe', last_name: 'Agent', email: 'x@y.z' } })).toBe('Agathe Agent')
     expect(agentName({ ...base, agent: { id: 'a', first_name: null, last_name: null, email: 'x@y.z' } })).toBe('x@y.z')
   })

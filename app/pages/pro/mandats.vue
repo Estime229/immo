@@ -196,7 +196,7 @@ const mineSorted = computed(() => [...mine.value].sort((a, b) => ORDER.indexOf(a
       <template v-if="isMandator && tab === 'agents'">
         <section class="mb-5.5 rounded-2xl border border-[var(--border-subtle)] bg-white p-5.5">
           <h2 class="m-0 text-[15px] font-bold">Mandater un agent</h2>
-          <p class="mb-3.5 mt-1 text-[13.5px] leading-[1.55] text-[var(--text-muted)]">L'agent doit avoir un compte Immo avec le rôle agent. Il reçoit l'invitation et l'accepte depuis son espace.</p>
+          <p class="mb-3.5 mt-1 text-[13.5px] leading-[1.55] text-[var(--text-muted)]">L'agent doit avoir un compte Bayo avec le rôle agent. Il reçoit l'invitation et l'accepte depuis son espace.</p>
           <div class="flex flex-wrap items-start gap-2.5">
             <div class="min-w-0 flex-[1_1_240px]">
               <FormsInput v-model="contact" label="E-mail ou téléphone de l'agent" placeholder="agent@exemple.bj ou 0197000000" :invalid="!!inviteError" :hint="inviteError || undefined" @keydown.enter="inviteAgent" />

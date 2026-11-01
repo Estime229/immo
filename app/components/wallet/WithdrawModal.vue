@@ -112,7 +112,7 @@ async function submit() {
         <div class="mb-4.5 flex items-start gap-2.5 rounded-md border border-info-border bg-info-bg px-3.5 py-3">
           <Info class="mt-px h-4 w-4 flex-none text-info-fg" :stroke-width="1.9" />
           <p class="m-0 text-[12.5px] leading-[1.5] text-info-fg-deep">
-            Retirable : <strong class="font-mono">{{ formatFcfa(available) }}</strong> · minimum <span class="font-mono">{{ WITHDRAW_MIN }}</span> FCFA. Un administrateur Immo valide chaque demande avant le virement.
+            Retirable : <strong class="font-mono">{{ formatFcfa(available) }}</strong> · minimum <span class="font-mono">{{ WITHDRAW_MIN }}</span> FCFA. Un administrateur Bayo valide chaque demande avant le virement.
           </p>
         </div>
 
@@ -133,7 +133,7 @@ async function submit() {
         <p class="mb-[7px] mt-4.5 text-[12.5px] font-bold">Opérateur</p>
         <FormsSegmentedControl v-model="operator" :options="OPERATORS" size="sm" />
 
-        <p class="mb-0 mt-3.5 text-[12.5px] leading-[1.5] text-[var(--text-faint)]">Le montant est retiré de votre solde dès la demande. Si vous l'annulez ou si Immo la refuse, il est recrédité sur votre solde.</p>
+        <p class="mb-0 mt-3.5 text-[12.5px] leading-[1.5] text-[var(--text-faint)]">Le montant est retiré de votre solde dès la demande. Si vous l'annulez ou si Bayo la refuse, il est recrédité sur votre solde.</p>
         <p v-if="shownError" class="mb-0 mt-2.5 text-[12.5px] font-semibold text-danger-fg">{{ shownError }}</p>
         <p v-if="errorMessage" class="mb-0 mt-2.5 text-[13px] font-semibold text-danger-fg">{{ errorMessage }}</p>
       </template>
@@ -158,7 +158,7 @@ async function submit() {
           Votre solde passera de <span class="font-mono font-bold text-[var(--text-primary)]">{{ formatFcfa(available) }}</span> à <span class="font-mono font-bold text-[var(--text-primary)]">{{ formatFcfa(available - amountNum) }}</span> dès l'envoi.
           <template v-if="savingsDrop > 0"> Votre tirelire baissera aussi de <span class="font-mono font-bold text-[var(--text-primary)]">{{ formatFcfa(savingsDrop) }}</span> (elle ne peut pas dépasser le solde).</template>
         </p>
-        <p class="mb-0 mt-2 text-[12.5px] text-[var(--text-faint)]">Vérifiez le numéro : un virement vers un mauvais numéro ne peut pas être récupéré par Immo.</p>
+        <p class="mb-0 mt-2 text-[12.5px] text-[var(--text-faint)]">Vérifiez le numéro : un virement vers un mauvais numéro ne peut pas être récupéré par Bayo.</p>
         <p v-if="errorMessage" class="mb-0 mt-2.5 text-[13px] font-semibold text-danger-fg">{{ errorMessage }}</p>
       </template>
     </template>
@@ -167,7 +167,7 @@ async function submit() {
       <div class="mx-auto grid h-14 w-14 animate-[im-pop_.5s_ease] place-items-center rounded-pill bg-green-600 text-white"><Check class="h-7 w-7" :stroke-width="2.4" /></div>
       <p class="mb-0 mt-4 text-base font-bold"><span class="font-mono">{{ formatFcfa(amountNum) }}</span> vers {{ operatorName }} <span class="font-mono">{{ normalizedPhone }}</span></p>
       <p class="mx-auto mb-0 mt-2 max-w-[340px] text-[13.5px] leading-[1.55] text-[var(--text-muted)]">
-        Le montant a été retiré de votre solde et attend la validation d'Immo. Suivez la demande dans « Demandes de retrait » : vous pouvez l'annuler tant qu'elle est en attente.
+        Le montant a été retiré de votre solde et attend la validation de Bayo. Suivez la demande dans « Demandes de retrait » : vous pouvez l'annuler tant qu'elle est en attente.
       </p>
     </div>
 

@@ -5,7 +5,7 @@ import { spaceAccess, spaceOf } from '../app/utils/roleRoutes'
 
 describe('titres et indexation (aucune page n\'avait de <title>)', () => {
   it('ajoute le nom du site, et un titre complet par défaut', () => {
-    expect(formatTitle('Nous contacter')).toBe('Nous contacter · Immo')
+    expect(formatTitle('Nous contacter')).toBe('Nous contacter · Bayo')
     expect(formatTitle('')).toBe(DEFAULT_TITLE)
     expect(formatTitle(null)).toBe(DEFAULT_TITLE)
   })

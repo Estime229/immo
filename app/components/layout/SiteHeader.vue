@@ -127,8 +127,8 @@ function closeMenu() {
     <!-- Sous lg, la marque et la navigation vivent ailleurs (bannière d'app, barre d'onglets du bas) : l'en-tête ne garde que la pilule de recherche. -->
     <div class="mx-auto flex h-[72px] max-w-[1240px] items-center justify-center gap-[22px] px-4 sm:px-[26px] lg:justify-between">
       <NuxtLink to="/" class="hidden items-center gap-2.5 lg:flex">
-        <img src="/images/logo.png" alt="Immo" class="h-8 w-8 rounded-[9px]" width="32" height="32">
-        <span class="font-display text-[22px] font-extrabold tracking-[-.025em] text-green-900">Immo</span>
+        <img src="/images/logo.png" alt="Bayo" class="h-8 w-8 rounded-[9px]" width="32" height="32">
+        <span class="font-display text-[22px] font-extrabold tracking-[-.025em] text-green-900">Bayo</span>
       </NuxtLink>
 
       <nav class="hidden items-center gap-0.5 rounded-pill border border-sand-300 bg-sand-100 p-1 lg:flex">
@@ -212,7 +212,7 @@ function closeMenu() {
           <House class="mt-0.5 h-[18px] w-[22px] flex-none text-clay-700" :stroke-width="1.9" />
           <span>
             <p class="m-0 text-[14.5px] font-bold">Mettre un bien en location</p>
-            <p class="mb-0 mt-[3px] text-[12.5px] leading-[1.5] text-[var(--text-muted)]">Annonces, bail signé en ligne, loyers suivis et caution séquestrée par Immo pendant le bail.</p>
+            <p class="mb-0 mt-[3px] text-[12.5px] leading-[1.5] text-[var(--text-muted)]">Annonces, bail signé en ligne, loyers suivis et caution séquestrée par Bayo pendant le bail.</p>
           </span>
         </NuxtLink>
         <NuxtLink to="/favoris" class="flex items-center gap-3.5 rounded-md px-3.5 py-3 hover:bg-sand-100" @click="closeMenu">
@@ -261,7 +261,7 @@ function closeMenu() {
   <LayoutSearchSheet v-model:open="searchOpen" />
 
   <!-- Compte (mobile) -->
-  <LayoutBottomSheet v-model:open="accountOpen" :title="auth.user.value ? 'Mon compte' : 'Bienvenue sur Immo'">
+  <LayoutBottomSheet v-model:open="accountOpen" :title="auth.user.value ? 'Mon compte' : 'Bienvenue sur Bayo'">
     <template v-if="auth.user.value">
       <div class="flex items-center gap-3.5 rounded-2xl bg-white p-4 shadow-hairline">
         <CoreAvatar :name="displayName" :avatar-url="auth.user.value?.avatar_url" :size="48" color="var(--color-green-700)" />

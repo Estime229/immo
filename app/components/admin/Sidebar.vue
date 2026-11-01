@@ -26,8 +26,8 @@ const groups = computed(() =>
   <!-- Défilement interne sur ce div, séparé du conteneur sticky (même raison que dans layouts/pro.vue). -->
   <div class="flex h-full flex-col gap-1.5 overflow-y-auto p-3.5">
     <NuxtLink to="/admin" class="flex items-center gap-2.5 px-2 pb-3">
-      <img src="/images/logo.png" alt="Immo" class="h-[30px] w-[30px] rounded-sm" width="30" height="30">
-      <span class="font-display text-xl font-extrabold tracking-[-.025em] text-green-900">Immo <span class="text-xs font-bold tracking-normal text-clay-500">Admin</span></span>
+      <img src="/images/logo.png" alt="Bayo" class="h-[30px] w-[30px] rounded-sm" width="30" height="30">
+      <span class="font-display text-xl font-extrabold tracking-[-.025em] text-green-900">Bayo <span class="text-xs font-bold tracking-normal text-clay-500">Admin</span></span>
     </NuxtLink>
 
     <div class="flex items-center gap-2.5 rounded-lg bg-[var(--surface-page)] p-2.5">

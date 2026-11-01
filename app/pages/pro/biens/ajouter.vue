@@ -524,11 +524,11 @@ const summary = computed(() => {
               <FormsInput v-model="avanceMonths" label="Avance (mois)" type="number" mono />
               <FormsInput v-model="fraisDossier" label="Frais de dossier (FCFA)" type="number" mono />
             </div>
-            <p class="mb-0 mt-2 text-xs text-[var(--text-faint)]">La loi 2022-30 plafonne la caution et l'avance à 3 mois de loyer chacune. La caution est séquestrée par Immo, jamais versée au propriétaire.</p>
+            <p class="mb-0 mt-2 text-xs text-[var(--text-faint)]">La loi 2022-30 plafonne la caution et l'avance à 3 mois de loyer chacune. La caution est séquestrée par Bayo, jamais versée au propriétaire.</p>
           </div>
           <div v-if="hasNightly">
             <p class="mb-2.5 mt-0 text-sm font-bold">Séjours à la nuit</p>
-            <FormsInput v-model="bookingRetentionPercentage" label="Retenue de garantie (%)" type="number" mono placeholder="0" hint="La retenue est gardée par Immo jusqu'au départ du voyageur, puis versée." class="sm:max-w-[260px]" />
+            <FormsInput v-model="bookingRetentionPercentage" label="Retenue de garantie (%)" type="number" mono placeholder="0" hint="La retenue est gardée par Bayo jusqu'au départ du voyageur, puis versée." class="sm:max-w-[260px]" />
             <div class="mt-3.5 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-page)] p-4">
               <FormsToggle v-model="requiresBookingInventory" label="Exiger un état des lieux à l'arrivée" hint="La retenue n'est versée qu'une fois l'état des lieux d'arrivée fait." />
             </div>

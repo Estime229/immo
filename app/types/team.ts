@@ -93,7 +93,8 @@ export interface PublicInvitation {
   owner_name: string
   status: string
   expires_at: string
-  properties: { id: string; name: string }[]
+  /** Absent de `GET /team/invitation/:token` (get-invitation.handler) malgré l'exemple Swagger. */
+  properties?: { id: string; name: string }[]
 }
 
 export interface Membership {

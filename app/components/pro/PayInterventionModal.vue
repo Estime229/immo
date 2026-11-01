@@ -121,7 +121,7 @@ async function submit() {
       </div>
       <p v-if="retainedAmount > 0" class="mb-0 mt-2.5 flex items-start gap-2 text-[12.5px] leading-[1.5] text-[var(--text-muted)]">
         <Lock class="mt-0.5 h-3.5 w-3.5 flex-none" :stroke-width="1.9" />
-        La part retenue est conservée par Immo et versée à l'artisan à la fin de la garantie, sauf si vous signalez un problème d'ici là.
+        La part retenue est conservée par Bayo et versée à l'artisan à la fin de la garantie, sauf si vous signalez un problème d'ici là.
       </p>
 
       <div class="mt-3.5 flex items-center justify-between gap-3 px-1">

@@ -60,7 +60,7 @@ const title = computed(() => (notVerified.value ? "Vérifiez votre identité d'a
     <template v-if="notVerified">
       <div class="flex items-start gap-3">
         <div class="grid h-[46px] w-[46px] flex-none place-items-center rounded-pill bg-green-50 text-green-700"><ShieldCheck class="h-5 w-5" :stroke-width="1.9" /></div>
-        <p class="m-0 text-[13.5px] leading-[1.6] text-[var(--text-muted)]">Pour protéger les propriétaires, seules les personnes dont l'identité a été vérifiée par Immo peuvent candidater. La validation prend généralement moins de 24 h.</p>
+        <p class="m-0 text-[13.5px] leading-[1.6] text-[var(--text-muted)]">Pour protéger les propriétaires, seules les personnes dont l'identité a été vérifiée par Bayo peuvent candidater. La validation prend généralement moins de 24 h.</p>
       </div>
     </template>
 

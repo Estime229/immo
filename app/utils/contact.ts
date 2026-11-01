@@ -16,7 +16,7 @@ export function validateContact(f: ContactForm): Partial<Record<keyof ContactFor
 }
 
 /**
- * Coordonnées publiques d'Immo, affichées sur /contact, dans le pied de page et dans la politique
+ * Coordonnées publiques de Bayo, affichées sur /contact, dans le pied de page et dans la politique
  * de confidentialité — une seule source, pour les corriger partout d'un coup. À CONFIRMER par
  * l'équipe : jamais validées (INTEGRATION-TESTS.md, « coordonnées à confirmer »), et le pied de
  * page affichait une autre adresse (« Boulevard de la Marina ») ; seule celle de /contact est gardée.

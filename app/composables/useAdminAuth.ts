@@ -1,7 +1,7 @@
 import type { Permission } from './useAdminLevels'
 
 /**
- * Session admin, bâtie sur l'auth d'Immo (useApiAuth + useAuthApi + useAuthUser) :
+ * Session admin, bâtie sur l'auth de Bayo (useApiAuth + useAuthApi + useAuthUser) :
  * mêmes jetons, même proxy, même rafraîchissement que les 3 autres espaces.
  * Un compte est « admin » s'il a role === 'admin' ET un admin_level.
  *

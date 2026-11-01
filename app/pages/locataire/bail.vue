@@ -310,7 +310,7 @@ async function writeLandlord() {
               </div>
             </div>
             <p class="mb-0 mt-3 text-xs leading-[1.55] text-[var(--text-faint)]">
-              La caution est versée à Immo, pas au propriétaire : ni lui ni vous ne pouvez y toucher pendant le bail. Sa restitution en fin de bail n'est pas encore gérée dans l'application.
+              La caution est versée à Bayo, pas au propriétaire : ni lui ni vous ne pouvez y toucher pendant le bail. Sa restitution en fin de bail n'est pas encore gérée dans l'application.
             </p>
 
             <div v-if="buffersState === 'loading'" class="mt-4"><DataSkeletonCard :height="90" :lines="0" /></div>

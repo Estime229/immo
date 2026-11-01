@@ -639,7 +639,7 @@ watch(famille, loadFamily)
         <div class="flex flex-wrap items-start gap-3">
           <div class="min-w-0 flex-1">
             <h2 class="m-0 text-[15px] font-bold">Devises et taux de change</h2>
-            <p class="mb-0 mt-1 text-[12.5px] leading-[1.5] text-[var(--text-muted)]">Chaque taux convertit la devise en franc CFA (XOF), la devise de référence d'Immo.</p>
+            <p class="mb-0 mt-1 text-[12.5px] leading-[1.5] text-[var(--text-muted)]">Chaque taux convertit la devise en franc CFA (XOF), la devise de référence de Bayo.</p>
           </div>
           <AdminButton size="sm" @click="openCurrencyCreate">+ Ajouter une devise</AdminButton>
         </div>

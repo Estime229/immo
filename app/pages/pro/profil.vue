@@ -265,7 +265,7 @@ async function toggleChannel(channel: NotificationChannel) {
           </p>
           <div class="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
             <FormsInput v-model="fullName" class="sm:col-span-2" label="Nom légal (pièce d'identité)" placeholder="ex. Koffi Dossou" :hint="filledHint(profile?.full_name_masked)" />
-            <FormsInput v-model="company" class="sm:col-span-2" label="Raison sociale" placeholder="ex. Agence Immo Cotonou" :hint="filledHint(profile?.company_masked)" />
+            <FormsInput v-model="company" class="sm:col-span-2" label="Raison sociale" placeholder="ex. Agence Bayo Cotonou" :hint="filledHint(profile?.company_masked)" />
             <FormsInput v-model="ifu" label="IFU" placeholder="13 chiffres" mono :hint="filledHint(profile?.ifu_masked)" />
             <FormsInput v-model="rccm" label="RCCM" placeholder="ex. RB/COT/25 A 1234" mono :hint="filledHint(profile?.rccm_masked)" />
           </div>

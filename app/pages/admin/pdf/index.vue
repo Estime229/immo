@@ -296,7 +296,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onBeforeUnload)
             <h2 class="m-0 text-[15px] font-bold">Identité</h2>
             <p class="mb-4 mt-1 text-[12.5px] text-[var(--text-muted)]">Ce qui apparaît en tête et en pied de chaque document.</p>
             <div class="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
-              <AdminInput v-model="form.company_name" label="Nom de l'entreprise" placeholder="Ex. Immo Bénin SARL" />
+              <AdminInput v-model="form.company_name" label="Nom de l'entreprise" placeholder="Ex. Bayo Bénin SARL" />
               <AdminInput v-model="form.company_phone" label="Téléphone" placeholder="Ex. +229 01 97 00 00 00" />
               <div class="sm:col-span-2">
                 <AdminInput v-model="form.company_address" label="Adresse" placeholder="Ex. Cotonou, Bénin" />

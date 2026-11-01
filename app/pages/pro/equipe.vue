@@ -41,7 +41,8 @@ async function load() {
   registry.value = reg.value
   team.value = my.status === 'fulfilled' ? my.value : null
   presets.value = pre.status === 'fulfilled' ? pre.value : []
-  properties.value = props.status === 'fulfilled' && props.value ? props.value.data.map(p => ({ id: p.id, name: p.name })) : []
+  // Un logement sans immeuble remonte comme un bien « virtuel » (id = id du logement) : l'API le refuse ensuite à l'invitation.
+  properties.value = props.status === 'fulfilled' && props.value ? props.value.data.filter(p => !('_virtual' in p)).map(p => ({ id: p.id, name: p.name })) : []
   memberships.value = mem.status === 'fulfilled' ? mem.value : []
   state.value = my.status === 'rejected' && canManage.value ? 'error' : 'ready'
 }

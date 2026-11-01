@@ -122,7 +122,7 @@ function firstPhoto(p: PropertySearchResult) {
           <div v-if="p.is_suspended" class="flex items-start gap-2 border-b border-danger-border bg-danger-bg px-5 py-2.5">
             <TriangleAlert class="mt-px h-4 w-4 flex-none text-danger-fg" :stroke-width="1.9" />
             <div class="min-w-0">
-              <p class="m-0 text-xs font-bold text-danger-fg">Bien suspendu par Immo</p>
+              <p class="m-0 text-xs font-bold text-danger-fg">Bien suspendu par Bayo</p>
               <p v-if="p.suspended_reason" class="mb-0 mt-0.5 text-[11.5px] text-danger-fg-deep">{{ p.suspended_reason }}</p>
             </div>
           </div>

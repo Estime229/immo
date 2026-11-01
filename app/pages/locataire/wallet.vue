@@ -77,7 +77,7 @@ const depositsTotal = computed(() => deposits.value.reduce((sum, d) => sum + d.a
             <h2 class="m-0 text-[15px] font-bold">Cautions séquestrées</h2>
             <span v-if="deposits.length > 1" class="font-mono text-[13px] font-bold text-clay-700">{{ formatFcfaShort(depositsTotal) }}</span>
           </div>
-          <p class="mb-2 mt-1 text-xs text-[var(--text-faint)]">Détenues par Immo, hors de votre solde. Leur restitution en fin de bail n'est pas encore gérée dans l'application.</p>
+          <p class="mb-2 mt-1 text-xs text-[var(--text-faint)]">Détenues par Bayo, hors de votre solde. Leur restitution en fin de bail n'est pas encore gérée dans l'application.</p>
           <DataSkeletonCard v-if="leasesBlock.state.value === 'loading'" :height="46" :lines="0" />
           <p v-else-if="leasesBlock.state.value === 'error'" class="m-0 py-2 text-[13px] font-semibold text-danger-fg">
             Vos baux n'ont pas pu être chargés. <button type="button" class="font-bold underline" @click="leasesBlock.reload()">Réessayer</button>

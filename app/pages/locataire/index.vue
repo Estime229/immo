@@ -2,6 +2,8 @@
 import { ArrowRight, BedDouble, CalendarDays, ChevronRight, ClipboardCheck, FileSignature, Home, Megaphone, MessageSquare, Search, Wallet as WalletIcon } from '@lucide/vue'
 import type { Component } from 'vue'
 import type { BookingSummary } from '~/types/tenant'
+import type { GuideStep } from '~/components/layout/GuideChecklist.vue'
+import { verificationLink } from '~/utils/kycStatus'
 import { ApiRequestError } from '~/utils/authenticatedFetcher'
 import { errorText } from '~/utils/apiErrors'
 import { bookingPhase, PHASE_LABEL, PHASE_TONE } from '~/utils/bookings'
@@ -11,6 +13,7 @@ import { buildActivityFeed, buildNextSteps, findLateLeaseInvoice, inventorySignS
 definePageMeta({ layout: 'locataire' })
 
 const wallet = useTenantWallet()
+const { canAct: identityVerified } = useVerification()
 const { openPay } = usePaymentModal()
 
 /** Explication complète (solde vs tirelire) montrée une fois sur le tableau de bord, puis
@@ -52,6 +55,18 @@ onMounted(() => {
     signalsBlock.load(),
     notificationsBlock.load()
   ])
+})
+
+/* ---- Parcours « Bien démarrer » : chaque étape se coche d'après les données réelles ---- */
+const guideReady = computed(() => [leasesBlock.state.value, wallet.state.value, bookingsBlock.state.value, housingRequestsBlock.state.value].every(s => s === 'success' || s === 'empty'))
+const guideSteps = computed<GuideStep[]>(() => {
+  const activity = bookingsBlock.items.value.length + housingRequestsBlock.items.value.length + leasesBlock.leases.value.length
+  return [
+    { key: 'kyc', title: 'Vérifier mon identité', text: "Une pièce d'identité suffit pour visiter, candidater et réserver.", to: verificationLink('/locataire'), cta: 'Vérifier', done: identityVerified.value },
+    { key: 'wallet', title: 'Alimenter mon wallet', text: 'Le loyer et la caution se paient depuis votre wallet, par Mobile Money.', to: '/locataire/wallet', cta: 'Mon wallet', done: wallet.balanceTotal.value > 0 || leasesBlock.leases.value.length > 0 },
+    { key: 'search', title: 'Trouver un logement', text: 'Cherchez, visitez, puis candidatez ou réservez.', to: '/recherche', cta: 'Chercher', done: activity > 0 },
+    { key: 'lease', title: 'Signer mon bail', text: "Le bail et l'état des lieux se signent dans l'application.", to: '/locataire/bail', cta: 'Mon bail', done: leasesBlock.leases.value.length > 0 }
+  ]
 })
 
 function formatDate(iso: string) {
@@ -188,6 +203,7 @@ function retryActivity() {
 <template>
   <div class="@container animate-[im-fade_.3s_ease_backwards]">
     <LayoutKycNotice space="locataire" />
+    <LayoutGuideChecklist space="locataire" :steps="guideSteps" :ready="guideReady" />
     <FeedbackAlertBanner v-if="lateInfo" tone="danger" action-label="Payer maintenant" class="mb-5" @action="payLateLease">
       {{ dashAlert }}
     </FeedbackAlertBanner>

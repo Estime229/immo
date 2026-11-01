@@ -8,7 +8,7 @@ const GUIDE_CARDS = [
   {
     icon: Lock,
     title: 'La caution séquestrée',
-    text: "Payée à l'entrée, elle est détenue par Immo pendant tout le bail : ni vous ni le propriétaire n'y avez accès. Sa restitution en fin de bail, après l'état des lieux de sortie, n'est pas encore gérée dans l'application.",
+    text: "Payée à l'entrée, elle est détenue par Bayo pendant tout le bail : ni vous ni le propriétaire n'y avez accès. Sa restitution en fin de bail, après l'état des lieux de sortie, n'est pas encore gérée dans l'application.",
     link: { label: 'Mes cautions', to: '/locataire/wallet' }
   },
   {
@@ -34,6 +34,7 @@ const GUIDE_CARDS = [
 
 <template>
   <div class="grid max-w-[880px] animate-[im-fade_.3s_ease_backwards] grid-cols-1 gap-4.5 sm:grid-cols-2">
+    <LayoutGuideRestore space="locataire" home="/locataire" class="sm:col-span-2" />
     <section v-for="g in GUIDE_CARDS" :key="g.title" class="flex flex-col rounded-2xl border border-[var(--border-subtle)] bg-white p-5.5">
       <div class="grid h-[46px] w-[46px] place-items-center rounded-pill bg-green-50 text-green-700"><component :is="g.icon" class="h-5 w-5" :stroke-width="1.9" /></div>
       <h2 class="mb-0 mt-3.5 text-[15px] font-bold">{{ g.title }}</h2>

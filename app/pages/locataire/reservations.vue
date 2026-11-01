@@ -187,7 +187,7 @@ async function downloadReceipt(b: BookingSummary) {
       <p v-if="actionError" class="mb-3.5 mt-0 rounded-md border border-danger-border bg-danger-bg px-3.5 py-2.5 text-[13px] font-semibold text-danger-fg">{{ actionError }}</p>
       <div v-if="!rows.length" class="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-[var(--border-default)] bg-white px-4 py-10 text-center">
         <div class="grid h-[46px] w-[46px] place-items-center rounded-pill bg-green-50 text-green-700"><CalendarDays class="h-5 w-5" :stroke-width="1.9" /></div>
-        <p class="m-0 text-[13.5px] text-[var(--text-muted)]">{{ block.items.value.length ? TABS.find(t => t.key === tab)?.empty : 'Aucune réservation pour l\'instant. Les séjours à la nuit réservés sur Immo apparaissent ici, avec leur reçu.' }}</p>
+        <p class="m-0 text-[13.5px] text-[var(--text-muted)]">{{ block.items.value.length ? TABS.find(t => t.key === tab)?.empty : 'Aucune réservation pour l\'instant. Les séjours à la nuit réservés sur Bayo apparaissent ici, avec leur reçu.' }}</p>
         <NuxtLink v-if="tab === 'upcoming' || tab === 'pay'" to="/recherche?mode=nuit" class="inline-flex items-center gap-1.5 rounded-pill border border-[var(--border-default)] bg-white px-4 py-2 text-[13px] font-bold text-sand-900"><Search class="h-4 w-4" :stroke-width="1.9" />Trouver un logement à la nuit</NuxtLink>
       </div>
 
@@ -244,7 +244,7 @@ async function downloadReceipt(b: BookingSummary) {
         <div v-if="b.retained_amount" class="mt-3.5 flex items-start gap-2.5 rounded-md border border-[var(--border-escrow)] bg-[var(--surface-escrow)] px-3.5 py-2.5">
           <Lock class="mt-px h-4 w-4 flex-none text-clay-700" :stroke-width="1.9" />
           <p class="m-0 text-[12.5px] text-clay-900">
-            <strong class="font-mono">{{ formatFcfaShort(Number(b.retained_amount)) }}</strong> gardés par Immo jusqu'à votre départ{{ b.retention_released_at ? ` — versés à l'hôte le ${formatDate(b.retention_released_at)}` : '' }}<template v-if="b.unit?.requires_booking_inventory && !b.retention_released_at">, après l'état des lieux d'arrivée</template>.
+            <strong class="font-mono">{{ formatFcfaShort(Number(b.retained_amount)) }}</strong> gardés par Bayo jusqu'à votre départ{{ b.retention_released_at ? ` — versés à l'hôte le ${formatDate(b.retention_released_at)}` : '' }}<template v-if="b.unit?.requires_booking_inventory && !b.retention_released_at">, après l'état des lieux d'arrivée</template>.
           </p>
         </div>
 
@@ -266,7 +266,7 @@ async function downloadReceipt(b: BookingSummary) {
           <button v-if="phaseOf(b) === 'upcoming'" type="button" class="text-[12.5px] font-semibold text-[var(--text-muted)] underline" @click="cancelHelpId = cancelHelpId === b.id ? null : b.id">Annuler ce séjour ?</button>
         </div>
         <p v-if="cancelHelpId === b.id" class="mb-0 mt-2 rounded-md bg-sand-100 px-3.5 py-2.5 text-[12.5px] text-[var(--text-secondary)]">
-          Un séjour déjà payé ne s'annule pas encore depuis Immo. Écrivez à l'hôte pour convenir d'une annulation et d'un éventuel remboursement.
+          Un séjour déjà payé ne s'annule pas encore depuis Bayo. Écrivez à l'hôte pour convenir d'une annulation et d'un éventuel remboursement.
         </p>
       </article>
     </template>
