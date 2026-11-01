@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cityCenter, distanceKm, focusCluster, formatCoords, preciseLocation, resolveLocation, roundCoords } from '../app/utils/geo'
+import { cityCenter, distanceKm, focusCluster, formatCoords, preciseLocation, rankCities, resolveLocation, roundCoords } from '../app/utils/geo'
 
 describe('preciseLocation', () => {
   it('accepte un point GPS au Bénin, en chaîne ou en nombre', () => {
@@ -62,5 +62,15 @@ describe('formatCoords / roundCoords', () => {
   it('arrondit à 5 décimales (≈ 1 m) avant envoi et affichage', () => {
     expect(roundCoords({ lat: 6.365123456, lng: 2.418765432 })).toEqual({ lat: 6.36512, lng: 2.41877 })
     expect(formatCoords({ lat: 6.3601, lng: 2.4102 })).toBe('6.36010, 2.41020')
+  })
+})
+
+describe('rankCities', () => {
+  const cities = ['Abomey', 'Adjarra', 'Cotonou', 'Kandi', 'Porto-Novo', 'Sèmè-Podji'].map(name => ({ name }))
+  it('villes avec annonces d\'abord, puis grandes villes, puis alphabet', () => {
+    expect(rankCities(cities, ['Kandi', 'Porto-Novo', 'Kandi']).map(c => c.name)).toEqual(['Kandi', 'Porto-Novo', 'Cotonou', 'Sèmè-Podji', 'Abomey', 'Adjarra'])
+  })
+  it('compare sans accents ni casse', () => {
+    expect(rankCities(cities, ['SEME PODJI'])[0]!.name).toBe('Sèmè-Podji')
   })
 })

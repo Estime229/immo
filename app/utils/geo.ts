@@ -52,8 +52,29 @@ const CITY_CENTERS: Record<string, GeoPoint> = {
   'kandi': { lat: 11.1342, lng: 2.9386 }
 }
 
-function normalizeCity(name: string) {
+/** « Sèmè-Podji », « seme podji » → « seme-podji » : clé de comparaison et de recherche. */
+export function normalizeCity(name: string) {
   return name.normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLowerCase().replace(/\s+/g, '-')
+}
+
+/** Grandes villes, de la plus demandée à la moins demandée. */
+const MAIN_CITIES = ['cotonou', 'abomey-calavi', 'porto-novo', 'parakou', 'seme-podji', 'ouidah', 'bohicon', 'abomey', 'natitingou', 'djougou', 'lokossa', 'grand-popo']
+
+/**
+ * Le référentiel compte les 77 communes du Bénin (01/11/2026) : impossible de toutes les mettre
+ * en avant. Ordre : celles qui ont le plus d'annonces, puis les grandes villes, puis l'alphabet.
+ */
+export function rankCities<T extends { name: string }>(cities: T[], listingCityNames: string[]): T[] {
+  const counts = new Map<string, number>()
+  for (const n of listingCityNames) counts.set(normalizeCity(n), (counts.get(normalizeCity(n)) ?? 0) + 1)
+  const mainRank = (c: T) => {
+    const i = MAIN_CITIES.indexOf(normalizeCity(c.name))
+    return i === -1 ? MAIN_CITIES.length : i
+  }
+  return [...cities].sort((a, b) =>
+    (counts.get(normalizeCity(b.name)) ?? 0) - (counts.get(normalizeCity(a.name)) ?? 0)
+    || mainRank(a) - mainRank(b)
+    || a.name.localeCompare(b.name, 'fr'))
 }
 
 export function toCoordinate(v: string | number | null | undefined): number | null {

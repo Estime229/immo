@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import type { Component } from 'vue'
-import { ArrowRight, CalendarDays, Check, ChevronLeft, ChevronRight, ClipboardCheck, Moon, Search, ShieldCheck, Smartphone } from '@lucide/vue'
+import { ArrowRight, CalendarDays, Check, ChevronLeft, ChevronRight, ClipboardCheck, MapPin, Moon, Search, ShieldCheck, Smartphone } from '@lucide/vue'
 import type { PropertySearchResult } from '~/types/property'
 import { flattenSearchResults, type ListingCard } from '~/utils/propertyListing'
 import { classifyRental, mapLimited, type RentalMode } from '~/utils/rentalMode'
 import { buildSearchQuery, digitsOnly } from '~/utils/searchPill'
+import { normalizeCity, rankCities } from '~/utils/geo'
 
 const { photos, formatFcfaShort } = useProperties()
 const searchApi = usePropertySearchApi()
@@ -29,7 +30,7 @@ function runSearch() {
   navigateTo({ path: '/recherche', query: buildSearchQuery({ q: query.value, city: cityName.value, budget: budget.value, mode: 'tous' }) })
 }
 
-const popularChips = computed(() => cities.value.slice(0, 4).map(c => ({ label: `Logements à ${c.name}`, city: c.name })))
+const popularChips = computed(() => rankedCities.value.slice(0, 4).map(c => ({ label: `Logements à ${c.name}`, city: c.name })))
 function pickPopular(chip: { city: string }) {
   navigateTo({ path: '/recherche', query: { city: chip.city } })
 }
@@ -69,14 +70,10 @@ const CATEGORY_DEFS = [
 interface CategoryTile { code: string; label: string; empty: boolean; unitTypeId: string }
 const categories = ref<CategoryTile[]>([])
 const categoriesLoading = ref(true)
-/** Identifiant de chaque code UNIT_TYPE connu — sert aussi aux idées de location plus bas. */
-const unitTypeIds = ref<Record<string, string>>({})
-
 async function loadCategories() {
   categoriesLoading.value = true
   try {
     const unitTypes = await refData.fetchRef('UNIT_TYPE')
-    unitTypeIds.value = Object.fromEntries(unitTypes.map(u => [u.code, u.id]))
     const results = await Promise.all(CATEGORY_DEFS.map(async def => {
       const entry = unitTypes.find(u => u.code === def.code)
       if (!entry) return { ...def, count: 0 as number | null, unitTypeId: '' }
@@ -119,6 +116,8 @@ const listingsError = ref(false)
  */
 const LISTING_LIMIT = 30
 const rentalModeCache = useState<Record<string, RentalMode>>('homeRentalModes', () => ({}))
+/** Toutes les annonces publiées tiennent dans les 30 chargées : les comptes par ville sont exacts. */
+const catalogComplete = ref(false)
 
 async function loadListings() {
   listingsLoading.value = true
@@ -126,6 +125,7 @@ async function loadListings() {
   listingsError.value = false
   try {
     const res = await searchApi.search({ limit: LISTING_LIMIT, sort: 'newest' })
+    catalogComplete.value = res.total <= LISTING_LIMIT
     const properties = (res.data as PropertySearchResult[]).filter((p): p is PropertySearchResult => !('_virtual' in p))
     await loadRentalModes(flattenSearchResults(properties))
   } catch {
@@ -316,27 +316,55 @@ async function onFavorite(l: ListingCard) {
 }
 
 /*
- * ---- Idées de location — chaque lien est une vraie recherche (ville du référentiel + mode ou type de
- * logement), lue par /recherche. Avant : dix villes et sous-titres écrits en dur (« bord de mer »…),
- * et un clic qui ne cherchait que le nom de la ville dans le texte des annonces.
+ * ---- Explorer par ville — suit le mode choisi pour la page (plus d'onglets qui mélangeaient durée
+ * et type de logement). Chaque carte dit ce qu'on trouvera en cliquant : nombre de logements et
+ * prix de départ, tirés des annonces chargées plus haut. Une ville sans annonce n'envoie pas sur
+ * une recherche vide : elle propose aux propriétaires d'y publier.
  */
-type IdeaKey = 'nuit' | 'mois' | 'studio' | 'maison'
-const IDEA_TABS: { value: IdeaKey; label: string; kind: string }[] = [
-  { value: 'nuit', label: 'À la nuit', kind: 'Logements à la nuit' },
-  { value: 'mois', label: 'Au mois', kind: 'Logements au mois' },
-  { value: 'studio', label: 'Studios', kind: 'Studios' },
-  { value: 'maison', label: 'Maisons', kind: 'Maisons' }
-]
-/** Les onglets « type » n'apparaissent que si le code existe dans le référentiel UNIT_TYPE. */
-const ideaTabs = computed(() => IDEA_TABS.filter(t => t.value === 'nuit' || t.value === 'mois' || !!unitTypeIds.value[t.value]))
-const ideaTab = ref<string>('nuit')
-const ideaKind = computed(() => IDEA_TABS.find(t => t.value === ideaTab.value)?.kind ?? '')
-/** Pictogramme des cartes de villes, qui suit l'onglet : lune / calendrier pour le mode, plan pour le type. */
-const ideaIcon = computed(() => (ideaTab.value === 'nuit' || ideaTab.value === 'mois' ? RENTAL_META[ideaTab.value].icon : null))
-function ideaLink(city: string) {
-  const t = ideaTab.value as IdeaKey
-  if (t === 'nuit' || t === 'mois') return { path: '/recherche', query: { city, mode: t } }
-  return { path: '/recherche', query: { city, unit_type_id: unitTypeIds.value[t] } }
+const rankedCities = computed(() => rankCities(cities.value, [...rentalUnits.value.nuit, ...rentalUnits.value.mois].map(u => u.cityName).filter(Boolean)))
+interface CityStats { count: number; from: number; otherCount: number }
+function statsByCity(key: RentalKey) {
+  const stats = new Map<string, { count: number; from: number }>()
+  for (const u of rentalUnits.value[key]) {
+    const k = normalizeCity(u.cityName)
+    const s = stats.get(k) ?? { count: 0, from: 0 }
+    stats.set(k, { count: s.count + 1, from: u.price > 0 && (!s.from || u.price < s.from) ? u.price : s.from })
+  }
+  return stats
+}
+const cityStats = computed(() => {
+  const own = statsByCity(activeRental.value)
+  const other = statsByCity(otherRental.value)
+  return (name: string): CityStats => {
+    const k = normalizeCity(name)
+    return { count: own.get(k)?.count ?? 0, from: own.get(k)?.from ?? 0, otherCount: other.get(k)?.count ?? 0 }
+  }
+})
+const exploreCities = computed(() => rankCities(cities.value, rentalUnits.value[activeRental.value].map(u => u.cityName).filter(Boolean)).slice(0, 6))
+/** Le nombre et « pas encore d'annonce » ne sont sûrs que si toutes les annonces publiées ont été chargées. */
+const statsReliable = computed(() => catalogComplete.value && !listingsError.value)
+function cityLink(city: string, mode: RentalKey = activeRental.value) {
+  return { path: '/recherche', query: { city, mode } }
+}
+function plural(n: number, word: string) {
+  return `${n} ${word}${n > 1 ? 's' : ''}`
+}
+const allCitiesOpen = ref(false)
+const citySearch = ref('')
+const cityLetters = computed(() => {
+  const q = normalizeCity(citySearch.value)
+  const groups = new Map<string, { id: string; name: string }[]>()
+  for (const c of [...cities.value].sort((a, b) => a.name.localeCompare(b.name, 'fr'))) {
+    const k = normalizeCity(c.name)
+    if (q && !k.includes(q)) continue
+    const letter = k.charAt(0).toUpperCase()
+    groups.set(letter, [...(groups.get(letter) ?? []), c])
+  }
+  return [...groups].map(([letter, list]) => ({ letter, cities: list }))
+})
+function openAllCities() {
+  citySearch.value = ''
+  allCitiesOpen.value = true
 }
 
 /* ---- Confiance (contenu éditorial, aligné sur ce que l'application fait réellement) ---- */
@@ -596,35 +624,94 @@ const LANDLORD_POINTS = ['Publiez votre bien', 'Loyers encaissés par Mobile Mon
       </div>
     </section>
 
-    <!-- Idées de location : villes du référentiel × mode ou type réel -->
+    <!-- Explorer par ville : suit le mode de la page ; chaque carte dit ce qu'on trouvera en cliquant -->
     <section v-if="cities.length" class="mx-auto max-w-[1240px] px-[26px] pt-14">
-      <div class="mb-5 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <h2 class="m-0 font-display text-title-2 font-bold tracking-title-2">Des idées pour votre prochaine location</h2>
-        <div class="-mx-[26px] overflow-x-auto px-[26px] [scrollbar-width:none] sm:mx-0 sm:px-0 [&::-webkit-scrollbar]:hidden">
-          <FormsSegmentedControl v-model="ideaTab" :options="ideaTabs" size="sm" class="w-max" />
+      <div class="mb-5">
+        <h2 class="m-0 font-display text-title-2 font-bold tracking-title-2">Explorer par ville</h2>
+        <p class="mb-0 mt-1.5 text-[14.5px] leading-[1.5] text-[var(--text-muted)]">
+          Logements {{ activeRental === 'nuit' ? 'à la nuit' : 'au mois' }}, en {{ RENTAL_META[activeRental].eyebrow.toLowerCase() }}.
+          <button type="button" class="cursor-pointer font-bold text-green-700 underline-offset-2 hover:underline" @click="openRentalModal()">Changer</button>
+        </p>
+      </div>
+      <div v-if="rentalLoading" class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div v-for="i in 6" :key="i" :class="{ 'max-sm:hidden': i > 4 }" class="h-[82px] animate-[im-pulse_1.6s_ease-in-out_infinite] rounded-2xl bg-sand-100" />
+      </div>
+      <div v-else class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <template v-for="(c, i) in exploreCities" :key="`${activeRental}-${c.id}`">
+          <!-- Aucune annonce dans ce mode (compte sûr) : pas de lien vers une recherche vide -->
+          <div
+            v-if="statsReliable && !cityStats(c.name).count"
+            :class="{ 'max-sm:hidden': i >= 4 }"
+            class="flex items-center gap-4 rounded-2xl border border-dashed border-[var(--border-default)] p-4"
+          >
+            <span class="grid h-12 w-12 flex-none place-items-center rounded-xl bg-sand-100 text-[var(--text-faint)]">
+              <MapPin class="h-5 w-5" :stroke-width="1.9" />
+            </span>
+            <span class="min-w-0 flex-1">
+              <span class="block truncate text-[16px] font-bold text-[var(--text-secondary)]">{{ c.name }}</span>
+              <NuxtLink v-if="cityStats(c.name).otherCount" :to="cityLink(c.name, otherRental)" class="mt-0.5 inline-flex items-center gap-1 text-[13px] font-semibold text-green-700 hover:underline">
+                {{ plural(cityStats(c.name).otherCount, 'logement') }} {{ otherRental === 'nuit' ? 'à la nuit' : 'au mois' }}<ArrowRight class="h-3.5 w-3.5" :stroke-width="2" />
+              </NuxtLink>
+              <span v-else class="mt-0.5 block truncate text-[13px] text-[var(--text-muted)]">
+                Pas encore d'annonce · <NuxtLink to="/louer" class="font-semibold text-green-700 hover:underline">Publier ici</NuxtLink>
+              </span>
+            </span>
+          </div>
+          <NuxtLink
+            v-else
+            :to="cityLink(c.name)"
+            :class="{ 'max-sm:hidden': i >= 4 }"
+            class="group flex items-center gap-4 rounded-2xl border border-[var(--border-subtle)] bg-white p-4 transition-[border-color,box-shadow] duration-[var(--duration-base)] hover:border-green-600 hover:shadow-card"
+          >
+            <span class="grid h-12 w-12 flex-none place-items-center rounded-xl bg-green-50 text-green-700">
+              <MapPin class="h-5 w-5" :stroke-width="1.9" />
+            </span>
+            <span class="min-w-0 flex-1">
+              <span class="block truncate text-[16px] font-bold text-[var(--text-primary)]">{{ c.name }}</span>
+              <span class="mt-0.5 block text-[13px] leading-[1.4] text-[var(--text-muted)]">
+                {{ statsReliable ? plural(cityStats(c.name).count, 'logement') : 'Voir les logements' }}<template v-if="cityStats(c.name).from"> · dès <strong class="font-bold text-[var(--text-primary)]">{{ formatFcfaShort(cityStats(c.name).from) }}</strong> {{ RENTAL_META[activeRental].suffix }}</template>
+              </span>
+            </span>
+            <span class="grid h-9 w-9 flex-none place-items-center rounded-pill bg-sand-100 text-[var(--text-secondary)] transition-colors group-hover:bg-green-600 group-hover:text-white">
+              <ArrowRight class="h-4 w-4" :stroke-width="1.9" />
+            </span>
+          </NuxtLink>
+        </template>
+      </div>
+      <button
+        v-if="cities.length > exploreCities.length"
+        type="button"
+        class="mt-4 inline-flex cursor-pointer items-center gap-2 rounded-pill border border-[var(--border-default)] bg-white px-5 py-3 text-[14px] font-bold text-[var(--text-primary)] transition-colors hover:border-green-600 hover:text-green-700"
+        @click="openAllCities"
+      >
+        <MapPin class="h-4 w-4" :stroke-width="2" />Toutes les villes ({{ cities.length }})
+      </button>
+    </section>
+
+    <CoreModal :open="allCitiesOpen" title="Toutes les villes" width="720px" @close="allCitiesOpen = false">
+      <p class="mb-3 mt-0 text-[14px] text-[var(--text-muted)]">Logements {{ activeRental === 'nuit' ? 'à la nuit' : 'au mois' }}, dans les {{ cities.length }} communes du Bénin.</p>
+      <label class="sticky top-0 z-10 -mx-1 flex items-center gap-2.5 rounded-pill border border-[var(--border-default)] bg-white px-4 py-3 focus-within:border-green-600">
+        <Search class="h-4 w-4 flex-none text-[var(--text-faint)]" :stroke-width="2" />
+        <input v-model="citySearch" type="search" placeholder="Rechercher une ville…" aria-label="Rechercher une ville" class="w-full min-w-0 border-0 bg-transparent text-[15px] font-semibold text-[var(--text-primary)] outline-none">
+      </label>
+      <p v-if="!cityLetters.length" class="mb-1 mt-6 text-center text-[14px] text-[var(--text-muted)]">Aucune ville ne correspond à « {{ citySearch }} ».</p>
+      <div v-for="g in cityLetters" :key="g.letter" class="mt-4">
+        <p class="m-0 mb-1.5 text-label font-bold uppercase tracking-label text-[var(--text-faint)]">{{ g.letter }}</p>
+        <div class="grid grid-cols-2 gap-1 sm:grid-cols-3">
+          <NuxtLink
+            v-for="c in g.cities"
+            :key="c.id"
+            :to="cityLink(c.name)"
+            :class="statsReliable && !cityStats(c.name).count ? 'text-[var(--text-faint)]' : 'text-[var(--text-secondary)]'"
+            class="flex min-w-0 items-center gap-1.5 rounded-md px-2.5 py-2 text-[14px] font-semibold hover:bg-green-50 hover:text-green-700"
+            @click="allCitiesOpen = false"
+          >
+            <span class="truncate">{{ c.name }}</span>
+            <span v-if="statsReliable && cityStats(c.name).count" class="flex-none rounded-pill bg-green-50 px-1.5 text-[11.5px] font-bold text-green-700">{{ cityStats(c.name).count }}</span>
+          </NuxtLink>
         </div>
       </div>
-      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <NuxtLink
-          v-for="c in cities"
-          :key="`${ideaTab}-${c.id}`"
-          :to="ideaLink(c.name)"
-          class="group flex items-center gap-4 rounded-2xl border border-[var(--border-subtle)] bg-white p-4 transition-[border-color,box-shadow] duration-[var(--duration-base)] hover:border-green-600 hover:shadow-card"
-        >
-          <span class="grid h-12 w-12 flex-none place-items-center rounded-xl bg-green-50 text-green-700">
-            <component :is="ideaIcon" v-if="ideaIcon" class="h-[22px] w-[22px]" :stroke-width="1.9" />
-            <SearchCategoryIcon v-else :code="ideaTab" class="h-9 w-9" />
-          </span>
-          <span class="min-w-0 flex-1">
-            <span class="block truncate text-[16px] font-bold text-[var(--text-primary)]">{{ c.name }}</span>
-            <span class="mt-0.5 block truncate text-[13px] text-[var(--text-muted)]">{{ ideaKind }}</span>
-          </span>
-          <span class="grid h-9 w-9 flex-none place-items-center rounded-pill bg-sand-100 text-[var(--text-secondary)] transition-colors group-hover:bg-green-600 group-hover:text-white">
-            <ArrowRight class="h-4 w-4" :stroke-width="1.9" />
-          </span>
-        </NuxtLink>
-      </div>
-    </section>
+    </CoreModal>
 
     <!-- Confiance : l'argument à gauche, les trois protections en liste à droite -->
     <section class="mx-auto max-w-[1240px] px-[26px] pt-14">

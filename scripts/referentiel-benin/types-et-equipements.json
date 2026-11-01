@@ -1,0 +1,44 @@
+{
+  "source": "Listes complétées pour le marché béninois. Les entrées déjà en base (même code ou même libellé) sont ignorées ; rien n'est modifié ni supprimé.",
+  "PROPERTY_TYPE": [
+    { "code": "concession", "fr": "Concession (cour commune)", "en": "Compound (shared yard)", "icon": "Fence", "sort_order": 8 },
+    { "code": "duplex", "fr": "Villa duplex", "en": "Duplex villa", "icon": "Home", "sort_order": 9 },
+    { "code": "residence_meublee", "fr": "Résidence meublée", "en": "Serviced residence", "icon": "BedDouble", "sort_order": 10 },
+    { "code": "local_commercial", "fr": "Local commercial", "en": "Commercial premises", "icon": "Store", "sort_order": 11 },
+    { "code": "entrepot", "fr": "Entrepôt", "en": "Warehouse", "icon": "Warehouse", "sort_order": 12 }
+  ],
+  "UNIT_TYPE": [
+    { "code": "entree_couchee", "fr": "Entrée-couchée", "en": "Single room with entrance", "sort_order": 0 },
+    { "code": "5_chambres_salon", "fr": "5 Chambres-Salon et +", "en": "5+ Bedrooms-Living", "sort_order": 5 },
+    { "code": "duplex", "fr": "Duplex", "en": "Duplex", "sort_order": 7 },
+    { "code": "bureau", "fr": "Bureau", "en": "Office", "sort_order": 8 },
+    { "code": "boutique", "fr": "Boutique", "en": "Shop", "sort_order": 9 },
+    { "code": "magasin", "fr": "Magasin", "en": "Store", "sort_order": 10 }
+  ],
+  "FEATURE": [
+    { "code": "cuisine_interne", "fr": "Cuisine interne", "en": "Indoor kitchen", "icon": "CookingPot", "category": "ESSENTIAL", "sort_order": 12 },
+    { "code": "douche_interne", "fr": "Douche interne", "en": "Indoor shower", "icon": "ShowerHead", "category": "ESSENTIAL", "sort_order": 13 },
+    { "code": "panneaux_solaires", "fr": "Panneaux solaires", "en": "Solar panels", "icon": "SunMedium", "category": "ESSENTIAL", "sort_order": 14 },
+    { "code": "acces_pmr", "fr": "Accès personnes à mobilité réduite", "en": "Wheelchair access", "icon": "Accessibility", "category": "ESSENTIAL", "sort_order": 15 },
+    { "code": "chauffe_eau", "fr": "Chauffe-eau", "en": "Water heater", "icon": "Flame", "category": "COMFORT", "sort_order": 16 },
+    { "code": "ventilateur", "fr": "Ventilateur au plafond", "en": "Ceiling fan", "icon": "Fan", "category": "COMFORT", "sort_order": 17 },
+    { "code": "carrelage", "fr": "Carrelage", "en": "Tiled floors", "icon": "Grid2x2", "category": "COMFORT", "sort_order": 18 },
+    { "code": "faux_plafond", "fr": "Faux plafond", "en": "False ceiling", "icon": "Layers", "category": "COMFORT", "sort_order": 19 },
+    { "code": "placards", "fr": "Placards", "en": "Built-in wardrobes", "icon": "Archive", "category": "COMFORT", "sort_order": 20 },
+    { "code": "debarras", "fr": "Débarras (magasin)", "en": "Storage room", "icon": "Package", "category": "COMFORT", "sort_order": 21 },
+    { "code": "buanderie", "fr": "Buanderie", "en": "Laundry room", "icon": "WashingMachine", "category": "COMFORT", "sort_order": 22 },
+    { "code": "television", "fr": "Télévision", "en": "Television", "icon": "Tv", "category": "COMFORT", "sort_order": 23 },
+    { "code": "ascenseur", "fr": "Ascenseur", "en": "Elevator", "icon": "ArrowUpDown", "category": "COMFORT", "sort_order": 24 },
+    { "code": "salle_de_sport", "fr": "Salle de sport", "en": "Gym", "icon": "Dumbbell", "category": "COMFORT", "sort_order": 25 },
+    { "code": "portail", "fr": "Portail", "en": "Gate", "icon": "DoorClosed", "category": "SECURITY", "sort_order": 26 },
+    { "code": "cloture", "fr": "Clôture (mur d'enceinte)", "en": "Boundary wall", "icon": "BrickWall", "category": "SECURITY", "sort_order": 27 },
+    { "code": "grilles_protection", "fr": "Grilles de protection", "en": "Window bars", "icon": "Grid3x3", "category": "SECURITY", "sort_order": 28 },
+    { "code": "videosurveillance", "fr": "Vidéosurveillance", "en": "CCTV", "icon": "Cctv", "category": "SECURITY", "sort_order": 29 },
+    { "code": "interphone", "fr": "Interphone", "en": "Intercom", "icon": "PhoneCall", "category": "SECURITY", "sort_order": 30 },
+    { "code": "cour", "fr": "Cour", "en": "Yard", "icon": "Square", "category": "EXTERIOR", "sort_order": 31 },
+    { "code": "jardin", "fr": "Jardin", "en": "Garden", "icon": "Trees", "category": "EXTERIOR", "sort_order": 32 },
+    { "code": "terrasse", "fr": "Terrasse", "en": "Terrace", "icon": "Sun", "category": "EXTERIOR", "sort_order": 33 },
+    { "code": "garage", "fr": "Garage", "en": "Garage", "icon": "Warehouse", "category": "EXTERIOR", "sort_order": 34 },
+    { "code": "route_bitumee", "fr": "Accès par route bitumée ou pavée", "en": "Paved road access", "icon": "Route", "category": "EXTERIOR", "sort_order": 35 }
+  ]
+}

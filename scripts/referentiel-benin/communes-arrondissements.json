@@ -1,0 +1,996 @@
+{
+  "source": "Loi n° 2013-05 du 15/02/2013 (liste annexe des unités administratives locales, sgg.gouv.bj), recoupée avec Wikipédia « Arrondissements of Benin ». Orthographe du texte de loi, accents usuels.",
+  "departements": [
+    {
+      "nom": "Alibori",
+      "communes": [
+        {
+          "nom": "Banikoara",
+          "arrondissements": [
+            "Banikoara",
+            "Founougo",
+            "Gomparou",
+            "Goumori",
+            "Kokey",
+            "Kokiborou",
+            "Ounet",
+            "Sompéroukou",
+            "Soroko",
+            "Toura"
+          ]
+        },
+        {
+          "nom": "Gogounou",
+          "arrondissements": [
+            "Bagou",
+            "Gogounou",
+            "Gounarou",
+            "Ouara",
+            "Sori",
+            "Zougou-Pantrossi"
+          ]
+        },
+        {
+          "nom": "Kandi",
+          "arrondissements": [
+            "Angaradébou",
+            "Bensékou",
+            "Donwari",
+            "Kandi I",
+            "Kandi II",
+            "Kandi III",
+            "Kassakou",
+            "Saah",
+            "Sam",
+            "Sonsoro"
+          ]
+        },
+        {
+          "nom": "Karimama",
+          "arrondissements": [
+            "Birni-Lafia",
+            "Bogo-Bogo",
+            "Karimama",
+            "Kompa",
+            "Monsey"
+          ]
+        },
+        {
+          "nom": "Malanville",
+          "arrondissements": [
+            "Garou",
+            "Guénè",
+            "Madécali",
+            "Malanville",
+            "Toumboutou"
+          ]
+        },
+        {
+          "nom": "Ségbana",
+          "arrondissements": [
+            "Libantè",
+            "Liboussou",
+            "Lougou",
+            "Ségbana",
+            "Sokotindji"
+          ]
+        }
+      ]
+    },
+    {
+      "nom": "Atacora",
+      "communes": [
+        {
+          "nom": "Boukoumbé",
+          "arrondissements": [
+            "Boukoumbé",
+            "Dipoli",
+            "Korontière",
+            "Kossoucoingou",
+            "Manta",
+            "Natta",
+            "Tabota"
+          ]
+        },
+        {
+          "nom": "Cobly",
+          "arrondissements": [
+            "Cobly",
+            "Datori",
+            "Kountori",
+            "Tapoga"
+          ]
+        },
+        {
+          "nom": "Kérou",
+          "arrondissements": [
+            "Brignamaro",
+            "Firou",
+            "Kaobagou",
+            "Kérou"
+          ]
+        },
+        {
+          "nom": "Kouandé",
+          "arrondissements": [
+            "Birni",
+            "Chabi-Couma",
+            "Fô-Tancé",
+            "Guilmaro",
+            "Kouandé",
+            "Oroukayo"
+          ]
+        },
+        {
+          "nom": "Matéri",
+          "arrondissements": [
+            "Dassari",
+            "Gouandé",
+            "Matéri",
+            "Nodi",
+            "Tantéga",
+            "Tchianhoun-Cossi"
+          ]
+        },
+        {
+          "nom": "Natitingou",
+          "arrondissements": [
+            "Kotopounga",
+            "Kouaba",
+            "Kouandata",
+            "Natitingou I",
+            "Natitingou II",
+            "Natitingou III",
+            "Perma",
+            "Péporiyakou",
+            "Tchoumi-Tchoumi"
+          ]
+        },
+        {
+          "nom": "Péhunco",
+          "arrondissements": [
+            "Gnémasson",
+            "Péhunco",
+            "Tobré"
+          ]
+        },
+        {
+          "nom": "Tanguiéta",
+          "arrondissements": [
+            "Cotiakou",
+            "N'Dahonta",
+            "Taiacou",
+            "Tanguiéta",
+            "Tanongou"
+          ]
+        },
+        {
+          "nom": "Toucountouna",
+          "arrondissements": [
+            "Kouarfa",
+            "Tampégré",
+            "Toucountouna"
+          ]
+        }
+      ]
+    },
+    {
+      "nom": "Atlantique",
+      "communes": [
+        {
+          "nom": "Abomey-Calavi",
+          "arrondissements": [
+            "Abomey-Calavi",
+            "Akassato",
+            "Glo-Djigbé",
+            "Godomey",
+            "Hêvié",
+            "Kpanroun",
+            "Ouèdo",
+            "Togba",
+            "Zinvié"
+          ]
+        },
+        {
+          "nom": "Allada",
+          "arrondissements": [
+            "Agbanou",
+            "Ahouannonzoun",
+            "Allada",
+            "Attogon",
+            "Avakpa",
+            "Ayou",
+            "Hinvi",
+            "Lissègazoun",
+            "Lon-Agonmey",
+            "Sékou",
+            "Togoudo",
+            "Tokpa-Avagoudo"
+          ]
+        },
+        {
+          "nom": "Kpomassè",
+          "arrondissements": [
+            "Aganmalomè",
+            "Agbanto",
+            "Agonkanmè",
+            "Dédomè",
+            "Dékanmè",
+            "Kpomassè",
+            "Ségbéya",
+            "Ségbohouè",
+            "Tokpa-Domè"
+          ]
+        },
+        {
+          "nom": "Ouidah",
+          "arrondissements": [
+            "Avlékété",
+            "Djègbadji",
+            "Gakpè",
+            "Houakpè-Daho",
+            "Ouidah I",
+            "Ouidah II",
+            "Ouidah III",
+            "Ouidah IV",
+            "Pahou",
+            "Savi"
+          ]
+        },
+        {
+          "nom": "Sô-Ava",
+          "arrondissements": [
+            "Ahomey-Lokpo",
+            "Dékanmey",
+            "Ganvié I",
+            "Ganvié II",
+            "Houédo-Aguékon",
+            "Sô-Ava",
+            "Vekky"
+          ]
+        },
+        {
+          "nom": "Toffo",
+          "arrondissements": [
+            "Agué",
+            "Colli",
+            "Coussi",
+            "Damè",
+            "Djanglanmè",
+            "Houègbo",
+            "Kpomè",
+            "Sèhouè",
+            "Sey",
+            "Toffo"
+          ]
+        },
+        {
+          "nom": "Tori-Bossito",
+          "arrondissements": [
+            "Avamè",
+            "Azohouè-Aliho",
+            "Azohouè-Cada",
+            "Tori-Bossito",
+            "Tori-Cada",
+            "Tori-Gare"
+          ]
+        },
+        {
+          "nom": "Zè",
+          "arrondissements": [
+            "Adjan",
+            "Dawé",
+            "Djigbé",
+            "Dodji-Bata",
+            "Hêkanmè",
+            "Koundokpoè",
+            "Sèdjè-Dénou",
+            "Sèdjè-Houégoudo",
+            "Tangbo-Djevié",
+            "Yokpo",
+            "Zè"
+          ]
+        }
+      ]
+    },
+    {
+      "nom": "Borgou",
+      "communes": [
+        {
+          "nom": "Bembèrèkè",
+          "arrondissements": [
+            "Bembèrèkè",
+            "Béroubouay",
+            "Bouanri",
+            "Gamia",
+            "Ina"
+          ]
+        },
+        {
+          "nom": "Kalalè",
+          "arrondissements": [
+            "Basso",
+            "Bouca",
+            "Dérassi",
+            "Dunkassa",
+            "Kalalè",
+            "Péonga"
+          ]
+        },
+        {
+          "nom": "N'Dali",
+          "arrondissements": [
+            "Bori",
+            "Gbégourou",
+            "N'Dali",
+            "Ouénou",
+            "Sirarou"
+          ]
+        },
+        {
+          "nom": "Nikki",
+          "arrondissements": [
+            "Biro",
+            "Gnonkourokali",
+            "Nikki",
+            "Ouénou",
+            "Sérékali",
+            "Suya",
+            "Tasso"
+          ]
+        },
+        {
+          "nom": "Parakou",
+          "arrondissements": [
+            "1er arrondissement",
+            "2e arrondissement",
+            "3e arrondissement"
+          ]
+        },
+        {
+          "nom": "Pèrèrè",
+          "arrondissements": [
+            "Gninsy",
+            "Guinagourou",
+            "Kpébié",
+            "Panè",
+            "Pèrèrè",
+            "Sontou"
+          ]
+        },
+        {
+          "nom": "Sinendé",
+          "arrondissements": [
+            "Fô-Bourè",
+            "Sèkèrè",
+            "Sikki",
+            "Sinendé"
+          ]
+        },
+        {
+          "nom": "Tchaourou",
+          "arrondissements": [
+            "Alafiarou",
+            "Bétérou",
+            "Goro",
+            "Kika",
+            "Sanson",
+            "Tchaourou",
+            "Tchatchou"
+          ]
+        }
+      ]
+    },
+    {
+      "nom": "Collines",
+      "communes": [
+        {
+          "nom": "Bantè",
+          "arrondissements": [
+            "Agoua",
+            "Akpassi",
+            "Atokolibé",
+            "Bantè",
+            "Bobè",
+            "Gouka",
+            "Koko",
+            "Lougba",
+            "Pira"
+          ]
+        },
+        {
+          "nom": "Dassa-Zoumè",
+          "arrondissements": [
+            "Akoffodjoulè",
+            "Dassa I",
+            "Dassa II",
+            "Gbaffo",
+            "Kèrè",
+            "Kpingni",
+            "Lèma",
+            "Paouingnan",
+            "Soclogbo",
+            "Tré"
+          ]
+        },
+        {
+          "nom": "Glazoué",
+          "arrondissements": [
+            "Aklampa",
+            "Assanté",
+            "Glazoué",
+            "Gomè",
+            "Kpakpaza",
+            "Magoumi",
+            "Ouèdèmè",
+            "Sokponta",
+            "Thio",
+            "Zaffé"
+          ]
+        },
+        {
+          "nom": "Ouèssè",
+          "arrondissements": [
+            "Challa-Ogoï",
+            "Djègbè",
+            "Gbanlin",
+            "Ikèmon",
+            "Kilibo",
+            "Laminou",
+            "Odougba",
+            "Ouèssè",
+            "Toui"
+          ]
+        },
+        {
+          "nom": "Savalou",
+          "arrondissements": [
+            "Djalloukou",
+            "Doumè",
+            "Gobada",
+            "Kpataba",
+            "Lahotan",
+            "Lèma",
+            "Logozohè",
+            "Monkpa",
+            "Ottola",
+            "Ouèssè",
+            "Savalou-Aga",
+            "Savalou-Agbado",
+            "Savalou-Attakè",
+            "Tchetti"
+          ]
+        },
+        {
+          "nom": "Savè",
+          "arrondissements": [
+            "Adido",
+            "Bèssè",
+            "Boni",
+            "Kaboua",
+            "Offè",
+            "Okpara",
+            "Plateau",
+            "Sakin"
+          ]
+        }
+      ]
+    },
+    {
+      "nom": "Couffo",
+      "communes": [
+        {
+          "nom": "Aplahoué",
+          "arrondissements": [
+            "Aplahoué",
+            "Atomey",
+            "Azovè",
+            "Dekpo",
+            "Godohou",
+            "Kissamey",
+            "Lonkly"
+          ]
+        },
+        {
+          "nom": "Djakotomey",
+          "arrondissements": [
+            "Adjintimey",
+            "Bètoumey",
+            "Djakotomey I",
+            "Djakotomey II",
+            "Gohomey",
+            "Houègamey",
+            "Kinkinhoué",
+            "Kokohoué",
+            "Kpoba",
+            "Sokouhoué"
+          ]
+        },
+        {
+          "nom": "Dogbo",
+          "arrondissements": [
+            "Ayomi",
+            "Dèvè",
+            "Honton",
+            "Lokogohoué",
+            "Madjrè",
+            "Tota",
+            "Totchangni"
+          ]
+        },
+        {
+          "nom": "Klouékanmè",
+          "arrondissements": [
+            "Adjahonmè",
+            "Ahogbèya",
+            "Aya-Hohoué",
+            "Djotto",
+            "Hondjin",
+            "Klouékanmè",
+            "Lanta",
+            "Tchikpé"
+          ]
+        },
+        {
+          "nom": "Lalo",
+          "arrondissements": [
+            "Adoukandji",
+            "Ahodjinnako",
+            "Ahomadégbé",
+            "Banigbé",
+            "Gnizounmè",
+            "Hlassamè",
+            "Lalo",
+            "Lokogba",
+            "Tchito",
+            "Tohou",
+            "Zalli"
+          ]
+        },
+        {
+          "nom": "Toviklin",
+          "arrondissements": [
+            "Adjido",
+            "Avédjin",
+            "Doko",
+            "Houédogli",
+            "Missinko",
+            "Tannou-Gola",
+            "Toviklin"
+          ]
+        }
+      ]
+    },
+    {
+      "nom": "Donga",
+      "communes": [
+        {
+          "nom": "Bassila",
+          "arrondissements": [
+            "Alédjo",
+            "Bassila",
+            "Manigri",
+            "Pénessoulou"
+          ]
+        },
+        {
+          "nom": "Copargo",
+          "arrondissements": [
+            "Anandana",
+            "Copargo",
+            "Pabégou",
+            "Singré"
+          ]
+        },
+        {
+          "nom": "Djougou",
+          "arrondissements": [
+            "Barei",
+            "Bariénou",
+            "Belléfoungou",
+            "Bougou",
+            "Djougou I",
+            "Djougou II",
+            "Djougou III",
+            "Kolocondé",
+            "Onklou",
+            "Partago",
+            "Pélébina",
+            "Sérou"
+          ]
+        },
+        {
+          "nom": "Ouaké",
+          "arrondissements": [
+            "Badjoudè",
+            "Kondé",
+            "Ouaké",
+            "Sèmèrè I",
+            "Sèmèrè II",
+            "Tchalinga"
+          ]
+        }
+      ]
+    },
+    {
+      "nom": "Littoral",
+      "communes": [
+        {
+          "nom": "Cotonou",
+          "arrondissements": [
+            "1er arrondissement",
+            "2e arrondissement",
+            "3e arrondissement",
+            "4e arrondissement",
+            "5e arrondissement",
+            "6e arrondissement",
+            "7e arrondissement",
+            "8e arrondissement",
+            "9e arrondissement",
+            "10e arrondissement",
+            "11e arrondissement",
+            "12e arrondissement",
+            "13e arrondissement"
+          ]
+        }
+      ]
+    },
+    {
+      "nom": "Mono",
+      "communes": [
+        {
+          "nom": "Athiémè",
+          "arrondissements": [
+            "Adohoun",
+            "Atchannou",
+            "Athiémè",
+            "Dédékpoé",
+            "Kpinnou"
+          ]
+        },
+        {
+          "nom": "Bopa",
+          "arrondissements": [
+            "Agbodji",
+            "Badazouin",
+            "Bopa",
+            "Gbakpodji",
+            "Lobogo",
+            "Possotomè",
+            "Yégodoé"
+          ]
+        },
+        {
+          "nom": "Comè",
+          "arrondissements": [
+            "Agatogbo",
+            "Akodéha",
+            "Comè",
+            "Ouèdèmè-Pédah",
+            "Oumako"
+          ]
+        },
+        {
+          "nom": "Grand-Popo",
+          "arrondissements": [
+            "Adjaha",
+            "Agoué",
+            "Avlo",
+            "Djanglanmey",
+            "Gbéhoué",
+            "Grand-Popo",
+            "Sazué"
+          ]
+        },
+        {
+          "nom": "Houéyogbé",
+          "arrondissements": [
+            "Dahé",
+            "Doutou",
+            "Honhoué",
+            "Houéyogbé",
+            "Sè",
+            "Zoungbonou"
+          ]
+        },
+        {
+          "nom": "Lokossa",
+          "arrondissements": [
+            "Agamé",
+            "Houin",
+            "Koudo",
+            "Lokossa",
+            "Ouèdèmè-Adja"
+          ]
+        }
+      ]
+    },
+    {
+      "nom": "Ouémé",
+      "communes": [
+        {
+          "nom": "Adjarra",
+          "arrondissements": [
+            "Adjarra I",
+            "Adjarra II",
+            "Aglogbè",
+            "Honvié",
+            "Malanhoui",
+            "Médédjonou"
+          ]
+        },
+        {
+          "nom": "Adjohoun",
+          "arrondissements": [
+            "Adjohoun",
+            "Akpadanou",
+            "Awonou",
+            "Azowlissè",
+            "Dèmè",
+            "Gangban",
+            "Kodé",
+            "Togbota"
+          ]
+        },
+        {
+          "nom": "Aguégués",
+          "arrondissements": [
+            "Avagbodji",
+            "Houédomè",
+            "Zoungamè"
+          ]
+        },
+        {
+          "nom": "Akpro-Missérété",
+          "arrondissements": [
+            "Akpro-Missérété",
+            "Gomè-Sota",
+            "Katagon",
+            "Vakon",
+            "Zoungbomè"
+          ]
+        },
+        {
+          "nom": "Avrankou",
+          "arrondissements": [
+            "Atchoukpa",
+            "Avrankou",
+            "Djomon",
+            "Gbozounmè",
+            "Kouti",
+            "Ouanho",
+            "Sado"
+          ]
+        },
+        {
+          "nom": "Bonou",
+          "arrondissements": [
+            "Affamè",
+            "Atchonsa",
+            "Bonou",
+            "Damè-Wogon",
+            "Hounviguè"
+          ]
+        },
+        {
+          "nom": "Dangbo",
+          "arrondissements": [
+            "Dangbo",
+            "Dékin",
+            "Gbéko",
+            "Houédomey",
+            "Hozin",
+            "Késsounou",
+            "Zounguè"
+          ]
+        },
+        {
+          "nom": "Porto-Novo",
+          "arrondissements": [
+            "1er arrondissement",
+            "2e arrondissement",
+            "3e arrondissement",
+            "4e arrondissement",
+            "5e arrondissement"
+          ]
+        },
+        {
+          "nom": "Sèmè-Podji",
+          "arrondissements": [
+            "Agblangandan",
+            "Aholouyèmè",
+            "Djèrègbé",
+            "Ekpè",
+            "Sèmè-Podji",
+            "Tohouè"
+          ]
+        }
+      ]
+    },
+    {
+      "nom": "Plateau",
+      "communes": [
+        {
+          "nom": "Adja-Ouèrè",
+          "arrondissements": [
+            "Adja-Ouèrè",
+            "Ikpinlè",
+            "Kpoulou",
+            "Massè",
+            "Oko-Akarè",
+            "Totonnoukon"
+          ]
+        },
+        {
+          "nom": "Ifangni",
+          "arrondissements": [
+            "Banigbé",
+            "Daagbé",
+            "Ifangni",
+            "Ko-Koumolou",
+            "Lagbé",
+            "Tchaada"
+          ]
+        },
+        {
+          "nom": "Kétou",
+          "arrondissements": [
+            "Adakplamé",
+            "Idigny",
+            "Kétou",
+            "Kpankou",
+            "Odometa",
+            "Okpometa"
+          ]
+        },
+        {
+          "nom": "Pobè",
+          "arrondissements": [
+            "Ahoyéyé",
+            "Igana",
+            "Issaba",
+            "Pobè",
+            "Towé"
+          ]
+        },
+        {
+          "nom": "Sakété",
+          "arrondissements": [
+            "Aguidi",
+            "Ita-Djèbou",
+            "Sakété I",
+            "Sakété II",
+            "Takon",
+            "Yoko"
+          ]
+        }
+      ]
+    },
+    {
+      "nom": "Zou",
+      "communes": [
+        {
+          "nom": "Abomey",
+          "arrondissements": [
+            "Agbokpa",
+            "Dètohou",
+            "Djègbè",
+            "Hounli",
+            "Sèhoun",
+            "Vidolè",
+            "Zounzonmè"
+          ]
+        },
+        {
+          "nom": "Agbangnizoun",
+          "arrondissements": [
+            "Adanhondjigon",
+            "Adingnigon",
+            "Agbangnizoun",
+            "Kinta",
+            "Kpota",
+            "Lissazounmè",
+            "Sahé",
+            "Sinwé",
+            "Tanvè",
+            "Zoungoundo"
+          ]
+        },
+        {
+          "nom": "Bohicon",
+          "arrondissements": [
+            "Agongointo",
+            "Avogbanna",
+            "Bohicon I",
+            "Bohicon II",
+            "Gnidjazoun",
+            "Lissèzoun",
+            "Ouassaho",
+            "Passagon",
+            "Saclo",
+            "Sodohomè"
+          ]
+        },
+        {
+          "nom": "Covè",
+          "arrondissements": [
+            "Adogbé",
+            "Gounli",
+            "Houéko",
+            "Houin-Hounso",
+            "Laïnta-Cogbé",
+            "Naogon",
+            "Soli",
+            "Zogba"
+          ]
+        },
+        {
+          "nom": "Djidja",
+          "arrondissements": [
+            "Agondji",
+            "Agouna",
+            "Dan",
+            "Djidja",
+            "Dohouimè",
+            "Gobaix",
+            "Houto",
+            "Monsourou",
+            "Mougnon",
+            "Oumbègamè",
+            "Setto",
+            "Zounkon"
+          ]
+        },
+        {
+          "nom": "Ouinhi",
+          "arrondissements": [
+            "Dasso",
+            "Ouinhi",
+            "Sagon",
+            "Tohouès"
+          ]
+        },
+        {
+          "nom": "Za-Kpota",
+          "arrondissements": [
+            "Allahé",
+            "Assanlin",
+            "Houngomè",
+            "Kpakpamè",
+            "Kpozoun",
+            "Za-Kpota",
+            "Za-Tanta",
+            "Zèko"
+          ]
+        },
+        {
+          "nom": "Zagnanado",
+          "arrondissements": [
+            "Agonli-Houégbo",
+            "Banamè",
+            "Don-Tan",
+            "Dovi",
+            "Kpédékpo",
+            "Zagnanado"
+          ]
+        },
+        {
+          "nom": "Zogbodomey",
+          "arrondissements": [
+            "Akiza",
+            "Avlamè",
+            "Cana I",
+            "Cana II",
+            "Domè",
+            "Koussoukpa",
+            "Kpokissa",
+            "Massi",
+            "Tanwé-Hessou",
+            "Zogbodomey",
+            "Zoukou"
+          ]
+        }
+      ]
+    }
+  ]
+}
