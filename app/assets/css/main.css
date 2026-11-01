@@ -173,6 +173,17 @@ body {
   font-family: var(--font-body);
 }
 
+@layer base {
+  /* WebKit (Safari, et tout navigateur sur iPhone) : le texte d'une option plus longue que la
+     liste déroulante déborde quand même et élargit la page, qui s'affiche alors dézoomée
+     (constaté sur /pro/tarifs : 522 px de contenu pour un écran de 414). Les listes à choix
+     multiples défilent, elles ne sont pas concernées. */
+  select:not([multiple]):not([size]) {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
 @keyframes im-fade {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: none; }
