@@ -2,6 +2,7 @@
 import { Camera, ImagePlus, Loader, Star, Trash2 } from '@lucide/vue'
 import { ApiRequestError } from '~/utils/authenticatedFetcher'
 import { errorText } from '~/utils/apiErrors'
+import { VERIFICATION_STAGE_BADGE, verificationLink } from '~/utils/kycStatus'
 import { prepareAvatarUpload } from '~/utils/uploadFile'
 import { useArtisanProfile } from '~/composables/useArtisanProfile'
 
@@ -83,6 +84,11 @@ const displayName = computed(() => {
   return `${u.first_name ?? ''} ${u.last_name ?? ''}`.trim() || u.email
 })
 
+const verification = useVerification()
+onMounted(() => { void verification.refreshSubmitted() })
+const kycBadge = computed(() => VERIFICATION_STAGE_BADGE[verification.stage.value])
+const kycLink = verificationLink('/artisan/profil')
+
 /* ---- Photo de profil ---- */
 const avatarUploading = ref(false)
 const avatarError = ref('')
@@ -163,15 +169,14 @@ async function removePhoto(mediaId: string) {
       <button type="button" class="ml-2 font-bold underline" @click="artisan.load">Réessayer</button>
     </FeedbackAlertBanner>
 
-    <div v-else-if="tab === 'infos'" class="flex max-w-[680px] flex-col gap-4.5">
-      <LayoutAccountNameForm />
-
-      <section class="rounded-2xl border border-[var(--border-subtle)] bg-white p-5.5">
-        <div class="flex items-center gap-4 border-b border-sand-200 pb-4.5">
-          <div class="relative flex-none">
-            <CoreAvatar :name="displayName" :avatar-url="currentUser?.avatar_url" :size="64" />
+    <!-- Informations : résumé à gauche (fixe sur grand écran), formulaires à droite -->
+    <div v-else-if="tab === 'infos'" class="grid max-w-[680px] grid-cols-1 items-start gap-4.5 xl:max-w-[1100px] xl:grid-cols-[320px_minmax(0,1fr)]">
+      <section class="rounded-2xl border border-[var(--border-subtle)] bg-white p-5.5 xl:sticky xl:top-[94px]">
+        <div class="flex flex-col items-center text-center">
+          <div class="relative">
+            <CoreAvatar :name="displayName" :avatar-url="currentUser?.avatar_url" :size="88" />
             <label
-              class="absolute -bottom-1 -right-1 grid h-8 w-8 cursor-pointer place-items-center rounded-pill border-2 border-white bg-green-600 text-white shadow-card"
+              class="absolute bottom-0 right-0 grid h-8 w-8 cursor-pointer place-items-center rounded-pill border-2 border-white bg-green-600 text-white shadow-card"
               :class="{ 'pointer-events-none opacity-60': avatarUploading }"
               :aria-label="avatarUploading ? 'Envoi de la photo' : 'Changer la photo de profil'"
             >
@@ -180,64 +185,88 @@ async function removePhoto(mediaId: string) {
               <input ref="avatarInput" type="file" accept="image/*" class="hidden" :disabled="avatarUploading" @change="onAvatarSelected">
             </label>
           </div>
-          <div class="min-w-0">
-            <p class="m-0 truncate font-display text-xl font-bold">{{ displayName }}</p>
-            <p class="mb-0 mt-1 flex flex-wrap items-center gap-x-1.5 text-[13px] text-[var(--text-muted)]">
-              <span>{{ profile?.years_experience ? `${profile.years_experience} an${profile.years_experience > 1 ? 's' : ''} d'expérience` : 'Expérience non renseignée' }}</span>
-              <span aria-hidden="true">·</span>
-              <span v-if="profile?.reputation_score != null" class="inline-flex items-center gap-1">
-                <Star class="h-3.5 w-3.5 fill-current text-clay-500" :stroke-width="1.9" aria-hidden="true" />
-                <span class="font-mono">{{ profile.reputation_score.toFixed(1).replace('.', ',') }}</span> ({{ profile.review_count }} avis)
-              </span>
-              <span v-else>Aucun avis pour l'instant</span>
-            </p>
-            <p v-if="avatarError" class="mb-0 mt-1 text-[12.5px] font-semibold text-danger-fg">{{ avatarError }}</p>
-          </div>
-        </div>
-
-        <!-- Métier : obligatoire, c'est lui qui décide des postes ouverts proposés -->
-        <fieldset class="m-0 mt-4.5 border-0 p-0">
-          <legend class="mb-[7px] p-0 text-[12.5px] font-bold">Métier <span class="font-semibold text-danger-fg">*</span></legend>
-          <div v-if="artisan.tradesState.value === 'idle' || artisan.tradesState.value === 'loading'" class="flex flex-wrap gap-2">
-            <span v-for="i in 4" :key="i" class="h-[38px] w-[96px] animate-pulse rounded-pill bg-sand-200" />
-          </div>
-          <p v-else-if="artisan.tradesState.value === 'error'" class="m-0 text-[13px] font-semibold text-danger-fg">
-            La liste des métiers n'a pas pu être chargée.
-            <button type="button" class="ml-1 font-bold underline" @click="artisan.loadTrades">Réessayer</button>
+          <p class="mb-0 mt-3.5 font-display text-xl font-bold tracking-[-.02em] [overflow-wrap:anywhere]">{{ displayName }}</p>
+          <p class="mb-0 mt-1 flex flex-wrap items-center justify-center gap-x-1.5 text-[13px] text-[var(--text-muted)]">
+            <span>{{ profile?.years_experience ? `${profile.years_experience} an${profile.years_experience > 1 ? 's' : ''} d'expérience` : 'Expérience non renseignée' }}</span>
+            <span aria-hidden="true">·</span>
+            <span v-if="profile?.reputation_score != null" class="inline-flex items-center gap-1">
+              <Star class="h-3.5 w-3.5 fill-current text-clay-500" :stroke-width="1.9" aria-hidden="true" />
+              <span class="font-mono">{{ profile.reputation_score.toFixed(1).replace('.', ',') }}</span> ({{ profile.review_count }} avis)
+            </span>
+            <span v-else>Aucun avis pour l'instant</span>
           </p>
-          <div v-else class="flex flex-wrap gap-2">
-            <button
-              v-for="t in artisan.trades.value"
-              :key="t.id"
-              type="button"
-              class="rounded-pill border px-3.5 py-2 text-[13px] font-bold transition-colors"
-              :class="tradeId === t.id ? 'border-green-600 bg-green-50 text-green-800' : 'border-[var(--border-default)] bg-white text-[var(--text-secondary)] hover:bg-sand-50'"
-              :aria-pressed="tradeId === t.id"
-              @click="tradeId = t.id; saved = ''"
-            >{{ t.labels.fr }}</button>
-          </div>
-          <p class="mb-0 mt-[7px] text-[12.5px]" :class="tradeId ? 'text-[var(--text-faint)]' : 'font-semibold text-warn-fg'">
-            {{ tradeId ? 'Les postes ouverts proposés correspondent à ce métier.' : 'Choisissez votre métier pour recevoir des demandes.' }}
-          </p>
-        </fieldset>
-
-        <div class="mt-4.5 max-w-[220px]">
-          <FormsInput v-model="yearsExperience" type="number" label="Années d'expérience" :invalid="!!yearsError" :hint="yearsError || 'Facultatif'" mono />
+          <p v-if="avatarError" class="mb-0 mt-1.5 text-[12.5px] font-semibold text-danger-fg">{{ avatarError }}</p>
         </div>
-
-        <label class="mt-4.5 block">
-          <span class="mb-[7px] block text-[12.5px] font-bold">Présentation</span>
-          <textarea v-model="bio" maxlength="1000" placeholder="Plombier depuis 8 ans, spécialisé fuites et sanitaires." class="min-h-[96px] w-full resize-y rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] p-3.5 text-[14.5px] outline-none" />
-          <span class="mt-[7px] block text-[12.5px] text-[var(--text-faint)]">Facultatif · <span class="font-mono">{{ bio.length }}</span> / 1 000 caractères</span>
-        </label>
-
-        <p v-if="saveError" class="mb-0 mt-3.5 text-[13px] font-semibold text-danger-fg">{{ saveError }}</p>
-        <p v-if="saved" class="mb-0 mt-3.5 rounded-md border border-ok-border bg-ok-bg px-3.5 py-2.5 text-[13px] font-semibold text-green-900">
-          {{ saved }}
-          <NuxtLink to="/artisan/missions?tab=ouvertes" class="ml-1 font-bold underline">Voir les postes ouverts</NuxtLink>
-        </p>
-        <CoreButton class="mt-4.5" :disabled="saving || !canSave" @click="save">{{ saving ? 'Enregistrement…' : 'Enregistrer' }}</CoreButton>
+        <dl class="m-0 mt-5">
+          <div class="flex flex-wrap items-center justify-between gap-2 border-b border-sand-200 py-3">
+            <dt class="text-[13.5px] text-[var(--text-muted)]">E-mail</dt>
+            <dd class="m-0 text-sm font-semibold [overflow-wrap:anywhere]">{{ currentUser?.email }}</dd>
+          </div>
+          <div class="flex flex-wrap items-center justify-between gap-2 border-b border-sand-200 py-3">
+            <dt class="text-[13.5px] text-[var(--text-muted)]">Téléphone</dt>
+            <dd class="m-0 font-mono text-sm font-semibold">{{ currentUser?.phone_number || 'Non renseigné' }}</dd>
+          </div>
+          <div class="flex flex-wrap items-center justify-between gap-2 pt-3">
+            <dt class="text-[13.5px] text-[var(--text-muted)]">Vérification</dt>
+            <dd class="m-0">
+              <NuxtLink :to="kycLink" class="inline-flex items-center gap-2 text-[12.5px] font-bold text-green-700">
+                <CoreBadge :tone="kycBadge.tone">{{ kycBadge.label }}</CoreBadge>Voir
+              </NuxtLink>
+            </dd>
+          </div>
+        </dl>
       </section>
+
+      <div class="flex min-w-0 flex-col gap-4.5">
+        <LayoutAccountNameForm />
+
+        <section class="rounded-2xl border border-[var(--border-subtle)] bg-white p-5.5">
+          <h2 class="m-0 text-[15px] font-bold">Mon activité</h2>
+
+          <!-- Métier : obligatoire, c'est lui qui décide des postes ouverts proposés -->
+          <fieldset class="m-0 mt-4 border-0 p-0">
+            <legend class="mb-[7px] p-0 text-[12.5px] font-bold">Métier <span class="font-semibold text-danger-fg">*</span></legend>
+            <div v-if="artisan.tradesState.value === 'idle' || artisan.tradesState.value === 'loading'" class="flex flex-wrap gap-2">
+              <span v-for="i in 4" :key="i" class="h-[38px] w-[96px] animate-pulse rounded-pill bg-sand-200" />
+            </div>
+            <p v-else-if="artisan.tradesState.value === 'error'" class="m-0 text-[13px] font-semibold text-danger-fg">
+              La liste des métiers n'a pas pu être chargée.
+              <button type="button" class="ml-1 font-bold underline" @click="artisan.loadTrades">Réessayer</button>
+            </p>
+            <div v-else class="flex flex-wrap gap-2">
+              <button
+                v-for="t in artisan.trades.value"
+                :key="t.id"
+                type="button"
+                class="rounded-pill border px-3.5 py-2 text-[13px] font-bold transition-colors"
+                :class="tradeId === t.id ? 'border-green-600 bg-green-50 text-green-800' : 'border-[var(--border-default)] bg-white text-[var(--text-secondary)] hover:bg-sand-50'"
+                :aria-pressed="tradeId === t.id"
+                @click="tradeId = t.id; saved = ''"
+              >{{ t.labels.fr }}</button>
+            </div>
+            <p class="mb-0 mt-[7px] text-[12.5px]" :class="tradeId ? 'text-[var(--text-faint)]' : 'font-semibold text-warn-fg'">
+              {{ tradeId ? 'Les postes ouverts proposés correspondent à ce métier.' : 'Choisissez votre métier pour recevoir des demandes.' }}
+            </p>
+          </fieldset>
+
+          <div class="mt-4.5 max-w-[220px]">
+            <FormsInput v-model="yearsExperience" type="number" label="Années d'expérience" :invalid="!!yearsError" :hint="yearsError || 'Facultatif'" mono />
+          </div>
+
+          <label class="mt-4.5 block">
+            <span class="mb-[7px] block text-[12.5px] font-bold">Présentation</span>
+            <textarea v-model="bio" maxlength="1000" placeholder="Plombier depuis 8 ans, spécialisé fuites et sanitaires." class="min-h-[96px] w-full resize-y rounded-md border border-[var(--border-default)] bg-[var(--surface-input)] p-3.5 text-[14.5px] outline-none" />
+            <span class="mt-[7px] block text-[12.5px] text-[var(--text-faint)]">Facultatif · <span class="font-mono">{{ bio.length }}</span> / 1 000 caractères</span>
+          </label>
+
+          <p v-if="saveError" class="mb-0 mt-3.5 text-[13px] font-semibold text-danger-fg">{{ saveError }}</p>
+          <p v-if="saved" class="mb-0 mt-3.5 rounded-md border border-ok-border bg-ok-bg px-3.5 py-2.5 text-[13px] font-semibold text-green-900">
+            {{ saved }}
+            <NuxtLink to="/artisan/missions?tab=ouvertes" class="ml-1 font-bold underline">Voir les postes ouverts</NuxtLink>
+          </p>
+          <CoreButton class="mt-4.5" :disabled="saving || !canSave" @click="save">{{ saving ? 'Enregistrement…' : 'Enregistrer' }}</CoreButton>
+        </section>
+      </div>
     </div>
 
     <section v-else class="rounded-2xl border border-[var(--border-subtle)] bg-white p-5.5">

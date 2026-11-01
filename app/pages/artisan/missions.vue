@@ -350,7 +350,7 @@ function emptyAction() {
           </div>
 
           <div class="mt-4.5 flex flex-wrap items-center gap-3 rounded-md bg-[var(--surface-page)] px-3.5 py-3">
-            <CoreAvatar :name="requesterName(selected)" :size="36" />
+            <CoreAvatar :name="requesterName(selected)" :avatar-url="selected.requester?.avatar_url" :size="36" />
             <div class="min-w-0 flex-1">
               <p class="m-0 truncate text-sm font-bold">{{ requesterName(selected) }}</p>
               <p class="mb-0 mt-0.5 text-xs text-[var(--text-faint)]">Demandeur</p>

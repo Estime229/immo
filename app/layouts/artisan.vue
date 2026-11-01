@@ -91,7 +91,7 @@ const identitySubtitle = computed(() => {
       </NuxtLink>
 
       <div class="mb-1.5 flex items-center gap-2.5 rounded-lg bg-[var(--surface-page)] p-2.5">
-        <CoreAvatar :name="displayName || 'Artisan'" :size="40" color="var(--color-green-700)" />
+        <CoreAvatar :name="displayName || 'Artisan'" :avatar-url="currentUser?.avatar_url" :size="40" color="var(--color-green-700)" />
         <div class="min-w-0">
           <p class="m-0 truncate text-sm font-bold">{{ displayName }}</p>
           <p class="mb-0 mt-0.5 text-[11.5px] text-[var(--text-faint)]">{{ identitySubtitle }}</p>
@@ -120,6 +120,7 @@ const identitySubtitle = computed(() => {
           <h1 class="m-0 truncate font-display text-[19px] font-bold tracking-[-.025em] sm:text-[22px]">{{ pageTitle }}</h1>
         </div>
         <div class="flex flex-none items-center gap-2.5 sm:gap-4">
+          <LayoutNotificationBell />
           <LayoutAccountMenu :name="displayName || 'Artisan'" :size="38" color="var(--color-green-700)" />
         </div>
       </header>

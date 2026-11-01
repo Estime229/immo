@@ -120,7 +120,7 @@ const mobileTabs = computed<MobileTab[]>(() => {
       </NuxtLink>
 
       <div class="mb-1.5 flex items-center gap-2.5 rounded-lg bg-[var(--surface-page)] p-3">
-        <CoreAvatar :name="displayName || 'Locataire'" :size="42" color="var(--color-green-700)" />
+        <CoreAvatar :name="displayName || 'Locataire'" :avatar-url="currentUser?.avatar_url" :size="42" color="var(--color-green-700)" />
         <div class="min-w-0">
           <p class="m-0 truncate text-sm font-bold">{{ displayName }}</p>
           <p class="mb-0 mt-0.5 text-[11.5px] text-[var(--text-faint)]">{{ verifiedLabel }}</p>

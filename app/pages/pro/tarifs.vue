@@ -480,17 +480,17 @@ function sameBlock(a: AvailabilityBlock | null, b: AvailabilityBlock) {
 
     <template v-else>
       <div class="mb-4.5 flex flex-wrap items-center gap-x-3 gap-y-2">
-        <select v-model="selectedUnitId" aria-label="Logement" class="h-[42px] max-w-full cursor-pointer rounded-pill border border-[var(--border-default)] bg-white px-3.5 text-[13px] font-semibold text-sand-900 outline-none">
+        <select v-model="selectedUnitId" aria-label="Logement" class="h-[42px] w-full max-w-full sm:w-auto cursor-pointer rounded-pill border border-[var(--border-default)] bg-white px-3.5 text-[13px] font-semibold text-sand-900 outline-none">
           <option v-for="u in unitOptions" :key="u.value" :value="u.value">{{ u.label }}</option>
         </select>
-        <span v-if="selectedUnit" class="text-xs text-[var(--text-faint)]">Prix affiché sur l'annonce : <strong class="font-mono text-[13px] text-[var(--text-primary)]">{{ fmtF(selectedUnit.price) }}</strong></span>
+        <span v-if="selectedUnit" class="min-w-0 text-xs text-[var(--text-faint)]">Prix affiché sur l'annonce : <strong class="font-mono text-[13px] text-[var(--text-primary)]">{{ fmtF(selectedUnit.price) }}</strong></span>
         <NuxtLink v-if="selectedUnit" :to="`/pro/biens/fiche?id=${selectedUnit.propertyId}`" class="ml-auto text-[12.5px] font-bold text-green-700">Fiche du bien</NuxtLink>
       </div>
 
       <div class="grid grid-cols-1 items-start gap-4.5 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
         <div class="flex min-w-0 flex-col gap-4.5">
           <!-- Grille tarifaire -->
-          <section class="rounded-2xl border border-[var(--border-subtle)] bg-white p-5.5">
+          <section class="min-w-0 rounded-2xl border border-[var(--border-subtle)] bg-white p-4 sm:p-5.5">
             <div class="mb-1 flex flex-wrap items-center justify-between gap-3">
               <h2 class="m-0 text-[15px] font-bold">Grille tarifaire</h2>
               <CoreButton v-if="missingFreqs.length && !showAdd" size="sm" tone="secondary" class="inline-flex items-center gap-1.5" @click="openAdd"><Plus class="h-4 w-4" :stroke-width="1.9" />Ajouter un tarif</CoreButton>
@@ -580,10 +580,10 @@ function sameBlock(a: AvailabilityBlock | null, b: AvailabilityBlock) {
           </section>
 
           <!-- Durée de séjour -->
-          <section class="rounded-2xl border border-[var(--border-subtle)] bg-white p-5.5">
+          <section class="min-w-0 rounded-2xl border border-[var(--border-subtle)] bg-white p-4 sm:p-5.5">
             <h2 class="m-0 text-[15px] font-bold">Durée de séjour</h2>
             <p class="mb-3.5 mt-1 text-[13.5px] text-[var(--text-muted)]">Appliquée à chaque réservation en ligne. Laissez vide pour ne rien imposer.</p>
-            <div class="grid grid-cols-2 items-start gap-3 sm:grid-cols-[1fr_1fr_auto]">
+            <div class="grid grid-cols-2 items-start gap-3 sm:grid-cols-[1fr_1fr_auto] [&_input]:min-w-0">
               <FormsInput :model-value="minStay" label="Minimum (nuits)" type="number" mono placeholder="1" @update:model-value="onStayInput('min', $event)" />
               <FormsInput :model-value="maxStay" label="Maximum (nuits)" type="number" mono placeholder="Aucun" @update:model-value="onStayInput('max', $event)" />
               <CoreButton tone="secondary" class="col-span-2 sm:col-span-1 sm:mt-[26px]" :disabled="staySaving" @click="saveStayLimits">{{ staySaving ? 'Enregistrement…' : 'Enregistrer' }}</CoreButton>
@@ -593,7 +593,7 @@ function sameBlock(a: AvailabilityBlock | null, b: AvailabilityBlock) {
           </section>
 
           <!-- Liste d'attente -->
-          <section class="rounded-2xl border border-[var(--border-subtle)] bg-white p-5.5">
+          <section class="min-w-0 rounded-2xl border border-[var(--border-subtle)] bg-white p-4 sm:p-5.5">
             <h2 class="m-0 text-[15px] font-bold">Liste d'attente</h2>
             <p class="mb-3 mt-1 text-[13.5px] text-[var(--text-muted)]">Immo ne prévient pas encore automatiquement ces personnes quand le logement se libère : contactez-les.</p>
             <DataSkeletonCard v-if="waitlistState === 'loading'" :height="44" :lines="0" />
@@ -634,7 +634,7 @@ function sameBlock(a: AvailabilityBlock | null, b: AvailabilityBlock) {
         </div>
 
         <!-- Calendrier -->
-        <section class="rounded-2xl border border-[var(--border-subtle)] bg-white p-5.5">
+        <section class="min-w-0 rounded-2xl border border-[var(--border-subtle)] bg-white p-4 sm:p-5.5">
           <div class="mb-3.5 flex items-center justify-between gap-2">
             <button type="button" class="grid h-9 w-9 place-items-center rounded-pill border border-[var(--border-default)] bg-white text-sand-900 disabled:opacity-40" aria-label="Mois précédent" :disabled="monthOffset <= 0" @click="monthOffset--"><ChevronLeft class="h-4 w-4" :stroke-width="1.9" /></button>
             <h2 class="m-0 text-[15px] font-bold capitalize">{{ monthLabel }}</h2>
@@ -674,7 +674,7 @@ function sameBlock(a: AvailabilityBlock | null, b: AvailabilityBlock) {
               </div>
 
               <div v-if="showBlockForm" class="mb-3 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-page)] p-4">
-                <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 [&_input]:min-w-0 [&_input]:max-w-full [&_input]:appearance-none">
                   <FormsInput v-model="blockFirst" label="Premier jour bloqué" type="date" />
                   <FormsInput v-model="blockLast" label="Dernier jour bloqué" type="date" />
                 </div>

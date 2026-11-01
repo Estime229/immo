@@ -335,7 +335,7 @@ const STATUS_NOTE: Record<string, string> = {
           data-testid="thread"
           @click="pickThread(c)"
         >
-          <CoreAvatar :name="threadName(c)" :size="40" :color="threadColor(c)" />
+          <CoreAvatar :name="threadName(c)" :avatar-url="otherParticipant(c)?.user.avatar_url" :size="40" :color="threadColor(c)" />
           <div class="min-w-0 flex-1">
             <div class="flex justify-between gap-2">
               <p class="m-0 truncate text-sm" :class="c.unread_count ? 'font-black' : 'font-bold'">{{ threadName(c) }}</p>
@@ -356,7 +356,7 @@ const STATUS_NOTE: Record<string, string> = {
     <div v-else class="min-h-0 min-w-0 flex-col lg:flex" :class="mobileView === 'list' ? 'hidden' : 'flex'">
       <div class="flex items-center gap-3.5 border-b border-[var(--border-subtle)] px-5.5 py-3.5">
         <button type="button" class="grid h-9 w-9 flex-none place-items-center rounded-pill border border-[var(--border-default)] bg-white text-base lg:hidden" aria-label="Retour aux conversations" @click="mobileView = 'list'">←</button>
-        <CoreAvatar :name="threadName(activeConversation)" :size="38" :color="threadColor(activeConversation)" />
+        <CoreAvatar :name="threadName(activeConversation)" :avatar-url="otherParticipant(activeConversation)?.user.avatar_url" :size="38" :color="threadColor(activeConversation)" />
         <div class="min-w-0 flex-1">
           <p class="m-0 truncate text-[15px] font-bold">{{ threadName(activeConversation) }}</p>
           <p class="mb-0 mt-0.5 truncate text-xs text-[var(--text-faint)]">{{ [threadRoleLabel(activeConversation), threadSubject(activeConversation)].filter(Boolean).join(' · ') }}</p>

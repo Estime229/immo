@@ -40,6 +40,10 @@ const SECTIONS = [
   ] },
   { id: 'droits', heading: '6. Vos droits', paras: [
     "Vous disposez d'un droit d'accès, de rectification et de suppression de vos données, ainsi que d'un droit d'opposition. Écrivez-nous pour exercer ces droits."
+  ] },
+  { id: 'cookies', heading: '7. Cookies', paras: [
+    "Immo n'utilise que des cookies nécessaires au fonctionnement du site : des cookies de connexion, qui vous gardent connecté à votre compte, et des cookies de préférences, qui retiennent vos choix d'affichage (mode « à la nuit » ou « au mois », bandeaux et messages déjà fermés). Quelques préférences d'affichage des espaces sont aussi gardées dans le stockage local de votre navigateur.",
+    "Aucun cookie publicitaire ni de mesure d'audience n'est déposé. Vous pouvez supprimer ces cookies depuis les réglages de votre navigateur : vous serez alors déconnecté et vos préférences d'affichage reviendront à leur état par défaut."
   ] }
 ]
 

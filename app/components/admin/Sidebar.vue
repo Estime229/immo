@@ -31,7 +31,7 @@ const groups = computed(() =>
     </NuxtLink>
 
     <div class="flex items-center gap-2.5 rounded-lg bg-[var(--surface-page)] p-2.5">
-      <CoreAvatar :name="auth.nom || 'Admin'" :size="40" color="var(--color-green-900)" />
+      <CoreAvatar :name="auth.nom || 'Admin'" :avatar-url="auth.avatarUrl" :size="40" color="var(--color-green-900)" />
       <div class="min-w-0">
         <p class="m-0 truncate text-sm font-bold">{{ auth.nom }}</p>
         <p class="mb-0 mt-0.5 truncate text-[11.5px] text-[var(--text-faint)]">{{ levelName }}</p>

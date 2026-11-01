@@ -163,7 +163,7 @@ function closeMenu() {
           aria-label="Mon compte"
           @click="openAccount"
         >
-          <CoreAvatar v-if="auth.user.value" :name="displayName" :size="42" color="var(--color-green-700)" />
+          <CoreAvatar v-if="auth.user.value" :name="displayName" :avatar-url="auth.user.value.avatar_url" :size="42" color="var(--color-green-700)" />
           <span v-else class="grid h-[42px] w-[42px] place-items-center rounded-pill bg-green-700 text-white"><LayoutNavIcon name="user" :size="22" /></span>
         </button>
       </div>
@@ -192,7 +192,7 @@ function closeMenu() {
             <span class="h-0.5 w-4 rounded-sm bg-sand-900 transition-[opacity,transform] duration-[var(--duration-base)]" :class="menuOpen ? 'scale-x-0 opacity-0' : ''" />
             <span class="h-0.5 w-4 rounded-sm bg-sand-900 transition-transform duration-[var(--duration-base)] ease-[var(--ease-standard)]" :class="menuOpen ? '-translate-y-[5px] -rotate-45' : ''" />
           </span>
-          <CoreAvatar :name="displayName" :size="32" color="var(--color-green-700)" />
+          <CoreAvatar :name="displayName" :avatar-url="auth.user.value?.avatar_url" :size="32" color="var(--color-green-700)" />
         </button>
       </div>
     </div>
@@ -264,7 +264,7 @@ function closeMenu() {
   <LayoutBottomSheet v-model:open="accountOpen" :title="auth.user.value ? 'Mon compte' : 'Bienvenue sur Immo'">
     <template v-if="auth.user.value">
       <div class="flex items-center gap-3.5 rounded-2xl bg-white p-4 shadow-hairline">
-        <CoreAvatar :name="displayName" :size="48" color="var(--color-green-700)" />
+        <CoreAvatar :name="displayName" :avatar-url="auth.user.value?.avatar_url" :size="48" color="var(--color-green-700)" />
         <div class="min-w-0">
           <p class="m-0 truncate text-[15.5px] font-bold">{{ displayName }}</p>
           <p class="mb-0 mt-0.5 truncate text-[13px] text-[var(--text-faint)]">{{ auth.user.value.email }}</p>

@@ -29,7 +29,8 @@ export interface LandlordBookingSummary {
   retained_amount?: string | null
   retention_released_at?: string | null
   promo_code_id?: string | null
-  tenant?: { id: string; first_name?: string | null; last_name?: string | null }
+  /** `avatar_url` : joint par l'API (`publicUserPreviewColumns`, get-bookings-for-landlord). */
+  tenant?: { id: string; first_name?: string | null; last_name?: string | null; avatar_url?: string | null }
   unit?: { id: string; name: string; property_id?: string | null; requires_booking_inventory?: boolean } | null
 }
 

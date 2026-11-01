@@ -32,6 +32,7 @@ export function useAdminAuth() {
     loading: loading.value,
     adminLevel: level.value,
     nom: user.value ? `${user.value.first_name ?? ''} ${user.value.last_name ?? ''}`.trim() || user.value.email : null,
+    avatarUrl: user.value?.avatar_url ?? null,
     permissions: resolvePermissions()
   }))
 

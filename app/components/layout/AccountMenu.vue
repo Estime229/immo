@@ -20,7 +20,7 @@ async function handleLogout() {
 <template>
   <div class="relative">
     <button type="button" class="block rounded-pill" @click="open = !open">
-      <CoreAvatar :name="name" :size="size" :color="color" />
+      <CoreAvatar :name="name" :avatar-url="auth.user.value?.avatar_url" :size="size" :color="color" />
     </button>
     <template v-if="open">
       <div class="fixed inset-0 z-40" @click="open = false" />

@@ -244,7 +244,7 @@ function leaseNeedsSending(r: RentalRequestSummary): boolean {
               :class="r.id === highlight ? '-mx-2.5 rounded-md bg-green-50 px-2.5' : ''"
             >
               <div class="flex flex-wrap items-center gap-2.5">
-                <CoreAvatar :name="name(r)" :size="36" />
+                <CoreAvatar :name="name(r)" :avatar-url="r.tenant?.avatar_url" :size="36" />
                 <div class="min-w-0 flex-[1_1_180px]">
                   <p class="m-0 text-sm font-bold">{{ name(r) }}</p>
                   <p class="mb-0 mt-0.5 text-xs text-[var(--text-faint)] [overflow-wrap:anywhere]">
@@ -285,7 +285,7 @@ function leaseNeedsSending(r: RentalRequestSummary): boolean {
         </div>
         <section v-else class="rounded-2xl border border-[var(--border-subtle)] bg-white px-5.5 py-2">
           <div v-for="r in done" :id="`request-${r.id}`" :key="r.id" class="flex flex-wrap items-center gap-3 border-b border-sand-200 py-3 last:border-b-0" :class="r.id === highlight ? '-mx-2.5 rounded-md bg-green-50 px-2.5' : ''">
-            <CoreAvatar :name="name(r)" :size="34" />
+            <CoreAvatar :name="name(r)" :avatar-url="r.tenant?.avatar_url" :size="34" />
             <div class="min-w-0 flex-[1_1_200px]">
               <p class="m-0 text-sm font-bold">{{ name(r) }} <span class="font-normal text-[var(--text-muted)]">· {{ r.unit?.name ?? 'logement supprimé' }}</span></p>
               <p class="mb-0 mt-0.5 text-xs text-[var(--text-faint)]">{{ CANDIDATURE_LABEL[r.status] }}<template v-if="r.responded_at"> le <span class="font-mono">{{ formatDate(r.responded_at) }}</span></template></p>

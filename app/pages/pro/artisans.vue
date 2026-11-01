@@ -491,7 +491,7 @@ function toggleInvite() {
       <div v-else class="grid grid-cols-1 gap-4.5 sm:grid-cols-2 lg:grid-cols-3">
         <section v-for="p in partSorted" :key="p.id" class="rounded-2xl border border-[var(--border-subtle)] bg-white p-5.5">
           <div class="flex items-center gap-3">
-            <CoreAvatar :name="partnershipArtisanName(p)" :size="40" color="var(--color-green-700)" />
+            <CoreAvatar :name="partnershipArtisanName(p)" :avatar-url="p.artisan?.avatar_url" :size="40" color="var(--color-green-700)" />
             <div class="min-w-0 flex-1">
               <p class="m-0 text-sm font-bold">{{ partnershipArtisanName(p) }}</p>
               <p v-if="p.artisan?.trade_reference_id" class="mb-0 mt-0.5 text-xs text-[var(--text-faint)]">{{ tradeLabel(p.artisan.trade_reference_id) }}</p>

@@ -37,5 +37,6 @@ useSeoMeta({
       <NuxtPage />
     </NuxtLayout>
     <LayoutVerificationGate />
+    <LayoutCookieNotice />
   </div>
 </template>

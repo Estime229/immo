@@ -15,6 +15,8 @@ export interface ArtisanRequestParty {
   id: string
   first_name: string | null
   last_name: string | null
+  /** Joint par `GET /artisan-requests/my` (`publicUserPreviewColumns` côté API). */
+  avatar_url?: string | null
 }
 
 export interface ArtisanRequestUnit {
@@ -146,6 +148,8 @@ export interface ArtisanPartnershipMember {
   id: string
   first_name: string | null
   last_name: string | null
+  /** Sélectionné par la liste des partenariats côté API (manager et artisan). */
+  avatar_url?: string | null
   trade_reference_id?: string
 }
 

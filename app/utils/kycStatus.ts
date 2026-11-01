@@ -15,6 +15,14 @@ export type VerificationSpace = 'locataire' | 'pro' | 'artisan'
 /** `todo` : rien de déposé · `review` : dossier envoyé, en attente d'un admin · `rejected` : refusé. */
 export type VerificationStage = 'verified' | 'todo' | 'review' | 'rejected'
 
+/** Pastille d'étape affichée dans les pages profil des trois espaces. */
+export const VERIFICATION_STAGE_BADGE: Record<VerificationStage, { label: string; tone: 'ok' | 'warn' | 'danger' | 'info' }> = {
+  verified: { label: 'Vérifiée', tone: 'ok' },
+  review: { label: "En cours d'examen", tone: 'info' },
+  rejected: { label: 'Refusée', tone: 'danger' },
+  todo: { label: 'À faire', tone: 'warn' }
+}
+
 export interface VerificationNotice {
   tone: 'warn' | 'danger' | 'info'
   title: string

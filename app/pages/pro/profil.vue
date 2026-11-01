@@ -3,8 +3,9 @@ import { BadgeCheck, Camera, ExternalLink, FileCheck, LoaderCircle, Store } from
 import type { NotificationChannel, NotificationPreferences, ProfileMe } from '~/types/profile'
 import { ApiRequestError } from '~/utils/authenticatedFetcher'
 import { errorText } from '~/utils/apiErrors'
-import { deriveVerificationNotice, verificationLink } from '~/utils/kycStatus'
+import { deriveVerificationNotice, VERIFICATION_STAGE_BADGE, verificationLink } from '~/utils/kycStatus'
 import { validateIfu, validateRccm } from '~/utils/onboarding'
+import { roleLabel } from '~/utils/roleRoutes'
 import { prepareAvatarUpload } from '~/utils/uploadFile'
 
 definePageMeta({ layout: 'pro' })
@@ -122,12 +123,7 @@ const KYB: Record<string, { label: string; tone: 'ok' | 'warn' | 'danger' | 'inf
  */
 const verification = useVerification()
 onMounted(() => { void verification.refreshSubmitted() })
-const KYC_STAGE: Record<string, { label: string; tone: 'ok' | 'warn' | 'danger' | 'info' }> = {
-  verified: { label: 'Vérifiée', tone: 'ok' },
-  review: { label: "En cours d'examen", tone: 'info' },
-  rejected: { label: 'Refusée', tone: 'danger' },
-  todo: { label: 'À faire', tone: 'warn' }
-}
+const kycBadge = computed(() => VERIFICATION_STAGE_BADGE[verification.stage.value])
 const kycNotice = computed(() => deriveVerificationNotice(verification.stage.value, 'pro'))
 const kycLink = verificationLink('/pro/profil?tab=verification')
 
@@ -171,14 +167,10 @@ async function confirmDelete() {
   }
 }
 
-const profileRows = computed(() => profile.value
-  ? [
-      { label: "Nom légal (pièce d'identité)", value: profile.value.full_name_masked },
-      { label: 'Raison sociale', value: profile.value.company_masked },
-      { label: 'IFU', value: profile.value.ifu_masked },
-      { label: 'RCCM', value: profile.value.rccm_masked }
-    ]
-  : [])
+/** Champ chiffré déjà enregistré : dit sous le champ, qui reste vide (jamais réaffiché en clair). */
+function filledHint(masked: string | null | undefined) {
+  return masked ? 'Renseigné : laissez vide pour garder la valeur enregistrée.' : undefined
+}
 
 /* ---- Notifications ---- */
 const notifPrefs = ref<NotificationPreferences | null>(null)
@@ -224,60 +216,64 @@ async function toggleChannel(channel: NotificationChannel) {
       <FormsSegmentedControl :options="TABS" :model-value="tab" size="sm" @update:model-value="setTab" />
     </div>
 
-    <!-- ===== Identité ===== -->
-    <div v-if="tab === 'identite'" class="flex max-w-[680px] flex-col gap-4.5">
-      <section class="rounded-2xl border border-[var(--border-subtle)] bg-white p-5.5">
-        <div class="flex items-center gap-4">
-          <div class="relative flex-none">
-            <CoreAvatar :name="displayName" :avatar-url="currentUser?.avatar_url" :size="64" color="var(--color-green-700)" />
-            <label class="absolute -bottom-1 -right-1 grid h-7 w-7 cursor-pointer place-items-center rounded-pill border-2 border-white bg-green-600 text-white shadow-card" :class="{ 'pointer-events-none opacity-60': avatarUploading }" aria-label="Changer la photo de profil">
+    <!-- ===== Identité : résumé à gauche (fixe sur grand écran), formulaires à droite ===== -->
+    <div v-if="tab === 'identite'" class="grid max-w-[680px] grid-cols-1 items-start gap-4.5 xl:max-w-[1100px] xl:grid-cols-[320px_minmax(0,1fr)]">
+      <section class="rounded-2xl border border-[var(--border-subtle)] bg-white p-5.5 xl:sticky xl:top-[94px]">
+        <div class="flex flex-col items-center text-center">
+          <div class="relative">
+            <CoreAvatar :name="displayName" :avatar-url="currentUser?.avatar_url" :size="88" color="var(--color-green-700)" />
+            <label class="absolute bottom-0 right-0 grid h-8 w-8 cursor-pointer place-items-center rounded-pill border-2 border-white bg-green-600 text-white shadow-card" :class="{ 'pointer-events-none opacity-60': avatarUploading }" aria-label="Changer la photo de profil">
               <LoaderCircle v-if="avatarUploading" class="h-3.5 w-3.5 animate-spin" :stroke-width="2" />
               <Camera v-else class="h-3.5 w-3.5" :stroke-width="2" />
               <input ref="avatarInput" type="file" accept="image/*" class="hidden" :disabled="avatarUploading" @change="onAvatarSelected">
             </label>
           </div>
-          <div class="min-w-0">
-            <p class="m-0 font-display text-lg font-bold">{{ displayName }}</p>
-            <p class="mb-0 mt-0.5 text-xs text-[var(--text-faint)]">Photo visible sur votre vitrine et dans vos conversations.</p>
-            <p v-if="avatarError" class="mb-0 mt-1 text-[13px] font-semibold text-danger-fg">{{ avatarError }}</p>
-          </div>
+          <p class="mb-0 mt-3.5 font-display text-xl font-bold tracking-[-.02em] [overflow-wrap:anywhere]">{{ displayName }}</p>
+          <p v-if="currentUser" class="mb-0 mt-1 text-[13px] text-[var(--text-muted)]">{{ roleLabel(currentUser.role) }}</p>
+          <p class="mb-0 mt-2 text-xs text-[var(--text-faint)]">Photo visible sur votre vitrine et dans vos conversations.</p>
+          <p v-if="avatarError" class="mb-0 mt-1.5 text-[13px] font-semibold text-danger-fg">{{ avatarError }}</p>
         </div>
 
-        <h2 class="mb-1 mt-5 text-[15px] font-bold">Coordonnées</h2>
-        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-sand-200 py-3">
-          <span class="text-[13.5px] text-[var(--text-muted)]">E-mail</span>
-          <span class="text-sm font-semibold [overflow-wrap:anywhere]">{{ currentUser?.email }}</span>
-        </div>
-        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-sand-200 py-3 last:border-b-0">
-          <span class="text-[13.5px] text-[var(--text-muted)]">Téléphone</span>
-          <span class="font-mono text-sm font-semibold">{{ currentUser?.phone_number || 'Non renseigné' }}</span>
-        </div>
-        <template v-if="profile">
-          <div v-for="row in profileRows" :key="row.label" class="flex flex-wrap items-center justify-between gap-2 border-b border-sand-200 py-3 last:border-b-0">
-            <span class="text-[13.5px] text-[var(--text-muted)]">{{ row.label }}</span>
-            <CoreBadge :tone="row.value ? 'ok' : 'neutral'">{{ row.value ? 'Renseigné' : 'Non renseigné' }}</CoreBadge>
+        <dl class="m-0 mt-5">
+          <div class="flex flex-wrap items-center justify-between gap-2 border-b border-sand-200 py-3">
+            <dt class="text-[13.5px] text-[var(--text-muted)]">E-mail</dt>
+            <dd class="m-0 text-sm font-semibold [overflow-wrap:anywhere]">{{ currentUser?.email }}</dd>
           </div>
-        </template>
-        <p v-else-if="profileState === 'error'" class="mb-0 mt-3 text-[13px] font-semibold text-danger-fg">
-          Votre identité professionnelle n'a pas pu être chargée. <button type="button" class="font-bold underline" @click="loadProfile">Réessayer</button>
-        </p>
+          <div class="flex flex-wrap items-center justify-between gap-2 border-b border-sand-200 py-3">
+            <dt class="text-[13.5px] text-[var(--text-muted)]">Téléphone</dt>
+            <dd class="m-0 font-mono text-sm font-semibold">{{ currentUser?.phone_number || 'Non renseigné' }}</dd>
+          </div>
+          <div class="flex flex-wrap items-center justify-between gap-2 pt-3">
+            <dt class="text-[13.5px] text-[var(--text-muted)]">Vérification</dt>
+            <dd class="m-0">
+              <button type="button" class="inline-flex items-center gap-2 text-[12.5px] font-bold text-green-700" @click="setTab('verification')">
+                <CoreBadge :tone="kycBadge.tone">{{ kycBadge.label }}</CoreBadge>Voir
+              </button>
+            </dd>
+          </div>
+        </dl>
       </section>
 
-      <LayoutAccountNameForm />
+      <div class="flex min-w-0 flex-col gap-4.5">
+        <LayoutAccountNameForm />
 
-      <section class="rounded-2xl border border-[var(--border-subtle)] bg-white p-5.5">
-        <h2 class="m-0 text-[15px] font-bold">Modifier mon identité pro</h2>
-        <p class="mb-4 mt-1 text-[13.5px] text-[var(--text-muted)]">Ces informations sont chiffrées et ne sont jamais réaffichées en clair. Ne remplissez que ce que vous voulez changer.</p>
-        <div class="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
-          <FormsInput v-model="fullName" class="sm:col-span-2" label="Nom légal (pièce d'identité)" placeholder="ex. Koffi Dossou" />
-          <FormsInput v-model="company" class="sm:col-span-2" label="Raison sociale" placeholder="ex. Agence Immo Cotonou" />
-          <FormsInput v-model="ifu" label="IFU" placeholder="13 chiffres" mono />
-          <FormsInput v-model="rccm" label="RCCM" placeholder="ex. RB/COT/25 A 1234" mono />
-        </div>
-        <p v-if="profileSaveError" class="mb-0 mt-3.5 text-[13px] font-semibold text-danger-fg">{{ profileSaveError }}</p>
-        <p v-if="profileSaved" class="mb-0 mt-3.5 rounded-md border border-ok-border bg-ok-bg px-3.5 py-2.5 text-[13px] font-semibold text-green-900">Identité pro mise à jour.</p>
-        <CoreButton class="mt-4" :disabled="savingProfile" @click="saveProfile">{{ savingProfile ? 'Enregistrement…' : 'Enregistrer' }}</CoreButton>
-      </section>
+        <section class="rounded-2xl border border-[var(--border-subtle)] bg-white p-5.5">
+          <h2 class="m-0 text-[15px] font-bold">Modifier mon identité pro</h2>
+          <p class="mb-4 mt-1 text-[13.5px] text-[var(--text-muted)]">Ces informations sont chiffrées et ne sont jamais réaffichées en clair. Ne remplissez que ce que vous voulez changer.</p>
+          <p v-if="profileState === 'error'" class="mb-4 mt-0 text-[13px] font-semibold text-danger-fg">
+            Votre identité professionnelle n'a pas pu être chargée. <button type="button" class="font-bold underline" @click="loadProfile">Réessayer</button>
+          </p>
+          <div class="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+            <FormsInput v-model="fullName" class="sm:col-span-2" label="Nom légal (pièce d'identité)" placeholder="ex. Koffi Dossou" :hint="filledHint(profile?.full_name_masked)" />
+            <FormsInput v-model="company" class="sm:col-span-2" label="Raison sociale" placeholder="ex. Agence Immo Cotonou" :hint="filledHint(profile?.company_masked)" />
+            <FormsInput v-model="ifu" label="IFU" placeholder="13 chiffres" mono :hint="filledHint(profile?.ifu_masked)" />
+            <FormsInput v-model="rccm" label="RCCM" placeholder="ex. RB/COT/25 A 1234" mono :hint="filledHint(profile?.rccm_masked)" />
+          </div>
+          <p v-if="profileSaveError" class="mb-0 mt-3.5 text-[13px] font-semibold text-danger-fg">{{ profileSaveError }}</p>
+          <p v-if="profileSaved" class="mb-0 mt-3.5 rounded-md border border-ok-border bg-ok-bg px-3.5 py-2.5 text-[13px] font-semibold text-green-900">Identité pro mise à jour.</p>
+          <CoreButton class="mt-4" :disabled="savingProfile" @click="saveProfile">{{ savingProfile ? 'Enregistrement…' : 'Enregistrer' }}</CoreButton>
+        </section>
+      </div>
     </div>
 
     <!-- ===== Vitrine ===== -->
@@ -340,7 +336,7 @@ async function toggleChannel(channel: NotificationChannel) {
       <p class="mb-3 mt-1 text-[13.5px] text-[var(--text-muted)]">Publier ou modifier un bien, et demander un artisan, exigent une identité vérifiée.</p>
       <div class="flex flex-wrap items-center justify-between gap-2 border-b border-sand-200 py-3">
         <span class="inline-flex items-center gap-2 text-[13.5px] text-[var(--text-secondary)]"><BadgeCheck class="h-4 w-4 text-[var(--text-faint)]" :stroke-width="1.9" />Identité (KYC)</span>
-        <CoreBadge :tone="KYC_STAGE[verification.stage.value]?.tone ?? 'neutral'">{{ KYC_STAGE[verification.stage.value]?.label ?? 'Inconnu' }}</CoreBadge>
+        <CoreBadge :tone="kycBadge.tone">{{ kycBadge.label }}</CoreBadge>
       </div>
       <div class="flex flex-wrap items-center justify-between gap-2 py-3">
         <span class="inline-flex items-center gap-2 text-[13.5px] text-[var(--text-secondary)]"><FileCheck class="h-4 w-4 text-[var(--text-faint)]" :stroke-width="1.9" />Activité professionnelle (KYB)</span>

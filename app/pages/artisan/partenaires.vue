@@ -91,7 +91,7 @@ function end(p: ArtisanPartnership) {
         </h2>
         <div v-for="p in pending" :key="p.id" class="border-b border-info-border py-3.5 last:border-b-0 last:pb-0">
           <div class="flex flex-wrap items-center gap-3">
-            <CoreAvatar :name="managerName(p)" :size="40" />
+            <CoreAvatar :name="managerName(p)" :avatar-url="p.manager?.avatar_url" :size="40" />
             <div class="min-w-0 flex-1">
               <p class="m-0 truncate text-sm font-bold text-info-fg-deep">{{ managerName(p) }}</p>
               <p class="mb-0 mt-0.5 text-xs text-info-fg-deep/80">{{ managerKind(p) }} · invitation du <span class="font-mono">{{ formatLong(p.created_at) }}</span></p>
@@ -128,7 +128,7 @@ function end(p: ArtisanPartnership) {
         <div v-else>
           <div v-for="p in active" :key="p.id" class="border-b border-sand-200 py-3.5 last:border-b-0 last:pb-0">
             <div class="flex flex-wrap items-center gap-3">
-              <CoreAvatar :name="managerName(p)" :size="40" />
+              <CoreAvatar :name="managerName(p)" :avatar-url="p.manager?.avatar_url" :size="40" />
               <div class="min-w-0 flex-1 basis-[160px]">
                 <p class="m-0 truncate text-sm font-bold">{{ managerName(p) }}</p>
                 <p class="mb-0 mt-0.5 text-xs text-[var(--text-faint)]">{{ managerKind(p) }} · partenaire depuis le <span class="font-mono">{{ formatLong(p.created_at) }}</span></p>
@@ -155,7 +155,7 @@ function end(p: ArtisanPartnership) {
       <section v-if="past.length" class="rounded-2xl border border-[var(--border-subtle)] bg-white p-5.5">
         <h2 class="m-0 text-[15px] font-bold">Partenariats passés</h2>
         <div v-for="p in past" :key="p.id" class="flex flex-wrap items-center gap-3 border-b border-sand-200 py-3 last:border-b-0 last:pb-0">
-          <CoreAvatar :name="managerName(p)" :size="34" />
+          <CoreAvatar :name="managerName(p)" :avatar-url="p.manager?.avatar_url" :size="34" />
           <div class="min-w-0 flex-1">
             <p class="m-0 truncate text-sm font-bold">{{ managerName(p) }}</p>
             <p class="mb-0 mt-0.5 text-xs text-[var(--text-faint)]">{{ managerKind(p) }}<template v-if="p.updated_at"> · le <span class="font-mono">{{ formatLong(p.updated_at) }}</span></template></p>

@@ -39,7 +39,7 @@ async function doLogout() {
 
       <div class="relative">
         <button type="button" class="block rounded-pill" aria-label="Menu du compte" @click="menuOpen = !menuOpen">
-          <CoreAvatar :name="auth.nom || 'Admin'" :size="38" color="var(--color-green-900)" />
+          <CoreAvatar :name="auth.nom || 'Admin'" :avatar-url="auth.avatarUrl" :size="38" color="var(--color-green-900)" />
         </button>
         <template v-if="menuOpen">
           <div class="fixed inset-0 z-40" @click="menuOpen = false" />

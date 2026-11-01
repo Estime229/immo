@@ -189,7 +189,7 @@ async function toggleActive(p: PromoCodeSummary) {
           data-testid="booking-card"
         >
           <div class="flex flex-wrap items-start gap-3">
-            <CoreAvatar :name="tenantName(b)" :size="40" />
+            <CoreAvatar :name="tenantName(b)" :avatar-url="b.tenant?.avatar_url" :size="40" />
             <div class="min-w-0 flex-1">
               <div class="flex flex-wrap items-center gap-2">
                 <p class="m-0 text-[15px] font-bold">{{ b.unit?.name ?? 'Logement supprimé' }}</p>
