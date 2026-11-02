@@ -309,7 +309,24 @@ const nights = computed(() => {
 })
 const nightlyPrice = computed(() => Number(dailyPricing.value?.price ?? 0))
 /** Même calcul que l'API (combinaison la moins chère des paliers actifs) — avant : nuits × prix de la nuit, faux dès 7 nuits (Lot 46). */
-const stayQuote = computed(() => quoteStay(nights.value, pricing.value))
+const localQuote = computed(() => quoteStay(nights.value, pricing.value))
+/**
+ * Devis du serveur (API #30) : la règle de prix n'est plus recopiée comme seule source. Le calcul local
+ * s'affiche tout de suite et sert de repli si le serveur ne répond pas (ancienne API, réseau).
+ */
+const serverQuote = ref<{ key: string; total: number; saving: number; lines: { label: string; amount: number }[] } | null>(null)
+watch([() => selectedUnit.value?.id, checkIn, checkOut], async ([unitId, from, to]) => {
+  serverQuote.value = null
+  if (!unitId || !from || !to || nights.value <= 0) return
+  const key = `${unitId}:${from}:${to}`
+  try {
+    const q = await searchApi.fetchQuote(unitId, from, to)
+    if (`${selectedUnit.value?.id}:${checkIn.value}:${checkOut.value}` === key) serverQuote.value = { key, total: q.total, saving: q.saving, lines: q.lines }
+  } catch {
+    // Refus du serveur ou indisponible : le message de `stayProblem` et le calcul local restent affichés.
+  }
+})
+const stayQuote = computed(() => serverQuote.value ?? localQuote.value)
 const stayTotal = computed(() => stayQuote.value?.total ?? nights.value * nightlyPrice.value)
 const minStay = computed(() => selectedUnit.value?.min_duration_days ?? null)
 const maxStay = computed(() => selectedUnit.value?.max_duration_days ?? null)

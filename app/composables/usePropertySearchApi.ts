@@ -23,6 +23,11 @@ export function usePropertySearchApi() {
     return pub.get<AvailabilityBlock[]>(`/units/${unitId}/availability`)
   }
 
+  /** Devis du serveur (même calcul et mêmes refus que POST /bookings, sans réserver). */
+  async function fetchQuote(unitId: string, checkIn: string, checkOut: string) {
+    return pub.get<{ nights: number; total: number; saving: number; lines: { label: string; amount: number }[] }>(`/units/${unitId}/quote`, { check_in: checkIn, check_out: checkOut })
+  }
+
   async function fetchPricing(unitId: string) {
     return pub.get<UnitPricing[]>(`/units/${unitId}/pricing`)
   }
@@ -37,5 +42,5 @@ export function usePropertySearchApi() {
     return pub.get<PointOfInterest[]>(`/properties/${propertyId}/pois`)
   }
 
-  return { search, fetchById, fetchAvailability, fetchPricing, fetchOwnerStorefront, fetchPois }
+  return { search, fetchById, fetchAvailability, fetchPricing, fetchQuote, fetchOwnerStorefront, fetchPois }
 }
