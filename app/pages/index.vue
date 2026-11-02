@@ -390,10 +390,10 @@ const LANDLORD_POINTS = ['Publiez votre bien', 'Loyers encaissés par Mobile Mon
         />
         <div class="absolute inset-0 bg-[image:linear-gradient(180deg,rgba(18,60,41,0)_32%,rgba(18,60,41,.74)_100%)]" />
         <div class="relative w-full p-6 pb-16 sm:p-10">
-          <h1 class="m-0 max-w-[620px] text-balance font-display text-[38px] font-extrabold leading-[1.04] tracking-hero text-white sm:text-hero">
+          <h1 v-reveal="{ y: 32, duration: .9 }" class="m-0 max-w-[620px] text-balance font-display text-[38px] font-extrabold leading-[1.04] tracking-hero text-white sm:text-hero">
             Louez en toute confiance au Bénin.
           </h1>
-          <p class="mb-0 mt-3.5 max-w-[500px] text-[15px] leading-[1.5] text-white/90 sm:text-[16.5px]">
+          <p v-reveal="{ y: 24, delay: .15, duration: .9 }" class="mb-0 mt-3.5 max-w-[500px] text-[15px] leading-[1.5] text-white/90 sm:text-[16.5px]">
             Caution séquestrée par Bayo pendant le bail, état des lieux signé des deux côtés, propriétaires vérifiés.
           </p>
         </div>
@@ -496,7 +496,7 @@ const LANDLORD_POINTS = ['Publiez votre bien', 'Loyers encaissés par Mobile Mon
     </CoreModal>
 
     <!-- Catégories — pictogrammes de plan, une tuile par type de logement -->
-    <section v-if="categoriesLoading || categories.length" class="mx-auto max-w-[1240px] px-[26px] pt-12">
+    <section v-reveal v-if="categoriesLoading || categories.length" class="mx-auto max-w-[1240px] px-[26px] pt-12">
       <h2 class="mb-5 mt-0 font-display text-title-2 font-bold tracking-title-2">Trouvez le lieu qui vous correspond</h2>
       <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <template v-if="categoriesLoading">
@@ -524,7 +524,7 @@ const LANDLORD_POINTS = ['Publiez votre bien', 'Loyers encaissés par Mobile Mon
 
     <!-- Annonces : ancre de défilement, puis erreur ou absence de logement dans le mode choisi -->
     <div ref="listingsAnchor" />
-    <section v-if="!rentalLoading && (listingsError || !rentalUnits[activeRental].length)" class="mx-auto max-w-[1240px] px-[26px] pt-11">
+    <section v-reveal v-if="!rentalLoading && (listingsError || !rentalUnits[activeRental].length)" class="mx-auto max-w-[1240px] px-[26px] pt-11">
       <FeedbackAlertBanner v-if="listingsError" tone="danger">
         Impossible de charger les logements pour le moment.
         <button type="button" class="ml-2 font-bold underline" @click="loadListings">Réessayer</button>
@@ -537,7 +537,7 @@ const LANDLORD_POINTS = ['Publiez votre bien', 'Loyers encaissés par Mobile Mon
     </section>
 
     <!-- Sections par ville — squelette pendant le chargement -->
-    <section v-if="listingsLoading || rentalLoading" class="mx-auto max-w-[1240px] px-[26px] pt-11">
+    <section v-reveal v-if="listingsLoading || rentalLoading" class="mx-auto max-w-[1240px] px-[26px] pt-11">
       <div class="mb-[18px] h-[23px] w-[220px] animate-[im-shimmer_1.3s_linear_infinite] rounded-pill bg-[linear-gradient(90deg,var(--color-sand-200)_25%,var(--color-sand-100)_50%,var(--color-sand-200)_75%)] bg-[length:460px_100%]" />
       <div class="flex gap-[18px] overflow-x-auto pb-1">
         <div v-for="i in 5" :key="i" class="w-[214px] flex-none">
@@ -547,7 +547,7 @@ const LANDLORD_POINTS = ['Publiez votre bien', 'Loyers encaissés par Mobile Mon
     </section>
 
     <!-- Sections par ville -->
-    <section v-for="(group, gi) in (rentalLoading ? [] : cityGroups)" :key="`${activeRental}-${group.name}`" class="mx-auto max-w-[1240px] px-[26px] pt-11">
+    <section v-reveal v-for="(group, gi) in (rentalLoading ? [] : cityGroups)" :key="`${activeRental}-${group.name}`" class="mx-auto max-w-[1240px] px-[26px] pt-11">
       <div class="mb-[18px] flex items-center justify-between">
         <div class="flex items-center gap-3">
           <h2 class="m-0 font-display text-[23px] font-bold tracking-[-.025em]">{{ group.name }}</h2>
@@ -582,7 +582,7 @@ const LANDLORD_POINTS = ['Publiez votre bien', 'Loyers encaissés par Mobile Mon
     </section>
 
     <!-- L'autre mode de location, en fin de parcours : texte à gauche, ses annonces à droite, aux couleurs du mode -->
-    <section v-if="!rentalLoading && otherUnits.length" class="mx-auto max-w-[1240px] px-[26px] pt-14">
+    <section v-reveal v-if="!rentalLoading && otherUnits.length" class="mx-auto max-w-[1240px] px-[26px] pt-14">
       <div class="grid grid-cols-1 gap-7 rounded-3xl border p-6 sm:p-8 lg:grid-cols-[300px_minmax(0,1fr)] lg:items-center lg:gap-10" :class="RENTAL_META[otherRental].panel">
         <div>
           <p class="m-0 text-[12.5px] font-black uppercase tracking-[.08em]" :class="RENTAL_META[otherRental].ink">{{ RENTAL_META[otherRental].eyebrow }}</p>
@@ -625,7 +625,7 @@ const LANDLORD_POINTS = ['Publiez votre bien', 'Loyers encaissés par Mobile Mon
     </section>
 
     <!-- Explorer par ville : suit le mode de la page ; chaque carte dit ce qu'on trouvera en cliquant -->
-    <section v-if="cities.length" class="mx-auto max-w-[1240px] px-[26px] pt-14">
+    <section v-reveal v-if="cities.length" class="mx-auto max-w-[1240px] px-[26px] pt-14">
       <div class="mb-5">
         <h2 class="m-0 font-display text-title-2 font-bold tracking-title-2">Explorer par ville</h2>
         <p class="mb-0 mt-1.5 text-[14.5px] leading-[1.5] text-[var(--text-muted)]">
@@ -714,7 +714,7 @@ const LANDLORD_POINTS = ['Publiez votre bien', 'Loyers encaissés par Mobile Mon
     </CoreModal>
 
     <!-- Confiance : l'argument à gauche, les trois protections en liste à droite -->
-    <section class="mx-auto max-w-[1240px] px-[26px] pt-14">
+    <section v-reveal class="mx-auto max-w-[1240px] px-[26px] pt-14">
       <div class="grid grid-cols-1 gap-8 rounded-3xl border border-[var(--border-subtle)] bg-white p-6 sm:p-10 lg:grid-cols-[minmax(0,.85fr)_minmax(0,1.15fr)] lg:gap-14">
         <div>
           <p class="m-0 text-[12.5px] font-black uppercase tracking-[.08em] text-clay-500">Pourquoi Bayo</p>
@@ -736,7 +736,7 @@ const LANDLORD_POINTS = ['Publiez votre bien', 'Loyers encaissés par Mobile Mon
     </section>
 
     <!-- CTA bailleur -->
-    <section class="mx-auto max-w-[1240px] px-[26px] pt-11">
+    <section v-reveal class="mx-auto max-w-[1240px] px-[26px] pt-11">
       <div class="relative overflow-hidden rounded-3xl bg-green-900 p-7 sm:p-10">
         <SearchCategoryIcon code="maison" class="pointer-events-none absolute -bottom-12 -right-8 h-[280px] w-[280px] text-white/[.06]" />
         <div class="relative flex flex-col gap-7 lg:flex-row lg:items-center lg:justify-between">

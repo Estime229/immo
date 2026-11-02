@@ -80,7 +80,7 @@ async function becomeLandlord() {
 <template>
   <div class="animate-[im-fade_.3s_ease_backwards]">
     <!-- Héros : bandeau centré, aplat orange (sans dégradé), formes décoratives crème -->
-    <section class="mx-auto max-w-[1240px] px-[26px] pt-6">
+    <section v-reveal class="mx-auto max-w-[1240px] px-[26px] pt-6">
       <div class="relative overflow-hidden rounded-3xl bg-clay-500 px-6 py-14 text-center sm:px-12 sm:py-20">
         <span class="absolute left-10 top-10 hidden h-[88px] w-[88px] -rotate-6 place-items-center rounded-[26px] bg-white text-clay-500 shadow-raised sm:grid" aria-hidden="true">
           <SearchCategoryIcon code="maison" class="h-14 w-14" />
@@ -118,7 +118,7 @@ async function becomeLandlord() {
       </div>
     </section>
 
-    <section class="mx-auto max-w-[1240px] px-[26px] pt-11">
+    <section v-reveal class="mx-auto max-w-[1240px] px-[26px] pt-11">
       <h2 class="mb-5 mt-0 font-display text-title-2 font-bold tracking-title-2">Comment ça marche</h2>
       <div class="grid grid-cols-1 gap-4.5 sm:grid-cols-2 lg:grid-cols-4">
         <div v-for="(s, i) in STEPS" :key="s.title" class="rounded-2xl border border-[var(--border-subtle)] bg-white p-5.5">
@@ -132,7 +132,7 @@ async function becomeLandlord() {
       </div>
     </section>
 
-    <section class="mx-auto max-w-[1240px] px-[26px] pt-11">
+    <section v-reveal class="mx-auto max-w-[1240px] px-[26px] pt-11">
       <div class="rounded-2xl border border-[var(--border-escrow)] bg-[var(--surface-escrow)] p-5.5 sm:p-8">
         <h2 class="m-0 font-display text-2xl font-bold tracking-[-.025em] text-clay-700">Où va la caution</h2>
         <p class="mb-5.5 mt-2 max-w-[640px] text-[13.5px] leading-[1.55] text-clay-900">
@@ -154,7 +154,7 @@ async function becomeLandlord() {
       </div>
     </section>
 
-    <section id="tarifs" class="mx-auto max-w-[1240px] scroll-mt-[94px] px-[26px] pt-11">
+    <section v-reveal id="tarifs" class="mx-auto max-w-[1240px] scroll-mt-[94px] px-[26px] pt-11">
       <div class="flex flex-col gap-4 rounded-2xl border border-[var(--border-subtle)] bg-white p-5.5 sm:flex-row sm:items-center">
         <span class="grid h-[46px] w-[46px] flex-none place-items-center rounded-pill bg-green-50 text-green-700"><Banknote class="h-5 w-5" :stroke-width="1.9" /></span>
         <div class="flex-1">
@@ -168,7 +168,7 @@ async function becomeLandlord() {
     </section>
 
     <!-- Avis de propriétaires : cartes qui défilent en continu (pause au survol, figées si l'utilisateur réduit les animations) -->
-    <section v-if="showSampleReviews" class="pt-14" aria-labelledby="avis-titre">
+    <section v-reveal v-if="showSampleReviews" class="pt-14" aria-labelledby="avis-titre">
       <h2 id="avis-titre" class="mx-auto mb-0 mt-0 max-w-[1240px] px-[26px] text-center font-display text-[30px] font-extrabold tracking-[-.03em] sm:text-[38px]">Ils louent déjà avec Bayo</h2>
       <div class="mt-8 overflow-hidden motion-reduce:overflow-x-auto">
         <div class="flex w-max animate-[im-marquee_55s_linear_infinite] py-2 hover:[animation-play-state:paused] motion-reduce:animate-none motion-reduce:px-[26px]">
@@ -200,7 +200,7 @@ async function becomeLandlord() {
       </div>
     </section>
 
-    <section v-if="ctaKind !== 'none'" class="mx-auto max-w-[1240px] px-[26px] pb-4 pt-11">
+    <section v-reveal v-if="ctaKind !== 'none'" class="mx-auto max-w-[1240px] px-[26px] pb-4 pt-11">
       <div class="flex flex-col items-start gap-6 rounded-2xl bg-green-900 p-8 sm:flex-row sm:items-center sm:justify-between sm:p-9">
         <div>
           <h3 class="m-0 font-display text-2xl font-bold tracking-[-.025em] text-white">Prêt à publier votre premier bien ?</h3>

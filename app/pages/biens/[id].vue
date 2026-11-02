@@ -736,7 +736,7 @@ async function onFavoriteSimilar(l: { propertyId: string | null }) {
 
       <div class="mt-8 grid grid-cols-1 items-start gap-10 lg:grid-cols-[minmax(0,1fr)_400px] lg:gap-[52px]">
         <div class="min-w-0">
-          <div class="flex flex-wrap items-start justify-between gap-x-5 gap-y-3">
+          <div v-reveal="{ y: 16 }" class="flex flex-wrap items-start justify-between gap-x-5 gap-y-3">
             <div class="min-w-0">
               <h1 class="m-0 font-display text-title-1 font-bold tracking-title-1">{{ selectedUnit.name }}</h1>
               <p class="mb-0 mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[15px] text-[var(--text-secondary)]">
@@ -836,7 +836,7 @@ async function onFavoriteSimilar(l: { propertyId: string | null }) {
         </div>
 
         <aside ref="panelEl" class="scroll-mt-[84px] lg:sticky lg:top-[94px]" aria-label="Réserver ou candidater">
-          <div class="rounded-2xl border border-[var(--border-subtle)] bg-white p-5.5 shadow-panel sm:p-6">
+          <div v-reveal="{ y: 20, delay: .1 }" class="rounded-2xl border border-[var(--border-subtle)] bg-white p-5.5 shadow-panel sm:p-6">
             <div v-if="property.units.length > 1" class="mb-4">
               <p class="mb-2 mt-0 text-label font-bold uppercase tracking-label text-[var(--text-faint)]">{{ property.units.length }} logements dans ce bien</p>
               <div class="flex flex-wrap gap-1.5">

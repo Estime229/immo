@@ -482,10 +482,8 @@ function onMapSelect(id: string) {
 
 <template>
   <div class="mx-auto max-w-[1240px] animate-[im-fade_.3s_ease_backwards] px-4 pb-[60px] pt-6 sm:px-[26px]">
-    <!-- En-tête de recherche : fond doux, sans cadre ; les halos ne sont que décoratifs. -->
-    <div class="relative overflow-hidden rounded-[28px] bg-[linear-gradient(155deg,var(--color-green-50)_0%,var(--color-sand-50)_55%,var(--color-clay-50)_100%)] px-4 py-6 sm:px-8 sm:py-9">
-      <span aria-hidden="true" class="pointer-events-none absolute -right-20 -top-24 h-72 w-72 rounded-pill bg-green-200/40 blur-3xl" />
-      <span aria-hidden="true" class="pointer-events-none absolute -bottom-32 left-1/3 h-64 w-64 rounded-pill bg-clay-200/60 blur-3xl" />
+    <!-- En-tête de recherche : aplat uni (aucun dégradé ni halo), cadre fin. -->
+    <div v-reveal="{ y: 16 }" class="relative overflow-hidden rounded-[28px] border border-[var(--border-subtle)] bg-green-50 px-4 py-6 sm:px-8 sm:py-9">
 
       <div class="relative">
         <div class="flex flex-wrap items-end justify-between gap-x-5 gap-y-3">
@@ -729,7 +727,7 @@ function onMapSelect(id: string) {
         </div>
       </div>
 
-      <div v-else class="grid grid-cols-1 gap-[22px] transition-opacity sm:grid-cols-2 lg:grid-cols-3" :class="refreshing ? 'opacity-60' : ''">
+      <div v-else v-reveal.stagger class="grid grid-cols-1 gap-[22px] transition-opacity sm:grid-cols-2 lg:grid-cols-3" :class="refreshing ? 'opacity-60' : ''">
         <SearchPropertyCard
           v-for="item in displayItems"
           :key="item.listing.unitId"
