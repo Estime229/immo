@@ -188,6 +188,7 @@ const mobileTabs = computed<MobileTab[]>(() => {
       </div>
     </main>
 
+    <LayoutSpaceSwitchOverlay />
     <LayoutMobileTabBar :items="mobileTabs" @select="drawerOpen = !drawerOpen" />
 
     <ProRetraitModal />

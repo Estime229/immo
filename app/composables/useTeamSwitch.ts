@@ -12,8 +12,10 @@ export function useTeamSwitch() {
   const teamContext = useTeamContext()
   const teamApi = useTeamApi()
   const authApi = useAuthApi()
-  const switching = ref(false)
-  const error = ref('')
+  // Partagés avec l'écran de transition du layout : le loader reste affiché jusqu'au rechargement de la page.
+  const switching = useState('teamSwitching', () => false)
+  const target = useState<string>('teamSwitchTarget', () => '')
+  const error = useState('teamSwitchError', () => '')
 
   const activeTeam = computed(() => memberships.value.find(m => m.team.id === teamContext.value) ?? null)
 
@@ -33,8 +35,12 @@ export function useTeamSwitch() {
     if (switching.value || teamId === teamContext.value) return
     switching.value = true
     error.value = ''
+    target.value = teamId ? (memberships.value.find(m => m.team.id === teamId)?.team.name ?? 'cette équipe') : 'Mon espace'
     try {
+      const minimum = new Promise(resolve => setTimeout(resolve, 900))
       await authApi.switchContext(teamId)
+      // Le loader reste visible au moins un instant : sans lui, le changement passe pour un simple rechargement.
+      await minimum
       await reloadNuxtApp({ path: '/pro', persistState: false })
     } catch {
       error.value = "Impossible de changer d'espace pour le moment. Réessayez."
@@ -48,5 +54,5 @@ export function useTeamSwitch() {
     return { name: m.team.name, owner }
   }
 
-  return { memberships, activeTeam, switching, error, load, switchTo, teamLabel }
+  return { memberships, activeTeam, switching, target, error, load, switchTo, teamLabel }
 }
