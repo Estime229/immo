@@ -6,6 +6,7 @@ import type {
   RolesResult,
   SetPasswordResult,
   SimpleSuccessResult,
+  SwitchContextResult,
   SwitchRoleResult,
   UserRole
 } from '~/types/auth'
@@ -30,6 +31,7 @@ export function useAuthApi() {
   const api = useApi()
   const { setTokens, clearTokens, refreshToken, isAuthenticated } = useApiAuth()
   const user = useAuthUser()
+  const teamContext = useTeamContext()
 
   async function checkEmail(email: string) {
     return pub.get<CheckEmailResult>('/auth/check-email', { email })
@@ -86,6 +88,8 @@ export function useAuthApi() {
     try {
       const me = await api.get<AuthUser>('/auth/me')
       user.value = me
+      // L'équipe active vit dans le jeton : on la relit à chaque résolution de session.
+      teamContext.value = me.active_team_id ?? null
       return me
     } catch (err) {
       if (err instanceof ApiRequestError && err.status === 404) {
@@ -106,6 +110,18 @@ export function useAuthApi() {
     // Liste des rôles relue à la prochaine garde d'espace (middleware).
     clearNuxtState(['authRoles'])
     return api.post<RolesResult>('/user/roles', { role })
+  }
+
+  /**
+   * Agit pour une équipe (`teamId`) ou revient à son espace personnel (`null`). L'API vérifie que le
+   * compte est membre actif, émet une nouvelle paire de jetons et le contexte suit le jeton.
+   */
+  async function switchContext(teamId: string | null) {
+    const res = await api.post<SwitchContextResult>('/auth/switch-context', { team_id: teamId })
+    setTokens({ accessToken: res.token, refreshToken: res.refresh_token })
+    teamContext.value = res.active_team_id
+    await fetchMe()
+    return res
   }
 
   async function switchRole(role: UserRole) {
@@ -145,6 +161,7 @@ export function useAuthApi() {
     fetchMe,
     fetchRoles,
     addRole,
-    switchRole
+    switchRole,
+    switchContext
   }
 }

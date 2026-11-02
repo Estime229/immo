@@ -3,6 +3,7 @@ import { visitBucket } from '~/utils/visits'
 import type { MobileTab } from '~/utils/mobileNav'
 const route = useRoute()
 const currentUser = useAuthUser()
+const teamSwitch = useTeamSwitch()
 const displayName = computed(() => {
   const u = currentUser.value
   if (!u) return ''
@@ -171,12 +172,17 @@ const mobileTabs = computed<MobileTab[]>(() => {
           <h1 class="m-0 truncate font-display text-[19px] font-bold tracking-[-.025em] sm:text-[22px]">{{ pageTitle }}</h1>
         </div>
         <div class="flex flex-none items-center gap-3">
+          <LayoutTeamSwitcher />
           <LayoutNotificationBell />
           <LayoutAccountMenu :name="displayName" color="var(--color-green-700)" />
         </div>
       </header>
 
       <div class="w-full px-4 pb-[calc(var(--mobile-tabbar-space)+1.5rem)] pt-7 sm:px-8 lg:pb-[60px]">
+        <p v-if="teamSwitch.activeTeam.value" class="mb-5 mt-0 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-green-200 bg-green-50 px-4 py-2.5 text-[13px] text-green-900">
+          <span>Vous agissez pour l'équipe <strong>{{ teamSwitch.activeTeam.value.team.name }}</strong> : seuls les biens qui vous sont assignés apparaissent.</span>
+          <button type="button" class="cursor-pointer font-bold text-green-700 underline underline-offset-2" :disabled="teamSwitch.switching.value" @click="teamSwitch.switchTo(null)">Revenir à mon espace</button>
+        </p>
         <LayoutGuidePageHint />
         <slot />
       </div>

@@ -9,9 +9,15 @@ import type { CreatePoiPayload, CreatePropertyPayload, CreateUnitPayload, MediaI
  */
 export function useLandlordPropertiesApi() {
   const api = useApi()
+  const teamContext = useTeamContext()
 
+  /**
+   * Mes biens. Quand on agit pour une équipe (bascule dans l'en-tête), l'API ne renvoie que les biens
+   * assignés à notre poste dans cette équipe ; sinon, nos biens et ceux gérés au titre d'un mandat.
+   */
   async function fetchMine(filters: { city?: string; status?: string; page?: number; limit?: number } = {}) {
-    return api.get<PropertySearchPage>('/property/owner/me', filters)
+    const teamId = teamContext.value
+    return api.get<PropertySearchPage>('/property/owner/me', teamId ? { ...filters, team_id: teamId } : filters)
   }
 
   /** `POST /property` exige un compte vérifié KYC — confirmé en direct (403 `error.KYC_REQUIRED`), voir IP1. */

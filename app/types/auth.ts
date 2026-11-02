@@ -96,7 +96,8 @@ export interface SwitchRoleResult {
 
 export interface SwitchContextResult {
   token: string
-  /** Pas de refresh_token ici — bug backend documenté, voir 10-SOCLE-INTEGRATION.md §9. */
+  /** Depuis le correctif #26 de l'API (06/10/2026), une vraie paire de jetons est émise. */
+  refresh_token: string
   active_team_id: string | null
   team_name?: string | null
 }
