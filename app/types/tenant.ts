@@ -175,6 +175,8 @@ export interface BookingActionResult {
   status: BookingStatus
   expires_at: string | null
   extended_from_booking_id: string | null
+  /** Présent seulement quand un séjour déjà payé vient d'être annulé (API #25). */
+  refund?: { rule: 'tenant_full' | 'tenant_first_night_kept' | 'host_full'; amount_paid: number; refunded_amount: number; host_kept_amount: number }
 }
 
 /** Aucun débit, aucune incrémentation d'utilisation — simulation pure, vérifiée en direct (code invalide → 400 explicite). */

@@ -12,7 +12,7 @@ const GUIDE_CARDS = [
   {
     icon: Users,
     title: 'Mandats et équipe',
-    text: "L'équipe donne l'accès : chaque membre n'agit que sur les biens que vous lui confiez, selon ses permissions (baux, logements, fiche du bien, demandes de logement). Un mandat d'agent, lui, l'affiche comme agent d'un bien sans lui ouvrir aucun accès : pour qu'il agisse, invitez-le aussi dans votre équipe. Une invitation passe par un lien, que vous pouvez renouveler ou annuler.",
+    text: "L'équipe donne l'accès : chaque membre n'agit que sur les biens que vous lui confiez, selon ses permissions (baux, logements, fiche du bien, demandes de logement). Un mandat d'agent actif donne, lui, la gestion des seuls biens où vous l'avez désigné comme agent ; elle prend fin avec le mandat. Une invitation passe par un lien, que vous pouvez renouveler ou annuler.",
     link: { to: '/pro/equipe', label: 'Gérer mon équipe' }
   },
   {

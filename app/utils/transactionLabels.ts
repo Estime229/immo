@@ -13,6 +13,7 @@ export const TRANSACTION_TYPE_LABELS: Record<string, string> = {
   service_fee: 'Frais de service',
   lease_entry_payment: "Paiement d'entrée (bail)",
   short_stay_booking_payment: 'Réservation courte durée',
+  short_stay_booking_refund: 'Remboursement de réservation',
   artisan_intervention_payment: "Intervention d'artisan"
 }
 

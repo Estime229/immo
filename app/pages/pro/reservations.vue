@@ -10,6 +10,8 @@ definePageMeta({ layout: 'pro' })
 
 const modal = useProModal()
 const bookingsApi = useLandlordBookingsApi()
+const cancelHost = ref<LandlordBookingSummary | null>(null)
+const cancelFlash = ref('')
 const promoList = useLandlordPromoCodes()
 const landlordPropertiesApi = useLandlordPropertiesApi()
 
@@ -178,6 +180,7 @@ async function toggleActive(p: PromoCodeSummary) {
         <div class="mb-4.5 max-w-full overflow-x-auto">
           <FormsSegmentedControl v-model="bookingTabModel" :options="bookingTabOptions" size="sm" class="whitespace-nowrap" />
         </div>
+        <p v-if="cancelFlash" class="mb-3.5 rounded-md border border-ok-border bg-ok-bg px-3.5 py-2.5 text-[13px] font-semibold text-green-900">{{ cancelFlash }}</p>
         <p v-if="bookingError" class="mb-3.5 text-[13px] font-semibold text-danger-fg">{{ bookingError }}</p>
         <p v-if="!bookingRows.length" class="rounded-md border border-dashed border-[var(--border-default)] bg-white px-4 py-10 text-center text-[13.5px] text-[var(--text-muted)]">{{ BOOKING_TABS.find(t => t.key === bookingTab)?.empty }}</p>
         <article
@@ -209,6 +212,9 @@ async function toggleActive(p: PromoCodeSummary) {
             <div v-if="hostAmounts(b).retained > 0" class="rounded-lg border border-[var(--border-escrow)] bg-[var(--surface-escrow)] p-3.5"><p class="m-0 font-mono text-base font-bold text-clay-900">{{ formatFcfaShort(hostAmounts(b).retained) }}</p><p class="mb-0 mt-1 text-[11.5px] text-clay-900">{{ hostAmounts(b).released ? 'retenue versée' : 'retenu jusqu\'au départ' }}</p></div>
           </div>
           <p v-else class="mb-0 mt-3 text-[13px] text-[var(--text-muted)]"><span class="font-mono font-bold">{{ fmtFcfa(b.total_price) }}</span><template v-if="phaseOf(b) === 'hold'"> · le voyageur a 15 min pour payer, rien n'est encore bloqué.</template></p>
+          <div v-if="b.status === 'confirmed' && (phaseOf(b) === 'upcoming' || phaseOf(b) === 'ongoing')" class="mt-3 flex justify-end">
+            <button type="button" class="text-[12.5px] font-semibold text-danger-fg underline" @click="cancelHost = b">Annuler ce séjour</button>
+          </div>
           <div v-if="b.status === 'confirmed' && b.unit?.requires_booking_inventory && !b.retention_released_at" class="mt-3.5 flex flex-wrap items-center gap-2.5 rounded-md border border-warn-border bg-warn-bg px-3.5 py-2.5">
             <p class="m-0 min-w-0 flex-1 text-[12.5px] text-warn-fg">État des lieux exigé pour ce logement : la retenue n'est versée qu'une fois l'état des lieux d'arrivée fait.</p>
             <NuxtLink :to="{ path: '/pro/edl', query: { booking: b.id } }" class="inline-flex items-center gap-1.5 rounded-pill border border-warn-border bg-white px-3.5 py-2 text-xs font-bold text-warn-fg-deep">
@@ -269,5 +275,15 @@ async function toggleActive(p: PromoCodeSummary) {
         </div>
       </section>
     </template>
+    <BookingCancelModal
+      v-if="cancelHost"
+      mode="host"
+      :booking-id="cancelHost.id"
+      :check-in="cancelHost.check_in"
+      :check-out="cancelHost.check_out"
+      :guest-name="tenantName(cancelHost)"
+      @close="cancelHost = null"
+      @done="r => { cancelFlash = `Séjour annulé : ${fmtFcfa(String(r.refund?.refunded_amount ?? 0))} remboursés au voyageur, dates libérées.`; cancelHost = null; bookingsBlock.load() }"
+    />
   </div>
 </template>

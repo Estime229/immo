@@ -11,7 +11,8 @@ export const ENFORCED_PERMISSIONS: Record<string, string> = {
   'team:units:edit': 'modifier les logements et leur calendrier',
   'team:units:create': 'ajouter des logements à un bien',
   'team:properties:edit': 'modifier le bien et ses photos',
-  'team:requests:handle': 'répondre aux demandes de logement'
+  'team:requests:handle': 'répondre aux demandes de logement',
+  'team:bookings:cancel': 'annuler un séjour payé et rembourser le voyageur'
 }
 
 /** Registre groupé par catégorie, dans l'ordre de l'API. */

@@ -9,8 +9,8 @@ import { agentName, inTeam, MANDATE_STATUS, mandateClosed, mandatorName, mandato
 definePageMeta({ layout: 'pro' })
 
 /**
- * Mandats d'agent. Un mandat ne donne aucun accès aux biens (#76) : l'accès
- * passe par l'équipe. Chaque mandat actif propose donc l'étape suivante
+ * Mandats d'agent. Depuis le 02/11/2026 (#76), un mandat actif donne la gestion des biens désignés ;
+ * d'autres droits passent par l'équipe. Chaque mandat actif propose donc l'étape suivante
  * (inviter l'agent dans l'équipe, ou côté agent, retrouver ses équipes).
  * Vue dans l'URL (`?vue=mandants`), mandat mis en avant par `?mandate=`.
  */
@@ -206,7 +206,7 @@ const mineSorted = computed(() => [...mine.value].sort((a, b) => ORDER.indexOf(a
             </CoreButton>
           </div>
           <p class="mb-0 mt-3.5 rounded-md bg-[var(--surface-page)] p-3 text-[13px] leading-[1.55] text-[var(--text-muted)]">
-            Désigner un agent sur un bien l'affiche comme agent de ce bien, sans lui donner <strong>aucun accès</strong>. Pour lui confier des actions (baux, logements…), invitez-le aussi dans votre <NuxtLink to="/pro/equipe" class="font-bold text-green-700">équipe</NuxtLink>.
+            Un agent désigné sur un bien, avec un mandat actif, peut <strong>gérer ce bien</strong> (baux, logements, réservations, demandes), et lui seul. Il ne peut pas annuler un séjour payé. Il est retiré du bien à la fin du mandat. Pour d'autres droits, invitez-le dans votre <NuxtLink to="/pro/equipe" class="font-bold text-green-700">équipe</NuxtLink>.
           </p>
         </section>
 

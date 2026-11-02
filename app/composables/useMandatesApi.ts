@@ -4,7 +4,7 @@ import type { Mandate } from '~/types/team'
  * Mandats d'agent (`/agent-mandates`). Créer : propriétaire ou agence (une
  * agence doit avoir son KYB approuvé). Répondre : l'agent. Mettre fin : l'une
  * ou l'autre partie. Désigner l'agent d'un bien passe par `PATCH /property/:id`
- * (`agent_id`), accepté seulement avec un mandat actif — sans effet sur les accès (#76).
+ * (`agent_id`), accepté seulement avec un mandat actif — il ouvre la gestion de ces biens à l'agent (#76).
  */
 export function useMandatesApi() {
   const api = useApi()

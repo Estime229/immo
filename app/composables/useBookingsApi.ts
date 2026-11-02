@@ -32,10 +32,15 @@ export function useBookingsApi() {
     return api.post<BookingActionResult>(`/bookings/${id}/extend`, { new_check_out: newCheckOut })
   }
 
-  /** Uniquement tant que pending_payment — une réservation confirmée ne s'annule pas par cette route. */
-  async function cancel(id: string) {
-    return api.patch<BookingActionResult>(`/bookings/${id}/cancel`)
+  /** Hold non payé : annulation simple. Séjour payé : remboursé selon la règle du serveur (100 % jusqu'à 48 h avant l'arrivée, sinon première nuit gardée). */
+  async function cancel(id: string, reason?: string) {
+    return api.patch<BookingActionResult>(`/bookings/${id}/cancel`, reason ? { reason } : {})
   }
 
-  return { fetchMine, create, previewPromo, pay, extend, cancel }
+  /** Hôte (ou membre d'équipe autorisé) : séjour payé annulé, voyageur remboursé à 100 %. Motif obligatoire. */
+  async function cancelByHost(id: string, reason: string) {
+    return api.patch<BookingActionResult>(`/bookings/${id}/cancel-by-host`, { reason })
+  }
+
+  return { fetchMine, create, previewPromo, pay, extend, cancel, cancelByHost }
 }

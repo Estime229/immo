@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { CalendarDays, Lock, MessageSquare, Search, X } from '@lucide/vue'
-import type { BookingSummary } from '~/types/tenant'
+import type { BookingActionResult, BookingSummary } from '~/types/tenant'
 import type { DocumentResult } from '~/composables/usePdfDocument'
 import { deriveHoldCountdown } from '~/utils/bookingHold'
 import { ApiRequestError } from '~/utils/authenticatedFetcher'
@@ -91,7 +91,7 @@ const payingBooking = ref<BookingSummary | null>(null)
 const extendingBooking = ref<BookingSummary | null>(null)
 const busyId = ref<string | null>(null)
 const confirmCancelId = ref<string | null>(null)
-const cancelHelpId = ref<string | null>(null)
+const cancelPaid = ref<BookingSummary | null>(null)
 
 /** Après paiement : la réservation passe dans « À venir », mise en évidence, avec ce qui a été débité. */
 async function onPaid(b: BookingSummary) {
@@ -122,6 +122,13 @@ async function cancelBooking(b: BookingSummary) {
   } finally {
     busyId.value = null
   }
+}
+async function onPaidCancelled(b: BookingSummary, r: BookingActionResult) {
+  cancelPaid.value = null
+  actionError.value = ''
+  const kept = r.refund?.host_kept_amount ?? 0
+  flash.value = `Séjour annulé : ${formatFcfa(r.refund?.refunded_amount ?? 0)} remboursés sur votre portefeuille${kept > 0 ? ` (la première nuit, ${formatFcfa(kept)}, reste à l'hôte)` : ''}. Les dates du ${formatDate(b.check_in)} au ${formatDate(b.check_out)} sont libérées.`
+  await block.load()
 }
 async function contactHost(b: BookingSummary) {
   if (!b.landlord_id) return
@@ -263,14 +270,12 @@ async function downloadReceipt(b: BookingSummary) {
         <div class="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-sand-200 pt-3">
           <NuxtLink v-if="b.unit?.property_id" :to="`/biens/${b.unit.property_id}`" class="text-[12.5px] font-bold text-green-700">Voir l'annonce</NuxtLink>
           <NuxtLink v-if="(phaseOf(b) === 'upcoming' || phaseOf(b) === 'ongoing') && b.unit?.requires_booking_inventory" to="/locataire/edl" class="text-[12.5px] font-bold text-green-700">État des lieux d'arrivée</NuxtLink>
-          <button v-if="phaseOf(b) === 'upcoming'" type="button" class="text-[12.5px] font-semibold text-[var(--text-muted)] underline" @click="cancelHelpId = cancelHelpId === b.id ? null : b.id">Annuler ce séjour ?</button>
+          <button v-if="phaseOf(b) === 'upcoming'" type="button" class="text-[12.5px] font-semibold text-[var(--text-muted)] underline" @click="cancelPaid = b">Annuler ce séjour</button>
         </div>
-        <p v-if="cancelHelpId === b.id" class="mb-0 mt-2 rounded-md bg-sand-100 px-3.5 py-2.5 text-[12.5px] text-[var(--text-secondary)]">
-          Un séjour déjà payé ne s'annule pas encore depuis Bayo. Écrivez à l'hôte pour convenir d'une annulation et d'un éventuel remboursement.
-        </p>
       </article>
     </template>
 
+    <BookingCancelModal v-if="cancelPaid" mode="tenant" :booking-id="cancelPaid.id" :check-in="cancelPaid.check_in" :check-out="cancelPaid.check_out" @close="cancelPaid = null" @done="onPaidCancelled(cancelPaid!, $event)" />
     <TenantBookingPayModal v-if="payingBooking" :booking="payingBooking" @close="payingBooking = null" @paid="payingBooking && onPaid(payingBooking)" @changed="onChanged" />
     <TenantBookingExtendModal v-if="extendingBooking" :booking="extendingBooking" @close="extendingBooking = null" @extended="extendingBooking = null; block.load()" @pay="onExtendPay" />
   </div>

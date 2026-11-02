@@ -7,7 +7,7 @@
  *   calendrier, demandes, artisans) ;
  * - le **mandat** (`/agent-mandates`) relie un propriétaire ou une agence à un
  *   utilisateur au rôle agent, qu'on peut ensuite désigner comme agent d'un
- *   bien (`agent_id`). Il ne donne aucun accès (#76).
+ *   bien (`agent_id`). Depuis le 02/11/2026, un mandat actif donne la gestion des biens désignés (#76).
  */
 
 export interface TeamPermission {
