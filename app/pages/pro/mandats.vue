@@ -4,7 +4,7 @@ import type { Mandate, Membership, MyTeam } from '~/types/team'
 import type { UserRole } from '~/types/auth'
 import { ApiRequestError } from '~/utils/authenticatedFetcher'
 import { errorText } from '~/utils/apiErrors'
-import { agentName, inTeam, MANDATE_STATUS, mandatorName, mandatorTeam, propertiesOfAgent } from '~/utils/team'
+import { agentName, inTeam, MANDATE_STATUS, mandateClosed, mandatorName, mandatorTeam, propertiesOfAgent } from '~/utils/team'
 
 definePageMeta({ layout: 'pro' })
 
@@ -169,7 +169,7 @@ function becomeAgent() {
 function since(m: Mandate) {
   return new Date(m.status === 'pending' ? m.created_at : m.updated_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })
 }
-const ORDER = ['pending', 'active', 'revoked']
+const ORDER = ['pending', 'active', 'revoked', 'rejected']
 const managedSorted = computed(() => [...managed.value].sort((a, b) => ORDER.indexOf(a.status) - ORDER.indexOf(b.status)))
 const mineSorted = computed(() => [...mine.value].sort((a, b) => ORDER.indexOf(a.status) - ORDER.indexOf(b.status)))
 </script>
@@ -228,7 +228,7 @@ const mineSorted = computed(() => [...mine.value].sort((a, b) => ORDER.indexOf(a
               <CoreBadge :tone="MANDATE_STATUS[m.status].tone">{{ MANDATE_STATUS[m.status].label }}</CoreBadge>
             </div>
 
-            <div v-if="m.status !== 'revoked'" class="mt-4 border-t border-sand-200 pt-4">
+            <div v-if="!mandateClosed(m.status)" class="mt-4 border-t border-sand-200 pt-4">
               <template v-if="m.status === 'active'">
                 <p class="mb-2 mt-0 text-label font-bold uppercase tracking-label text-[var(--text-faint)]">Désigné sur</p>
                 <div v-if="propertiesOfAgent(properties, m.agent_id).length" class="flex flex-wrap gap-2">

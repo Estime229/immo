@@ -140,8 +140,15 @@ export function inTeam(team: MyTeam | null, email: string | null | undefined): '
 export const MANDATE_STATUS: Record<MandateStatus, { label: string; tone: 'ok' | 'warn' | 'neutral' }> = {
   pending: { label: 'En attente de réponse', tone: 'warn' },
   active: { label: 'Actif', tone: 'ok' },
-  // L'API ne distingue pas un refus d'une fin de mandat (#77).
-  revoked: { label: 'Terminé ou refusé', tone: 'neutral' }
+  // Avant le correctif #76 de l'API, un refus était enregistré comme une fin de mandat :
+  // les anciens refus restent `revoked`.
+  revoked: { label: 'Terminé ou refusé', tone: 'neutral' },
+  rejected: { label: 'Refusé', tone: 'neutral' }
+}
+
+/** Mandat clos (terminé ou refusé) : plus aucune action possible dessus. */
+export function mandateClosed(status: MandateStatus): boolean {
+  return status === 'revoked' || status === 'rejected'
 }
 
 function partyName(p: { first_name?: string | null; last_name?: string | null; email?: string | null } | null | undefined): string {

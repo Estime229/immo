@@ -106,7 +106,8 @@ export interface Membership {
   properties: { id: string; name: string }[]
 }
 
-export type MandateStatus = 'pending' | 'active' | 'revoked'
+/** `rejected` : refus de l'agent, distinct d'une fin de mandat depuis le correctif #76 de l'API (01/11/2026). */
+export type MandateStatus = 'pending' | 'active' | 'revoked' | 'rejected'
 
 interface PartyRef {
   id: string
