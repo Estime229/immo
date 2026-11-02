@@ -80,3 +80,13 @@ export async function mapLimited<T, R>(items: T[], limit: number, fn: (item: T) 
   await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker))
   return out
 }
+
+/**
+ * Mode de location d'une carte déjà classée par l'API (`nightly_price` / `monthly_price`,
+ * même règle que `classifyRental`). `null` si l'API ne les renvoie pas : l'appelant lit alors
+ * la grille tarifaire unité par unité.
+ */
+export function modeFromCard(c: { nightlyPrice?: number | null; monthlyPrice?: number | null }): RentalMode | null {
+  if (c.nightlyPrice === undefined || c.monthlyPrice === undefined) return null
+  return { nightly: c.nightlyPrice, monthly: c.monthlyPrice }
+}

@@ -14,6 +14,9 @@ export interface ListingCard {
   cityName: string
   neighborhoodName: string
   price: number
+  /** Prix par mode calculés par l'API ; `undefined` = ancienne API, il faut alors lire la grille tarifaire. */
+  nightlyPrice?: number | null
+  monthlyPrice?: number | null
   bedrooms: number
   surface: number | null
   photoUrl: string | null
@@ -51,6 +54,8 @@ export function flattenSearchResults(items: (PropertySearchResult | UnitSearchRe
         cityName: item.city?.name ?? '',
         neighborhoodName: '',
         price: Number(item.price),
+        nightlyPrice: item.nightly_price,
+        monthlyPrice: item.monthly_price,
         bedrooms: item.bedrooms_count ?? 0,
         surface: item.surface_m2,
         photoUrl: photos[0] ?? null,
@@ -72,6 +77,8 @@ export function flattenSearchResults(items: (PropertySearchResult | UnitSearchRe
         cityName: property.city?.name ?? '',
         neighborhoodName: property.neighborhood?.name ?? '',
         price: Number(u.price),
+        nightlyPrice: u.nightly_price,
+        monthlyPrice: u.monthly_price,
         bedrooms: u.bedrooms_count ?? 0,
         surface: u.surface_m2,
         photoUrl: photos[0] ?? null,

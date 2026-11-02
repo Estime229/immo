@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { classifyRental, displayPrice, filterByRental, mapLimited } from '~/utils/rentalMode'
+import { classifyRental, displayPrice, filterByRental, mapLimited, modeFromCard } from '~/utils/rentalMode'
 import type { UnitPricing } from '~/types/property'
 
 function row(billing_frequency: string, price: string, is_available = true): UnitPricing {
@@ -86,5 +86,15 @@ describe('mapLimited', () => {
     })
     expect(res).toEqual([10, 20, 30, 40, 50, 60, 70])
     expect(peak).toBeLessThanOrEqual(3)
+  })
+})
+
+describe('modeFromCard', () => {
+  it("reprend les prix calculés par l'API", () => {
+    expect(modeFromCard({ nightlyPrice: 15000, monthlyPrice: null })).toEqual({ nightly: 15000, monthly: null })
+  })
+  it("renvoie null sur une ancienne API (champs absents) : la grille tarifaire est alors lue", () => {
+    expect(modeFromCard({})).toBeNull()
+    expect(modeFromCard({ nightlyPrice: 1 })).toBeNull()
   })
 })

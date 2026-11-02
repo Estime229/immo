@@ -3,7 +3,7 @@ import type { Component } from 'vue'
 import { ArrowRight, CalendarDays, Check, ChevronLeft, ChevronRight, ClipboardCheck, MapPin, Moon, Search, ShieldCheck, Smartphone } from '@lucide/vue'
 import type { PropertySearchResult } from '~/types/property'
 import { flattenSearchResults, type ListingCard } from '~/utils/propertyListing'
-import { classifyRental, mapLimited, type RentalMode } from '~/utils/rentalMode'
+import { classifyRental, mapLimited, modeFromCard, type RentalMode } from '~/utils/rentalMode'
 import { buildSearchQuery, digitsOnly } from '~/utils/searchPill'
 import { normalizeCity, rankCities } from '~/utils/geo'
 
@@ -220,7 +220,7 @@ onMounted(() => {
 async function loadRentalModes(cards: ListingCard[]) {
   const cache = rentalModeCache.value
   const modes = await mapLimited(cards, 6, async c => {
-    const known = cache[c.unitId]
+    const known = cache[c.unitId] ?? modeFromCard(c)
     if (known) return known
     try {
       const mode = classifyRental(await searchApi.fetchPricing(c.unitId), c.price)

@@ -31,6 +31,9 @@ export interface UnitSearchResult {
   property_id: string
   name: string
   price: string
+  /** Prix à la nuit / au mois calculés par l'API (depuis le 02/11/2026) ; absents sur une ancienne API. */
+  nightly_price?: number | null
+  monthly_price?: number | null
   toilet_type: string | null
   water_source: string | null
   meter_type: string | null

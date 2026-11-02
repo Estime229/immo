@@ -3,7 +3,7 @@ import { BedDouble, ChevronDown, Droplets, House, LoaderCircle, MapPin, RefreshC
 import type { PropertySearchFilters, PropertySearchResult } from '~/types/property'
 import { flattenSearchResults, type ListingCard } from '~/utils/propertyListing'
 import { resolveLocation, type MapMarker } from '~/utils/geo'
-import { classifyRental, displayPrice, filterByRental, mapLimited, RENTAL_SUFFIX, type RentalKey, type RentalMode } from '~/utils/rentalMode'
+import { classifyRental, displayPrice, filterByRental, mapLimited, modeFromCard, RENTAL_SUFFIX, type RentalKey, type RentalMode } from '~/utils/rentalMode'
 import { filtersFromQuery, filtersToQuery, rememberSearch, sameSearch, SEARCH_QUERY_KEYS, searchPath, type SearchFiltersState, type SearchSort, type SearchView } from '~/utils/searchPill'
 
 const route = useRoute()
@@ -178,6 +178,8 @@ async function classify(cards: ListingCard[]) {
   const todo = cards.filter(c => !modeByUnit.value[c.unitId])
   if (!todo.length) return
   const modes = await mapLimited(todo, 10, async c => {
+    const fromApi = modeFromCard(c)
+    if (fromApi) return fromApi
     try {
       return classifyRental(await searchApi.fetchPricing(c.unitId), c.price)
     } catch {
