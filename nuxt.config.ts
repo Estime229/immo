@@ -27,7 +27,11 @@ export default defineNuxtConfig({
       // sont pas publiées : la bannière affiche alors « Bientôt » sans lien.
       // Surchargeables via NUXT_PUBLIC_APP_STORE_URL / NUXT_PUBLIC_PLAY_STORE_URL.
       appStoreUrl: '',
-      playStoreUrl: ''
+      playStoreUrl: '',
+      // Interrupteur V1 de l'espace pro (décision produit) : Équipe, Mandats et
+      // Artisans sont masqués du menu tant qu'il vaut false. Les pages restent
+      // joignables par leur URL. Réaffichage : NUXT_PUBLIC_PRO_ADVANCED=true.
+      proAdvanced: false
     }
   },
   vite: {

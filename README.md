@@ -20,6 +20,16 @@ yarn install
 bun install
 ```
 
+## Variables d'environnement
+
+Toutes facultatives : sans elles, l'application prend les valeurs de `runtimeConfig` dans `nuxt.config.ts`.
+
+| Variable | Défaut | Rôle |
+| --- | --- | --- |
+| `NUXT_API_BASE` | API de développement | URL de l'API appelée par le proxy serveur (`server/api/proxy`). |
+| `NUXT_PUBLIC_APP_STORE_URL` / `NUXT_PUBLIC_PLAY_STORE_URL` | vides | Liens de la bannière « Téléchargez l'application » ; vides, elle affiche « Bientôt ». |
+| `NUXT_PUBLIC_PRO_ADVANCED` | `false` | Interrupteur V1 de l'espace pro. À `false`, les rubriques Équipe, Mandats et Artisans sont masquées du menu (barre latérale et menu mobile) ; leurs pages restent accessibles par URL (notifications, invitations). Mettre `true` pour les réafficher. |
+
 ## Development Server
 
 Start the development server on `http://localhost:3000`:

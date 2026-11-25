@@ -121,7 +121,7 @@ const identitySubtitle = computed(() => {
         </div>
         <div class="flex flex-none items-center gap-2.5 sm:gap-4">
           <LayoutNotificationBell />
-          <LayoutAccountMenu :name="displayName || 'Artisan'" color="var(--color-green-700)" />
+          <LayoutAccountMenu :name="displayName || 'Artisan'" color="var(--color-green-700)" with-sidebar />
         </div>
       </header>
 

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { visitBucket } from '~/utils/visits'
 import type { MobileTab } from '~/utils/mobileNav'
+import { navBadgeLabel, navKeyForPath, TENANT_TABS, tenantsBadgeCount, visibleNavGroups } from '~/utils/proNav'
 const route = useRoute()
 const currentUser = useAuthUser()
 const teamSwitch = useTeamSwitch()
@@ -22,14 +23,16 @@ const roleLabel = computed(() => {
   return (r && labels[r]) || 'Compte pro'
 })
 
-/** Sous-pages (`/pro/biens/ajouter`, `/pro/biens/fiche`…) rattachées à leur rubrique — avant, tout s'affichait « Aperçu ». */
-const currentKey = computed(() => {
-  const items: ReadonlyArray<{ key: string; to: string }> = NAV_GROUPS.flatMap(g => [...g.items])
-  const exact = items.find(n => n.to === route.path)
-  if (exact) return exact.key
-  const parent = items.filter(n => n.to !== '/pro' && route.path.startsWith(`${n.to}/`)).sort((a, b) => b.to.length - a.to.length)[0]
-  return parent?.key ?? 'apercu'
-})
+/** Interrupteur V1 : sans `proAdvanced`, Équipe, Mandats et Artisans sortent du menu (barre latérale et tiroir mobile). */
+const proAdvanced = useProAdvanced()
+const navGroups = computed(() => visibleNavGroups(NAV_GROUPS, proAdvanced.value))
+const ALL_NAV_ITEMS = NAV_GROUPS.flatMap(g => [...g.items])
+
+/**
+ * Sous-pages (`/pro/biens/ajouter`, `/pro/biens/fiche`…) rattachées à leur rubrique — avant, tout s'affichait « Aperçu ».
+ * Calculé sur toutes les entrées, masquées comprises : `/pro/equipe` ouverte par son URL garde le titre « Équipe ».
+ */
+const currentKey = computed(() => navKeyForPath(ALL_NAV_ITEMS, route.path))
 /** Sous-pages qui ont leur propre titre (avant : « Créer un bail » s'affichait « Baux »). */
 const SUB_PAGE_TITLES: Array<[RegExp, string]> = [
   [/^\/pro\/biens\/ajouter$/, PAGE_TITLES.addBien!],
@@ -38,29 +41,42 @@ const SUB_PAGE_TITLES: Array<[RegExp, string]> = [
   [/^\/pro\/baux\/[^/]+$/, 'Bail']
 ]
 const pageTitle = computed(() => SUB_PAGE_TITLES.find(([re]) => re.test(route.path))?.[1] ?? PAGE_TITLES[currentKey.value] ?? '')
-/** Titre d'onglet (Lot 56) : l'intitulé de la page, sinon celui de l'espace. */
-useHead({ title: computed(() => pageTitle.value || 'Espace pro') })
+/**
+ * Titre d'onglet (Lot 56) : l'intitulé de la page, sinon celui de l'espace. Sous « Locataires »,
+ * l'onglet du navigateur garde le nom de la vue ouverte (Demandes, Visites, Candidatures).
+ */
+const tenantTab = computed(() => TENANT_TABS.find(t => t.to === route.path))
+useHead({ title: computed(() => tenantTab.value?.label ?? (pageTitle.value || 'Espace pro')) })
 
 /**
  * Compteurs du menu : jusqu'au Lot 47 ils étaient écrits en dur (« 1 » sur
  * Demandes, Baux, Mandats, Signalements, Messages, pour tout compte). Seul le
  * nombre de demandes ouvertes est calculé ici, depuis l'API ; les autres
  * restent vides tant qu'ils ne sont pas branchés sur une vraie donnée.
+ * Demandes, Visites et Candidatures vont dans `useProTenantCounts()` : ils
+ * nourrissent à la fois le badge cumulé « Locataires » et les onglets de ces pages.
  */
 const housingRequestsApi = useHousingRequestsApi()
 const visitsApi = useVisitsApi()
 const rentalApi = useRentalRequestsApi()
 const mandatesApi = useMandatesApi()
 const liveCounts = ref<Record<string, number>>({})
+const tenantCounts = useProTenantCounts()
 onMounted(async () => {
-  const [open, visits, rental, mandates] = await Promise.allSettled([housingRequestsApi.fetchOpen({ limit: 1 }), visitsApi.fetchMine('landlord'), rentalApi.fetchMine('landlord'), mandatesApi.mine()])
+  // Sans le drapeau, « Mandats » n'est pas au menu : inutile d'interroger l'API pour un badge invisible.
+  const [open, visits, rental, mandates] = await Promise.allSettled([
+    housingRequestsApi.fetchOpen({ limit: 1 }),
+    visitsApi.fetchMine('landlord'),
+    rentalApi.fetchMine('landlord'),
+    proAdvanced.value ? mandatesApi.mine() : Promise.reject(new Error('menu Mandats masqué'))
+  ])
   // Invitations de mandat en attente de ma réponse (403 si le compte n'a pas le rôle agent : pas de compteur).
   if (mandates.status === 'fulfilled') liveCounts.value = { ...liveCounts.value, mandats: mandates.value.filter(m => m.status === 'pending').length }
   // Le propriétaire n'est pas notifié d'une nouvelle candidature (#66) : le compteur est son seul signal.
-  if (rental.status === 'fulfilled') liveCounts.value = { ...liveCounts.value, candidatures: rental.value.filter(r => r.status === 'pending').length }
+  if (rental.status === 'fulfilled') tenantCounts.set('candidatures', rental.value.filter(r => r.status === 'pending').length)
   // pas de compteur plutôt qu'un faux en cas d'échec
-  if (open.status === 'fulfilled') liveCounts.value = { ...liveCounts.value, demandes: open.value.total }
-  if (visits.status === 'fulfilled') liveCounts.value = { ...liveCounts.value, visites: visits.value.filter(v => visitBucket(v) === 'todo').length }
+  if (open.status === 'fulfilled') tenantCounts.set('demandes', open.value.total)
+  if (visits.status === 'fulfilled') tenantCounts.set('visites', visits.value.filter(v => visitBucket(v) === 'todo').length)
 })
 /* Messages non lus (Lot 55) : sondé toutes les 60 s, remis à jour dès qu'une conversation est lue. */
 const unread = useUnreadMessages()
@@ -88,12 +104,10 @@ onMounted(() => { Object.values(notifBadges).forEach(b => b.refresh()) })
 
 function liveCount(key: string) {
   if (key === 'messages') return unread.label.value
-  if (key in notifBadges) {
-    const n = notifBadges[key]!.count.value
-    return n ? (n > 99 ? '99+' : String(n)) : ''
-  }
-  const n = liveCounts.value[key]
-  return n ? (n > 99 ? '99+' : String(n)) : ''
+  if (key in notifBadges) return navBadgeLabel(notifBadges[key]!.count.value)
+  // Demandes + visites à traiter + candidatures en attente : ce qui attend le propriétaire sous « Locataires ».
+  if (key === 'locataires') return navBadgeLabel(tenantsBadgeCount(tenantCounts.counts.value))
+  return navBadgeLabel(liveCounts.value[key])
 }
 
 const drawerOpen = ref(false)
@@ -104,14 +118,13 @@ watch(() => route.path, () => { drawerOpen.value = false })
 const MOBILE_SHORTCUTS = [
   { key: 'apercu', label: 'Aperçu', icon: 'grid' },
   { key: 'biens', label: 'Biens', icon: 'building' },
-  { key: 'demandes', label: 'Demandes', icon: 'inbox' },
+  { key: 'locataires', label: 'Locataires', icon: 'inbox' },
   { key: 'messages', label: 'Messages', icon: 'message' }
 ] as const
 const mobileTabs = computed<MobileTab[]>(() => {
-  const items = NAV_GROUPS.flatMap<{ key: string; to: string }>(g => g.items)
   const tabs: MobileTab[] = MOBILE_SHORTCUTS.map(t => ({
     ...t,
-    to: items.find(n => n.key === t.key)!.to,
+    to: ALL_NAV_ITEMS.find(n => n.key === t.key)!.to,
     active: !drawerOpen.value && currentKey.value === t.key,
     badge: liveCount(t.key)
   }))
@@ -147,7 +160,7 @@ const mobileTabs = computed<MobileTab[]>(() => {
       </div>
       <LayoutVerificationCard space="pro" />
 
-      <template v-for="g in NAV_GROUPS" :key="g.header || 'main'">
+      <template v-for="g in navGroups" :key="g.header || 'main'">
         <p v-if="g.header" class="mb-1 ml-2.5 mt-3.5 text-[10px] font-black uppercase tracking-[.07em] text-[var(--text-faint)]">{{ g.header }}</p>
         <NuxtLink
           v-for="n in g.items"
@@ -174,7 +187,8 @@ const mobileTabs = computed<MobileTab[]>(() => {
         <div class="flex flex-none items-center gap-3">
           <LayoutTeamSwitcher />
           <LayoutNotificationBell />
-          <LayoutAccountMenu :name="displayName" color="var(--color-green-700)" />
+          <!-- La barre latérale est affichée à partir de lg : le ☰ du menu de compte y ferait doublon. -->
+          <LayoutAccountMenu :name="displayName" color="var(--color-green-700)" with-sidebar />
         </div>
       </header>
 

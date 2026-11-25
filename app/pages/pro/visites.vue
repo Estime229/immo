@@ -32,6 +32,12 @@ const counts = computed(() => {
   return c
 })
 const tabOptions = computed(() => TABS.map(t => ({ value: t.key, label: counts.value[t.key] && t.key !== 'history' ? `${t.label} · ${counts.value[t.key]}` : t.label })))
+/** Onglet « Visites » des pages Locataires : les demandes à traiter, recalculées après chaque action. */
+const tenantCounts = useProTenantCounts()
+// `immediate` : si la liste est déjà chargée au montage (retour sur la page), l'onglet reçoit son compteur tout de suite.
+watch([() => block.state.value, () => counts.value.todo], ([st, todo]) => {
+  if (st === 'success' || st === 'empty') tenantCounts.set('visites', todo)
+}, { immediate: true })
 
 const highlighted = computed(() => (typeof route.query.visit === 'string' ? route.query.visit : ''))
 const highlightedVisit = computed(() => block.items.value.find(x => x.id === highlighted.value) ?? null)
@@ -174,6 +180,7 @@ async function contactTenant(v: VisitSummary) {
 
 <template>
   <div class="animate-[im-fade_.3s_ease_backwards]">
+    <ProTenantsTabs />
     <div class="mb-4.5 max-w-full overflow-x-auto [&_button]:whitespace-nowrap">
       <FormsSegmentedControl :options="tabOptions" :model-value="tab" size="sm" @update:model-value="setTab" />
     </div>

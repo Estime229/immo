@@ -10,6 +10,7 @@ const housingRequestsApi = useHousingRequestsApi()
 const landlordPropertiesApi = useLandlordPropertiesApi()
 const refData = useReferenceData()
 const currentUser = useAuthUser()
+const tenantCounts = useProTenantCounts()
 
 /* ---- Filtres réellement appliqués par l'API (ville, type de location), dans l'URL (`?ville=`, `?type=`) + pagination ---- */
 const route = useRoute()
@@ -47,6 +48,8 @@ async function load(reset = true) {
     items.value = reset ? res.data : [...items.value, ...res.data]
     total.value = res.total
     state.value = 'success'
+    // Onglet « Demandes » : même chiffre que le menu (toutes les demandes ouvertes), donc seulement sans filtre.
+    if (!cityId.value && !frequency.value) tenantCounts.set('demandes', res.total)
   } catch {
     if (reset) state.value = 'error'
   } finally {
@@ -127,6 +130,7 @@ function criteriaLine(r: HousingRequestOpenItem) {
 
 <template>
   <div class="animate-[im-fade_.3s_ease_backwards]">
+    <ProTenantsTabs />
     <p class="mb-4.5 mt-0 max-w-[720px] text-[13.5px] leading-[1.55] text-[var(--text-muted)]">
       Recherches publiées par des locataires. Proposez un de vos logements libres : une conversation s'ouvre avec le locataire, qui est notifié.
     </p>

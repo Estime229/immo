@@ -9,8 +9,16 @@ import { roleHomePath, roleLabel } from '~/utils/roleRoutes'
 interface Props {
   name: string
   color?: string
+  /**
+   * Espace doté d'une barre latérale visible à partir de `lg` (espace pro) : sur
+   * grand écran, les trois traits y faisaient doublon avec la navigation déjà
+   * affichée et se lisaient comme un second menu. Le bouton se réduit alors à
+   * l'avatar cerclé, toujours cliquable ; sous `lg` (tiroir fermé) la pilule
+   * reste entière. Désactivé par défaut : l'en-tête public garde sa pilule.
+   */
+  withSidebar?: boolean
 }
-withDefaults(defineProps<Props>(), { color: 'var(--color-green-700)' })
+withDefaults(defineProps<Props>(), { color: 'var(--color-green-700)', withSidebar: false })
 
 const auth = useAuthApi()
 const guide = useGuideMode()
@@ -62,13 +70,13 @@ async function handleLogout() {
     <button
       type="button"
       class="relative flex items-center gap-[9px] rounded-pill border bg-white py-[5px] pl-[13px] pr-[6px] shadow-card transition-[box-shadow,border-color] duration-[var(--duration-base)] hover:shadow-raised"
-      :class="open ? 'border-green-600 shadow-raised' : 'border-[var(--border-default)]'"
+      :class="[open ? 'border-green-600 shadow-raised' : 'border-[var(--border-default)]', withSidebar ? 'lg:gap-0 lg:py-[3px] lg:pl-[3px] lg:pr-[3px]' : '']"
       :aria-expanded="open"
       aria-label="Mon compte"
       @click="toggle"
     >
       <!-- Les trois traits se croisent en ✕ quand le menu est ouvert. -->
-      <span class="flex flex-col gap-[3px]">
+      <span class="flex flex-col gap-[3px]" :class="withSidebar ? 'lg:hidden' : ''">
         <span class="h-0.5 w-4 rounded-sm bg-sand-900 transition-transform duration-[var(--duration-base)] ease-[var(--ease-standard)]" :class="open ? 'translate-y-[5px] rotate-45' : ''" />
         <span class="h-0.5 w-4 rounded-sm bg-sand-900 transition-[opacity,transform] duration-[var(--duration-base)]" :class="open ? 'scale-x-0 opacity-0' : ''" />
         <span class="h-0.5 w-4 rounded-sm bg-sand-900 transition-transform duration-[var(--duration-base)] ease-[var(--ease-standard)]" :class="open ? '-translate-y-[5px] -rotate-45' : ''" />

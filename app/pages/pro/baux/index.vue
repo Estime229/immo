@@ -1,7 +1,10 @@
 <script setup lang="ts">
-import { ChevronRight, FileText, Plus } from '@lucide/vue'
+import { ChevronRight, FileText, MessageSquare, Plus } from '@lucide/vue'
 import type { LeaseSummary } from '~/types/tenant'
+import { ApiRequestError } from '~/utils/authenticatedFetcher'
+import { errorText } from '~/utils/apiErrors'
 import { cancelUnpaidState, leasePhase, LEASE_PHASE_LABEL, LEASE_PHASE_TONE, noticeDepartureDate, RENT_SUFFIX } from '~/utils/leases'
+import { overdueSummary } from '~/utils/leaseOverdue'
 
 definePageMeta({ layout: 'pro' })
 
@@ -46,6 +49,45 @@ function fmtDate(iso: string) {
   return new Date(iso.length === 10 ? `${iso}T12:00:00` : iso).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
+/**
+ * Bail actif avec des échéances en retard : combien, et le total dû. Avant, la
+ * ligne disait seulement « Une échéance est en retard. », sans montant, et il
+ * fallait ouvrir le bail pour savoir s'il manquait un loyer ou trois.
+ */
+function overdueOf(l: LeaseSummary): { count: number; total: number } | null {
+  // Préavis compris : le bail court jusqu'au départ, ses loyers restent dus.
+  if (!['active', 'notice'].includes(leasePhase(l))) return null
+  const s = overdueSummary(l.invoices)
+  return s.count ? s : null
+}
+function overdueLine(l: LeaseSummary): string {
+  const o = overdueOf(l)
+  return o ? `${o.count} échéance${o.count > 1 ? 's' : ''} en retard · total dû ${formatFcfa(o.total)}` : ''
+}
+
+/**
+ * « Écrire au locataire » : même mécanisme que « Écrire au voyageur » (pro/reservations) —
+ * la conversation existante sur ce logement est rouverte, sinon créée. Pas de relance
+ * automatique côté API : c'est au propriétaire d'écrire, avec ses mots.
+ */
+const messagingApi = useMessagingApi()
+const contactingId = ref<string | null>(null)
+const contactError = ref<{ id: string; message: string } | null>(null)
+async function contactTenant(l: LeaseSummary) {
+  const tenantId = l.tenant_id ?? l.tenant.id
+  if (!l.unit?.id || !tenantId) return
+  contactingId.value = l.id
+  contactError.value = null
+  try {
+    const conv = await messagingApi.openConversation(l.unit.id, tenantId)
+    await navigateTo(`/pro/messages?conversation=${conv.id}`)
+  } catch (e) {
+    contactError.value = { id: l.id, message: e instanceof ApiRequestError ? errorText(e.mapped, "Impossible d'ouvrir la conversation.") : "Impossible d'ouvrir la conversation." }
+  } finally {
+    contactingId.value = null
+  }
+}
+
 /** Ce que le propriétaire doit savoir ou faire, en une ligne. */
 function nextLine(l: LeaseSummary): string {
   switch (leasePhase(l)) {
@@ -60,8 +102,9 @@ function nextLine(l: LeaseSummary): string {
       return d ? `Départ prévu le ${fmtDate(d)} : préparez l'état des lieux de sortie.` : 'Préavis donné.'
     }
     case 'active': {
-      const late = (l.invoices ?? []).some(i => i.status === 'overdue')
-      return late ? 'Une échéance est en retard.' : l.next_billing_date ? `Prochaine échéance le ${fmtDate(l.next_billing_date)}.` : 'Bail en cours.'
+      // Le retard a sa propre ligne, chiffrée, avec le bouton pour écrire au locataire (voir `overdueOf`).
+      if (overdueOf(l)) return ''
+      return l.next_billing_date ? `Prochaine échéance le ${fmtDate(l.next_billing_date)}.` : 'Bail en cours.'
     }
     case 'terminated': return l.end_date ? `Terminé le ${fmtDate(l.end_date)}.` : 'Terminé.'
     case 'cancelled_unpaid': return "Annulé : l'entrée n'a pas été payée."
@@ -95,11 +138,12 @@ function nextLine(l: LeaseSummary): string {
         {{ tab === 'current' ? 'Aucun bail en cours : les baux terminés sont dans l\'autre onglet.' : 'Aucun bail terminé pour l\'instant.' }}
       </p>
 
-      <NuxtLink
+      <!-- Carte entière cliquable par le lien étiré du nom (after:inset-0) : un <button> ne peut pas
+      vivre dans un <a>, et « Écrire au locataire » doit rester un bouton à part (relative z-10). -->
+      <article
         v-for="l in shown"
         :key="l.id"
-        :to="`/pro/baux/${l.id}`"
-        class="group mb-3.5 block rounded-2xl border border-l-4 border-[var(--border-subtle)] bg-white p-5 transition-shadow hover:shadow-raised"
+        class="group relative mb-3.5 rounded-2xl border border-l-4 border-[var(--border-subtle)] bg-white p-5 transition-shadow hover:shadow-raised"
         :class="ACCENT[leasePhase(l)]"
         data-testid="lease-card"
       >
@@ -107,17 +151,31 @@ function nextLine(l: LeaseSummary): string {
           <CoreAvatar :name="tenantName(l)" :size="40" />
           <div class="min-w-0 flex-1">
             <div class="flex flex-wrap items-center gap-2">
-              <p class="m-0 text-[15px] font-bold tracking-[-.01em] group-hover:text-green-700">{{ tenantName(l) }}</p>
+              <NuxtLink :to="`/pro/baux/${l.id}`" class="m-0 text-[15px] font-bold tracking-[-.01em] after:absolute after:inset-0 after:rounded-2xl group-hover:text-green-700">{{ tenantName(l) }}</NuxtLink>
               <CoreBadge :tone="LEASE_PHASE_TONE[leasePhase(l)]">{{ LEASE_PHASE_LABEL[leasePhase(l)] }}</CoreBadge>
             </div>
             <p class="mb-0 mt-1 text-xs text-[var(--text-faint)]">
               {{ l.unit?.name ?? 'Logement supprimé' }}<template v-if="l.property"> · {{ l.property.name }}</template> · <span class="font-mono">{{ formatFcfa(Number(l.signed_rent)) }} {{ RENT_SUFFIX[l.billing_frequency ?? 'monthly'] }}</span> · <span class="font-mono">{{ fmtDate(l.start_date) }}{{ l.end_date ? ` au ${fmtDate(l.end_date)}` : '' }}</span>
             </p>
-            <p class="mb-0 mt-1.5 text-[13.5px] font-semibold text-[var(--text-secondary)]">{{ nextLine(l) }}</p>
+            <p v-if="nextLine(l)" class="mb-0 mt-1.5 text-[13.5px] font-semibold text-[var(--text-secondary)]">{{ nextLine(l) }}</p>
+            <div v-if="overdueLine(l)" class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
+              <p class="m-0 text-[13.5px] font-semibold text-danger-fg">{{ overdueLine(l) }}</p>
+              <CoreButton
+                v-if="l.unit"
+                size="sm"
+                tone="secondary"
+                class="relative z-10 inline-flex items-center gap-1.5"
+                :disabled="contactingId === l.id"
+                @click="contactTenant(l)"
+              >
+                <MessageSquare class="h-3.5 w-3.5" :stroke-width="1.9" />{{ contactingId === l.id ? 'Ouverture…' : 'Écrire au locataire' }}
+              </CoreButton>
+            </div>
+            <p v-if="contactError?.id === l.id" class="mb-0 mt-2 text-[13px] font-semibold text-danger-fg">{{ contactError?.message }}</p>
           </div>
           <ChevronRight class="h-5 w-5 flex-none text-[var(--text-faint)]" :stroke-width="1.9" />
         </div>
-      </NuxtLink>
+      </article>
     </template>
   </div>
 </template>

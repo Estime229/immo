@@ -183,7 +183,7 @@ const mobileTabs = computed<MobileTab[]>(() => {
             </div>
           </div>
           <LayoutNotificationBell />
-          <LayoutAccountMenu :name="displayName || 'Locataire'" color="var(--color-green-700)" />
+          <LayoutAccountMenu :name="displayName || 'Locataire'" color="var(--color-green-700)" with-sidebar />
         </div>
       </header>
 

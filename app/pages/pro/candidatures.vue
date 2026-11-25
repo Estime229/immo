@@ -19,6 +19,7 @@ const rentalApi = useRentalRequestsApi()
 const leasesApi = useLeasesApi()
 const visitsApi = useVisitsApi()
 const messagingApi = useMessagingApi()
+const tenantCounts = useProTenantCounts()
 
 const requests = ref<RentalRequestSummary[]>([])
 const leases = ref<LeaseSummary[]>([])
@@ -43,6 +44,8 @@ async function load() {
     leases.value = l
     visits.value = v
     state.value = 'ready'
+    // Onglet « Candidatures » des pages Locataires : remis à jour après chaque candidature retenue ou refusée.
+    tenantCounts.set('candidatures', r.filter(x => x.status === 'pending').length)
   } catch {
     state.value = 'error'
   }
@@ -73,7 +76,18 @@ const tabOptions = computed(() => [
 ])
 
 function name(r: RentalRequestSummary) {
-  return `${r.tenant?.first_name ?? ''} ${r.tenant?.last_name ?? ''}`.trim() || r.tenant?.email || 'Candidat'
+  // Sans prénom ni nom, l'e-mail ne sert de nom qu'à un candidat retenu : sinon il réapparaîtrait par ce biais.
+  return `${r.tenant?.first_name ?? ''} ${r.tenant?.last_name ?? ''}`.trim() || (r.status === 'accepted' ? r.tenant?.email : '') || 'Candidat'
+}
+/**
+ * E-mail et téléphone du candidat : affichés seulement une fois la candidature
+ * retenue (`accepted`). Avant, le propriétaire n'a besoin que de la messagerie,
+ * et un candidat non retenu n'a pas à voir ses coordonnées circuler. Masquage
+ * d'affichage seulement : `GET /rental-requests/my` les renvoie quel que soit
+ * le statut, c'est à l'API de les retirer pour que ce soit une vraie protection.
+ */
+function hasContact(r: RentalRequestSummary) {
+  return !!(r.tenant?.email || r.tenant?.phone_number)
 }
 function formatDate(iso: string | null | undefined) {
   if (!iso) return ''
@@ -198,6 +212,7 @@ function leaseNeedsSending(r: RentalRequestSummary): boolean {
 
 <template>
   <div class="animate-[im-fade_.3s_ease_backwards]">
+    <ProTenantsTabs />
     <div v-if="state === 'loading'" class="flex flex-col gap-4.5">
       <DataSkeletonCard v-for="i in 2" :key="i" :height="140" :lines="1" />
     </div>
@@ -249,9 +264,10 @@ function leaseNeedsSending(r: RentalRequestSummary): boolean {
                   <p class="m-0 text-sm font-bold">{{ name(r) }}</p>
                   <p class="mb-0 mt-0.5 text-xs text-[var(--text-faint)] [overflow-wrap:anywhere]">
                     Candidature du <span class="font-mono">{{ formatDate(r.created_at) }}</span>
-                    <template v-if="r.tenant?.email"> · {{ r.tenant.email }}</template>
-                    <template v-if="r.tenant?.phone_number"> · <span class="font-mono">{{ r.tenant.phone_number }}</span></template>
                   </p>
+                  <!-- Coordonnées réservées aux candidats retenus (audit UX) : tant que la candidature attend,
+                  l'échange passe par la messagerie Bayo. L'API les envoie malgré tout (voir hasContact). -->
+                  <p v-if="hasContact(r)" class="mb-0 mt-0.5 text-[11.5px] text-[var(--text-faint)]">Coordonnées visibles quand vous retenez ce candidat</p>
                 </div>
                 <div class="flex flex-wrap gap-1.5">
                   <CoreBadge v-if="r.tenant?.is_verified" tone="ok">Identité vérifiée</CoreBadge>
@@ -289,6 +305,11 @@ function leaseNeedsSending(r: RentalRequestSummary): boolean {
             <div class="min-w-0 flex-[1_1_200px]">
               <p class="m-0 text-sm font-bold">{{ name(r) }} <span class="font-normal text-[var(--text-muted)]">· {{ r.unit?.name ?? 'logement supprimé' }}</span></p>
               <p class="mb-0 mt-0.5 text-xs text-[var(--text-faint)]">{{ CANDIDATURE_LABEL[r.status] }}<template v-if="r.responded_at"> le <span class="font-mono">{{ formatDate(r.responded_at) }}</span></template></p>
+              <p v-if="r.status === 'accepted' && hasContact(r)" class="mb-0 mt-0.5 text-xs text-[var(--text-secondary)] [overflow-wrap:anywhere]">
+                <template v-if="r.tenant?.email">{{ r.tenant.email }}</template>
+                <template v-if="r.tenant?.email && r.tenant?.phone_number"> · </template>
+                <span v-if="r.tenant?.phone_number" class="font-mono">{{ r.tenant.phone_number }}</span>
+              </p>
             </div>
             <CoreBadge v-if="r.status === 'accepted' && leaseNeedsSending(r)" tone="warn">Bail à envoyer</CoreBadge>
             <CoreBadge v-else :tone="CANDIDATURE_TONE[r.status]">{{ CANDIDATURE_LABEL[r.status] }}</CoreBadge>

@@ -160,17 +160,25 @@ const topBiens = computed(() => {
             </span>
           </div>
         </div>
-        <div v-if="alerts.length" class="grid grid-cols-1 gap-2.5 md:grid-cols-2">
+        <!--
+          Texte entier (audit UX) : le `line-clamp-2` coupait la liste des logements concernés
+          (« 2 loyers en retard : 140 000 F (Studio A,… »). Sur mobile, le bouton passe sous le
+          texte au lieu de lui voler la moitié de la largeur ; deux colonnes seulement en xl,
+          où chaque carte a la place de garder texte et bouton côte à côte.
+        -->
+        <div v-if="alerts.length" class="grid grid-cols-1 gap-2.5 xl:grid-cols-2">
           <NuxtLink
             v-for="a in alerts"
             :key="a.key"
             :to="a.target.to"
-            class="group flex items-center gap-3 rounded-md p-3.5 transition-transform hover:-translate-y-px"
+            class="group flex flex-col items-start gap-2.5 rounded-md p-3.5 transition-transform hover:-translate-y-px sm:flex-row sm:items-center sm:gap-3"
             :class="TONE_BG[a.severity] ?? 'bg-sand-100'"
           >
-            <span class="h-[9px] w-[9px] flex-none rounded-pill" :class="TONE_DOT[a.severity] ?? 'bg-sand-400'" />
-            <p class="m-0 line-clamp-2 min-w-0 flex-1 text-[13px] font-semibold leading-[1.4]" :class="TONE_FG[a.severity] ?? 'text-[var(--text-primary)]'">{{ a.message }}</p>
-            <span class="flex flex-none items-center gap-1 whitespace-nowrap rounded-pill bg-white/70 px-3.5 py-2 text-xs font-bold" :class="TONE_FG[a.severity] ?? 'text-[var(--text-primary)]'">
+            <div class="flex min-w-0 flex-1 items-start gap-3 self-stretch sm:items-center">
+              <span class="mt-[5px] h-[9px] w-[9px] flex-none rounded-pill sm:mt-0" :class="TONE_DOT[a.severity] ?? 'bg-sand-400'" />
+              <p class="m-0 min-w-0 flex-1 text-[13px] font-semibold leading-[1.4] [overflow-wrap:anywhere]" :class="TONE_FG[a.severity] ?? 'text-[var(--text-primary)]'">{{ a.message }}</p>
+            </div>
+            <span class="ml-[21px] flex flex-none items-center gap-1 whitespace-nowrap rounded-pill bg-white/70 px-3.5 py-2 text-xs font-bold sm:ml-0" :class="TONE_FG[a.severity] ?? 'text-[var(--text-primary)]'">
               {{ a.target.label }} <ArrowRight class="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" :stroke-width="1.9" />
             </span>
           </NuxtLink>
@@ -181,11 +189,12 @@ const topBiens = computed(() => {
         </div>
       </section>
 
-      <!-- Chiffres clés -->
-      <div class="mb-4.5 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
-        <NuxtLink v-for="k in kpis" :key="k.label" :to="k.to" class="rounded-lg border border-[var(--border-subtle)] bg-white p-4 transition-colors hover:border-[var(--border-default)]">
-          <p class="m-0 truncate font-mono text-xl font-bold tracking-[-.02em] text-green-900">{{ k.value }}</p>
-          <p class="mb-0 mt-1.5 text-[11.5px] leading-[1.3] text-[var(--text-muted)]">{{ k.label }}</p>
+      <!-- Chiffres clés : sur mobile, tuiles compactes en trois colonnes (deux rangées au plus) ;
+      en deux colonnes, les six tuiles occupaient un écran entier avant le graphique des revenus. -->
+      <div class="mb-4.5 grid grid-cols-3 gap-2 sm:gap-3 xl:grid-cols-6">
+        <NuxtLink v-for="k in kpis" :key="k.label" :to="k.to" class="min-w-0 rounded-lg border border-[var(--border-subtle)] bg-white px-2.5 py-2.5 transition-colors hover:border-[var(--border-default)] sm:p-4">
+          <p class="m-0 truncate font-mono text-base font-bold tracking-[-.02em] text-green-900 sm:text-xl">{{ k.value }}</p>
+          <p class="mb-0 mt-0.5 text-[11px] leading-[1.25] text-[var(--text-muted)] sm:mt-1.5 sm:text-[11.5px] sm:leading-[1.3]">{{ k.label }}</p>
         </NuxtLink>
       </div>
 
@@ -238,7 +247,8 @@ const topBiens = computed(() => {
             <p class="mb-0 mt-0.5 truncate text-xs text-[var(--text-faint)]">{{ t.units }}</p>
           </div>
           <div class="hidden h-2 max-w-[200px] flex-1 overflow-hidden rounded-pill bg-sand-200 sm:block">
-            <div class="h-full rounded-pill bg-[image:linear-gradient(90deg,var(--color-green-500),var(--color-green-800))]" :style="{ width: t.pct }" />
+            <!-- Aplat (charte : pas de dégradé décoratif), même vert que la barre du mois en cours du graphique. -->
+            <div class="h-full rounded-pill bg-green-600" :style="{ width: t.pct }" />
           </div>
           <span class="min-w-[90px] text-right font-mono text-sm font-bold">{{ t.rev }}</span>
           <ChevronRight class="h-4 w-4 flex-none text-[var(--text-faint)]" :stroke-width="1.9" />

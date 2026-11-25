@@ -1,33 +1,40 @@
+import type { Component } from 'vue'
 import {
   BookOpen,
   Building2,
-  CalendarClock,
   CalendarDays,
   CalendarRange,
   ClipboardCheck,
-  FileText,
   FolderOpen,
   Handshake,
   LayoutGrid,
-  Megaphone,
   MessageSquare,
   ScrollText,
   TriangleAlert,
   UserRound,
   Users,
+  UsersRound,
   Wallet,
   Wrench
 } from '@lucide/vue'
+import { isProAdvanced, TENANT_TABS, type ProNavItem, type TenantCounts, type TenantTabKey } from '~/utils/proNav'
 
-export const PRO_PHOTOS = [
-  'radial-gradient(120% 80% at 20% 0%, rgba(255,255,255,.42), transparent 58%), linear-gradient(148deg, #cfe3d4, #7fb489 52%, #164c33)',
-  'radial-gradient(120% 80% at 20% 0%, rgba(255,255,255,.42), transparent 58%), linear-gradient(148deg, #f5dcc5, #de9c68 52%, #895328)',
-  'radial-gradient(120% 80% at 20% 0%, rgba(255,255,255,.4), transparent 58%), linear-gradient(148deg, #e9f1f4, #8fb9c6 52%, #2a6478)',
-  'radial-gradient(120% 80% at 20% 0%, rgba(255,255,255,.4), transparent 58%), linear-gradient(148deg, #fce8ec, #e3506b 52%, #8a2440)'
-]
+export interface ProNavEntry extends ProNavItem {
+  icon: Component
+  label: string
+  count: string
+}
 
-/** Menu rangé par métier ; le compte (profil, guide) passe en fin de menu, comme dans l'admin. */
-export const NAV_GROUPS = [
+/**
+ * Menu rangé par métier ; le compte (profil, guide) passe en fin de menu, comme dans l'admin.
+ *
+ * Audit UX : 18 entrées, c'était trop pour un propriétaire qui débute.
+ * - Demandes, Visites et Candidatures, trois étapes d'un même parcours, sont
+ *   réunies sous « Locataires » ; la page ouvre sur des onglets (ProTenantsTabs).
+ * - Équipe, Mandats et Artisans (`advanced`) sont masqués en V1, décision
+ *   produit : voir `useProAdvanced()`. Le menu se lit via `visibleNavGroups()`.
+ */
+export const NAV_GROUPS: ReadonlyArray<{ header: string; items: readonly ProNavEntry[] }> = [
   {
     header: '',
     items: [
@@ -45,9 +52,8 @@ export const NAV_GROUPS = [
   {
     header: 'Activité locative',
     items: [
-      { key: 'demandes', to: '/pro/demandes', icon: Megaphone, label: 'Demandes', count: '' },
-      { key: 'visites', to: '/pro/visites', icon: CalendarClock, label: 'Visites', count: '' },
-      { key: 'candidatures', to: '/pro/candidatures', icon: FileText, label: 'Candidatures', count: '' },
+      // Ouvre le premier onglet du parcours ; reste allumée sur les deux autres.
+      { key: 'locataires', to: TENANT_TABS[0].to, alsoActiveOn: TENANT_TABS.slice(1).map(t => t.to), icon: UsersRound, label: 'Locataires', count: '' },
       { key: 'reservations', to: '/pro/reservations', icon: CalendarDays, label: 'Réservations', count: '' },
       { key: 'baux', to: '/pro/baux', icon: ScrollText, label: 'Baux', count: '' },
       { key: 'edl', to: '/pro/edl', icon: ClipboardCheck, label: 'États des lieux', count: '' }
@@ -56,9 +62,9 @@ export const NAV_GROUPS = [
   {
     header: 'Équipe et partenaires',
     items: [
-      { key: 'equipe', to: '/pro/equipe', icon: Users, label: 'Équipe', count: '' },
-      { key: 'mandats', to: '/pro/mandats', icon: Handshake, label: 'Mandats', count: '' },
-      { key: 'artisans', to: '/pro/artisans', icon: Wrench, label: 'Artisans', count: '' }
+      { key: 'equipe', to: '/pro/equipe', icon: Users, label: 'Équipe', count: '', advanced: true },
+      { key: 'mandats', to: '/pro/mandats', icon: Handshake, label: 'Mandats', count: '', advanced: true },
+      { key: 'artisans', to: '/pro/artisans', icon: Wrench, label: 'Artisans', count: '', advanced: true }
     ]
   },
   {
@@ -76,14 +82,43 @@ export const NAV_GROUPS = [
       { key: 'guide', to: '/pro/guide', icon: BookOpen, label: 'Guide', count: '' }
     ]
   }
-] as const
+]
 
+/**
+ * `demandes`, `visites`, `candidatures` restent : le titre d'onglet du
+ * navigateur garde le nom de l'onglet ouvert, l'en-tête affiche « Locataires ».
+ */
 export const PAGE_TITLES: Record<string, string> = {
   apercu: 'Aperçu', profil: 'Profil', guide: 'Guide', biens: 'Mes biens', tarifs: 'Tarifs et disponibilité',
-  documents: 'Documents', demandes: 'Demandes', visites: 'Visites', candidatures: 'Candidatures',
+  documents: 'Documents', locataires: 'Locataires', demandes: 'Demandes', visites: 'Visites', candidatures: 'Candidatures',
   reservations: 'Réservations', baux: 'Baux', edl: 'États des lieux', equipe: 'Équipe', mandats: 'Mandats',
   artisans: 'Artisans', wallet: 'Wallet', signalements: 'Signalements', messages: 'Messages',
   addBien: 'Ajouter un bien', newBail: 'Créer un bail', bienFiche: 'Fiche du bien'
+}
+
+/**
+ * Interrupteur V1 (décision produit) : Équipe, Mandats et Artisans sortent du
+ * menu tant que `NUXT_PUBLIC_PRO_ADVANCED` ne vaut pas `true`. Les pages restent
+ * accessibles par leur URL — les notifications, alertes et invitations y mènent.
+ */
+export function useProAdvanced() {
+  const config = useRuntimeConfig()
+  return computed(() => isProAdvanced(config.public.proAdvanced))
+}
+
+/**
+ * Compteurs des onglets « Locataires », partagés entre le layout (badge cumulé
+ * du menu, chargé une fois) et ProTenantsTabs. Chaque page met à jour le sien
+ * après ses propres chargements : une candidature retenue ou une visite
+ * confirmée se voit tout de suite dans les onglets, sans rappel de l'API.
+ */
+export function useProTenantCounts() {
+  const counts = useState<TenantCounts>('proTenantCounts', () => ({}))
+  function set(key: TenantTabKey, n: number) {
+    if (counts.value[key] === n) return
+    counts.value = { ...counts.value, [key]: n }
+  }
+  return { counts, set }
 }
 
 export function useProModal() {

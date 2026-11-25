@@ -8,12 +8,17 @@ definePageMeta({ layout: 'pro' })
  * limites comprises (relu dans le code et BACKEND-ISSUES.md le 30/10/2026).
  * Même format de cartes que le guide locataire.
  */
-const GUIDE_CARDS = [
+/* Rubriques avancées masquées du menu en V1 (voir useProAdvanced) : le guide ne doit pas
+   renvoyer vers des pages que le menu ne montre pas. */
+const proAdvanced = useProAdvanced()
+
+const ALL_GUIDE_CARDS = [
   {
     icon: Users,
     title: 'Mandats et équipe',
     text: "L'équipe donne l'accès : chaque membre n'agit que sur les biens que vous lui confiez, selon ses permissions (baux, logements, fiche du bien, demandes de logement). Un mandat d'agent actif donne, lui, la gestion des seuls biens où vous l'avez désigné comme agent ; elle prend fin avec le mandat. Une invitation passe par un lien, que vous pouvez renouveler ou annuler.",
-    link: { to: '/pro/equipe', label: 'Gérer mon équipe' }
+    link: { to: '/pro/equipe', label: 'Gérer mon équipe' },
+    advanced: true
   },
   {
     icon: Landmark,
@@ -29,8 +34,8 @@ const GUIDE_CARDS = [
   },
   {
     icon: Wallet,
-    title: 'Le wallet, la tirelire et les retraits',
-    text: "Votre solde disponible reçoit vos revenus locatifs et se retire vers Mobile Money (MTN ou Moov), à partir de 500 FCFA. Une seule demande à la fois : un administrateur Bayo la valide avant le virement, et vous pouvez l'annuler tant qu'elle est en attente. La tirelire est la part réservée aux paiements de logement : elle ne vous sert que si ce compte loue aussi un logement.",
+    title: 'Le wallet et les retraits',
+    text: "Votre solde disponible reçoit vos revenus locatifs et se retire vers Mobile Money (MTN ou Moov), à partir de 500 FCFA. Une seule demande à la fois : un administrateur Bayo la valide avant le virement, et vous pouvez l'annuler tant qu'elle est en attente. Une partie du solde peut être « réservée au logement » : elle ne vous concerne que si ce compte loue aussi un logement.",
     link: { to: '/pro/wallet', label: 'Ouvrir mon wallet' }
   },
   {
@@ -46,6 +51,17 @@ const GUIDE_CARDS = [
     link: { to: '/pro/signalements', label: 'Voir les signalements' }
   }
 ]
+
+/**
+ * Cartes affichées. Sans le drapeau, la carte « Mandats et équipe » disparaît, et la carte de la
+ * retenue des artisans reste (une intervention se lance toujours depuis Signalements) mais
+ * renvoie vers Signalements plutôt que vers la page Artisans, absente du menu.
+ */
+const GUIDE_CARDS = computed(() => ALL_GUIDE_CARDS
+  .filter(c => proAdvanced.value || !c.advanced)
+  .map(c => (!proAdvanced.value && c.link.to === '/pro/artisans')
+    ? { ...c, link: { to: '/pro/signalements', label: 'Voir les signalements' } }
+    : c))
 </script>
 
 <template>
