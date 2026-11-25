@@ -94,7 +94,7 @@ function formatLong(iso: string) {
   <div class="animate-[im-fade_.3s_ease_backwards]">
     <div class="grid grid-cols-1 gap-4.5 sm:grid-cols-2">
       <!-- Solde -->
-      <section class="rounded-2xl bg-[image:var(--gradient-balance)] p-5.5 text-white sm:p-6">
+      <section class="rounded-2xl bg-[var(--surface-inverse)] p-5.5 text-white sm:p-6">
         <p class="m-0 text-label font-bold uppercase tracking-label text-white/60">Solde disponible</p>
         <div v-if="wallet.state.value === 'idle' || wallet.state.value === 'loading'" class="mt-3 h-[38px] w-[180px] animate-pulse rounded-md bg-white/20" aria-label="Chargement du solde" />
         <template v-else-if="wallet.state.value === 'error'">

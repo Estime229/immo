@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildActivityFeed, buildNextSteps, findLateLeaseInvoice } from '../app/utils/tenantDashboard'
+import { buildActivityFeed, buildNextSteps, findLateLeaseInvoice, findUpcomingLeaseInvoice, upcomingRentStepKey } from '../app/utils/tenantDashboard'
 import type { BookingSummary, HousingRequestSummary, LeaseSummary, NotificationItem, SignalSummary, WaitlistEntry } from '../app/types/tenant'
 
 function lease(overrides: Partial<LeaseSummary> = {}): LeaseSummary {
@@ -49,6 +49,78 @@ describe('findLateLeaseInvoice', () => {
   it('retourne null sans bail', () => {
     expect(findLateLeaseInvoice([])).toBeNull()
   })
+
+  it('une échéance due aujourd\'hui n\'est pas encore en retard (même règle que l\'échéancier)', () => {
+    const leases = [lease({ invoices: [{ id: 'inv1', amount: '75000.00', due_date: '2026-11-25', status: 'pending' }] })]
+    expect(findLateLeaseInvoice(leases, new Date('2026-11-25T18:00:00'))).toBeNull()
+    expect(findLateLeaseInvoice(leases, new Date('2026-11-26T08:00:00'))?.invoice.id).toBe('inv1')
+  })
+})
+
+describe('findUpcomingLeaseInvoice', () => {
+  // Heure locale : les échéances se comparent au jour local, comme dans l'échéancier.
+  const now = new Date('2026-11-25T10:00:00')
+
+  it('trouve une échéance payable due dans les 7 jours', () => {
+    const leases = [lease({ invoices: [{ id: 'inv1', amount: '90000.00', due_date: '2026-11-30', status: 'pending' }] })]
+    expect(findUpcomingLeaseInvoice(leases, now)?.invoice.id).toBe('inv1')
+  })
+
+  it('compte le jour même et le 7e jour, pas au-delà', () => {
+    const today = [lease({ invoices: [{ id: 'a', amount: '1', due_date: '2026-11-25', status: 'pending' }] })]
+    const day7 = [lease({ invoices: [{ id: 'b', amount: '1', due_date: '2026-12-02', status: 'pending' }] })]
+    const day8 = [lease({ invoices: [{ id: 'c', amount: '1', due_date: '2026-12-03', status: 'pending' }] })]
+    expect(findUpcomingLeaseInvoice(today, now)?.invoice.id).toBe('a')
+    expect(findUpcomingLeaseInvoice(day7, now)?.invoice.id).toBe('b')
+    expect(findUpcomingLeaseInvoice(day8, now)).toBeNull()
+    expect(findUpcomingLeaseInvoice(day8, now, 10)?.invoice.id).toBe('c')
+  })
+
+  it('ignore une échéance déjà échue, payée, annulée ou marquée en retard par le serveur', () => {
+    const leases = [lease({
+      invoices: [
+        { id: 'late', amount: '1', due_date: '2026-11-24', status: 'pending' },
+        { id: 'paid', amount: '1', due_date: '2026-11-27', status: 'paid' },
+        { id: 'cancelled', amount: '1', due_date: '2026-11-27', status: 'cancelled' },
+        { id: 'overdue', amount: '1', due_date: '2026-11-27', status: 'overdue' }
+      ]
+    })]
+    expect(findUpcomingLeaseInvoice(leases, now)).toBeNull()
+  })
+
+  it("ignore une échéance encore en attente sur un bail qui n'est pas actif", () => {
+    const pending = [{ id: 'inv1', amount: '90000.00', due_date: '2026-11-30', status: 'pending' as const }]
+    for (const status of ['signed', 'pending_signature', 'terminated'] as const) {
+      expect(findUpcomingLeaseInvoice([lease({ status, invoices: pending })], now)).toBeNull()
+    }
+    expect(findUpcomingLeaseInvoice([lease({ status: 'active', invoices: pending })], now)?.invoice.id).toBe('inv1')
+  })
+
+  it('garde un paiement partiel à venir (le reste est dû)', () => {
+    const leases = [lease({ invoices: [{ id: 'part', amount: '90000.00', due_date: '2026-11-28', status: 'partially_paid' }] })]
+    expect(findUpcomingLeaseInvoice(leases, now)?.invoice.id).toBe('part')
+  })
+
+  it('choisit la plus proche, tous baux confondus, quel que soit l\'ordre de l\'API', () => {
+    const leases = [
+      lease({ id: 'l1', invoices: [{ id: 'far', amount: '1', due_date: '2026-12-01', status: 'pending' }] }),
+      lease({ id: 'l2', invoices: [{ id: 'later', amount: '1', due_date: '2026-11-30', status: 'pending' }, { id: 'near', amount: '1', due_date: '2026-11-27', status: 'pending' }] })
+    ]
+    const found = findUpcomingLeaseInvoice(leases, now)
+    expect(found?.invoice.id).toBe('near')
+    expect(found?.lease.id).toBe('l2')
+  })
+
+  it('ne se confond jamais avec le loyer en retard', () => {
+    const leases = [lease({ invoices: [{ id: 'late', amount: '1', due_date: '2026-11-20', status: 'pending' }, { id: 'next', amount: '1', due_date: '2026-11-29', status: 'pending' }] })]
+    expect(findLateLeaseInvoice(leases, now)?.invoice.id).toBe('late')
+    expect(findUpcomingLeaseInvoice(leases, now)?.invoice.id).toBe('next')
+  })
+
+  it('retourne null sans bail ni échéance', () => {
+    expect(findUpcomingLeaseInvoice([], now)).toBeNull()
+    expect(findUpcomingLeaseInvoice([lease({ invoices: undefined })], now)).toBeNull()
+  })
 })
 
 describe('buildNextSteps', () => {
@@ -66,9 +138,27 @@ describe('buildNextSteps', () => {
     expect(steps[0]!.label).toContain("Payer l'entrée")
   })
 
-  it('ne propose rien pour un bail déjà actif', () => {
+  it('ne propose rien pour un bail déjà actif sans échéance proche', () => {
     const steps = buildNextSteps({ ...empty, leases: [lease({ status: 'active' })] })
     expect(steps).toHaveLength(0)
+    const far = lease({ status: 'active', invoices: [{ id: 'inv1', amount: '90000.00', due_date: '2026-12-20', status: 'pending' }] })
+    expect(buildNextSteps({ ...empty, leases: [far] }, new Date('2026-11-25T10:00:00'))).toHaveLength(0)
+  })
+
+  it('propose de payer le loyer à venir d\'un bail actif, vers le paiement de cette échéance', () => {
+    const active = lease({ status: 'active', invoices: [{ id: 'inv9', amount: '90000.00', due_date: '2026-11-30', status: 'pending' }] })
+    const steps = buildNextSteps({ ...empty, leases: [active] }, new Date('2026-11-25T10:00:00'))
+    expect(steps).toHaveLength(1)
+    expect(steps[0]!.key).toBe(upcomingRentStepKey('inv9'))
+    expect(steps[0]!.kind).toBe('pay')
+    expect(steps[0]!.to).toBe('/locataire/bail?lease=l1&pay=inv9')
+    expect(steps[0]!.label).toContain('Unité A2')
+    expect(steps[0]!.hint).toMatch(/90\s000 F/)
+  })
+
+  it('ne propose pas de loyer à venir pour un loyer déjà en retard (la bannière s\'en charge)', () => {
+    const active = lease({ status: 'active', invoices: [{ id: 'inv9', amount: '90000.00', due_date: '2026-11-20', status: 'pending' }] })
+    expect(buildNextSteps({ ...empty, leases: [active] }, new Date('2026-11-25T10:00:00'))).toHaveLength(0)
   })
 
   it('propose de payer une réservation en attente de paiement', () => {

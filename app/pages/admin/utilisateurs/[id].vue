@@ -154,7 +154,7 @@ const tiles = computed(() => {
   }
   if (s.walletBalanceTotal != null) {
     const savings = Number(s.walletBalanceSavings || 0)
-    out.push({ value: formatPrix(Number(s.walletBalanceTotal)), label: savings > 0 ? `Solde du wallet, dont ${formatPrix(savings)} en tirelire` : 'Solde du wallet' })
+    out.push({ value: formatPrix(Number(s.walletBalanceTotal)), label: savings > 0 ? `Solde du wallet, dont ${formatPrix(savings)} réservés au logement` : 'Solde du wallet' })
   }
   out.push({ value: String(s.transactionsCount), label: s.lastTransactionAt ? `Transaction${s.transactionsCount > 1 ? 's' : ''} · dernière le ${formatDate(s.lastTransactionAt)}` : 'Transaction' + (s.transactionsCount > 1 ? 's' : '') })
   return out

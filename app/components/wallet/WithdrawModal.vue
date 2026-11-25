@@ -3,7 +3,7 @@ import { Check, Info } from '@lucide/vue'
 import { ApiRequestError } from '~/utils/authenticatedFetcher'
 import { errorText } from '~/utils/apiErrors'
 import type { WithdrawalMethod } from '~/types/wallet'
-import { normalizeBeninPhone, validateWithdrawal, withdrawalMethodLabel, WITHDRAW_MIN } from '~/utils/wallet'
+import { normalizeBeninPhone, validateWithdrawal, walletBreakdown, withdrawalMethodLabel, WITHDRAW_MIN } from '~/utils/wallet'
 
 /**
  * Retrait Mobile Money, commun aux espaces locataire, pro et artisan (Lot 55) —
@@ -57,6 +57,12 @@ const ready = computed(() => wallet.state.value === 'success' && withdrawals.sta
 /** Effet sur la tirelire : l'API la plafonne au nouveau total (min(tirelire, total − montant)). */
 const savingsAfter = computed(() => Math.max(0, Math.min(wallet.balanceSavings.value, available.value - amountNum.value)))
 const savingsDrop = computed(() => wallet.balanceSavings.value - savingsAfter.value)
+/**
+ * Ce qu'on peut retirer sans entamer la part réservée au logement (la tirelire,
+ * nommée ainsi sur l'écran du solde unique). Annoncé avant la saisie :
+ * « Retirable » couvre tout le solde, réservé compris, ce qui n'allait pas de soi.
+ */
+const reservedPart = computed(() => walletBreakdown(wallet.balanceTotal.value, wallet.balanceSavings.value))
 
 const OPERATORS = [
   { value: 'MTN_MOMO', label: 'MTN' },
@@ -113,6 +119,8 @@ async function submit() {
           <Info class="mt-px h-4 w-4 flex-none text-info-fg" :stroke-width="1.9" />
           <p class="m-0 text-[12.5px] leading-[1.5] text-info-fg-deep">
             Retirable : <strong class="font-mono">{{ formatFcfa(available) }}</strong> · minimum <span class="font-mono">{{ WITHDRAW_MIN }}</span> FCFA. Un administrateur Bayo valide chaque demande avant le virement.
+            <template v-if="reservedPart.reserved > 0 && reservedPart.free > 0"> Au-delà de <span class="font-mono">{{ formatFcfa(reservedPart.free) }}</span>, le retrait entame la part réservée au logement (loyers et réservations).</template>
+            <template v-else-if="reservedPart.reserved > 0"> Tout votre solde est réservé au logement (loyers et réservations) : un retrait le réduit d'autant.</template>
           </p>
         </div>
 
@@ -156,7 +164,7 @@ async function submit() {
         </div>
         <p class="mb-0 mt-3 text-[13px] leading-[1.55] text-[var(--text-muted)]">
           Votre solde passera de <span class="font-mono font-bold text-[var(--text-primary)]">{{ formatFcfa(available) }}</span> à <span class="font-mono font-bold text-[var(--text-primary)]">{{ formatFcfa(available - amountNum) }}</span> dès l'envoi.
-          <template v-if="savingsDrop > 0"> Votre tirelire baissera aussi de <span class="font-mono font-bold text-[var(--text-primary)]">{{ formatFcfa(savingsDrop) }}</span> (elle ne peut pas dépasser le solde).</template>
+          <template v-if="savingsDrop > 0"> La part réservée au logement baissera de <span class="font-mono font-bold text-[var(--text-primary)]">{{ formatFcfa(savingsDrop) }}</span> : elle ne peut pas dépasser le solde.</template>
         </p>
         <p class="mb-0 mt-2 text-[12.5px] text-[var(--text-faint)]">Vérifiez le numéro : un virement vers un mauvais numéro ne peut pas être récupéré par Bayo.</p>
         <p v-if="errorMessage" class="mb-0 mt-2.5 text-[13px] font-semibold text-danger-fg">{{ errorMessage }}</p>

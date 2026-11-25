@@ -19,7 +19,7 @@ export const PAGE_HINTS: Record<string, GuideHint> = {
   '/pro/equipe': { title: 'Équipe', text: 'Chaque membre n’agit que sur les biens que vous lui confiez, selon ses permissions. L’invitation passe par un lien, que vous pouvez renouveler ou annuler.' },
   '/pro/mandats': { title: 'Mandats', text: 'Un mandat d’agent actif lui donne la gestion des biens où vous l’avez désigné comme agent (baux, logements, réservations, demandes), et d’eux seulement. À la fin du mandat, il est retiré de ces biens. L’annulation d’un séjour payé reste réservée à vous.' },
 
-  '/locataire/wallet': { title: 'Votre wallet', text: 'La tirelire est la part réservée au logement : elle seule paie un loyer, une entrée dans les lieux ou une réservation, un solde disponible ne suffit pas. Une recharge Mobile Money la crédite directement.' },
+  '/locataire/wallet': { title: 'Votre wallet', text: 'Une partie de votre solde est réservée au logement : elle seule paie un loyer, une entrée dans les lieux ou une réservation. Une recharge Mobile Money la crédite directement.' },
   '/locataire/bail': { title: 'Votre bail', text: 'La caution payée à l’entrée est détenue par Bayo pendant tout le bail : ni vous ni le propriétaire n’y avez accès. Sa restitution en fin de bail n’est pas encore gérée dans l’application. Donner son préavis est une déclaration d’intention : les loyers restent dus jusqu’à la fin du préavis prévu au bail.' },
   '/locataire/edl': { title: 'État des lieux', text: 'Signé des deux côtés à l’entrée, il sert de référence à la sortie. Ne signez pas un état des lieux qui ne correspond pas à ce que vous constatez.' },
 

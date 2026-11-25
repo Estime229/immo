@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ArrowUpRight, Lock, Plus } from '@lucide/vue'
 import { leasePhase, TENANT_LEASE_PHASE_LABEL } from '~/utils/leases'
+import { walletBreakdown, walletBreakdownLine } from '~/utils/wallet'
 
 definePageMeta({ layout: 'locataire' })
 
@@ -32,39 +33,38 @@ const deposits = computed(() => leasesBlock.leases.value
     phase: TENANT_LEASE_PHASE_LABEL[leasePhase(l)]
   })))
 const depositsTotal = computed(() => deposits.value.reduce((sum, d) => sum + d.amount, 0))
+
+/** Un seul solde (décision produit), puis ce qui en est réservé au logement et ce qui reste libre. */
+const split = computed(() => walletBreakdown(wallet.wallet.value?.balance_total, wallet.wallet.value?.balance_savings))
+const splitLine = computed(() => walletBreakdownLine(split.value, formatFcfaShort))
 </script>
 
 <template>
   <div class="animate-[im-fade_.3s_ease_backwards]">
-    <div v-if="wallet.state.value === 'loading' || wallet.state.value === 'idle'" class="grid grid-cols-1 gap-4.5 sm:grid-cols-2">
-      <DataSkeletonCard :height="170" :lines="0" />
-      <DataSkeletonCard :height="170" :lines="0" />
-    </div>
+    <DataSkeletonCard v-if="wallet.state.value === 'loading' || wallet.state.value === 'idle'" :height="170" :lines="0" />
 
     <FeedbackAlertBanner v-else-if="wallet.state.value === 'error'" tone="danger">
       Impossible de charger votre wallet pour le moment.
       <button type="button" class="ml-2 font-bold underline" @click="wallet.reload">Réessayer</button>
     </FeedbackAlertBanner>
 
-    <div v-else class="grid grid-cols-1 gap-4.5 sm:grid-cols-2">
-      <section class="rounded-2xl bg-[image:var(--gradient-balance)] p-5.5 text-white">
-        <p class="m-0 text-label font-bold uppercase tracking-label text-white/[.62]">Solde disponible</p>
-        <p class="mb-0 mt-2.5 font-mono text-[34px] font-bold leading-none tracking-[-.02em]">{{ formatFcfaShort(wallet.balanceTotal.value) }}</p>
-        <p class="mb-0 mt-2.5 text-[13px] leading-[1.5] text-white/75">Retirable ou utilisable pour toute dépense.</p>
+    <!-- Un seul solde en aplat (pas de dégradé décoratif) ; boutons à droite dès que la largeur le permet. -->
+    <section v-else class="flex flex-col gap-4.5 rounded-2xl bg-[var(--surface-inverse)] p-5.5 text-white sm:flex-row sm:items-end sm:justify-between sm:gap-6 sm:p-6">
+      <div class="min-w-0">
+        <p class="m-0 text-label font-bold uppercase tracking-label text-white/[.62]">Solde</p>
+        <p class="mb-0 mt-2.5 font-mono text-[34px] font-bold leading-none tracking-[-.02em]">{{ formatFcfaShort(split.total) }}</p>
+        <p v-if="splitLine" class="mb-0 mt-2.5 text-[13px] leading-[1.5] text-white/[.82]">{{ splitLine }}</p>
         <p v-if="withdrawals.pending.value" class="mb-0 mt-1.5 text-[12.5px] font-semibold text-white/90">
           <span class="font-mono">{{ formatFcfa(Number(withdrawals.pending.value.amount)) }}</span> en cours de retrait, déjà déduits de ce solde.
         </p>
-        <div class="mt-4.5 flex flex-wrap gap-2.5">
-          <button type="button" class="inline-flex items-center gap-1.5 rounded-md bg-white px-5 py-3 text-[14px] font-bold text-green-900" @click="openPay('recharge')"><Plus class="h-4 w-4" :stroke-width="2.2" />Recharger</button>
-          <button type="button" class="inline-flex items-center gap-1.5 rounded-md border border-white/40 px-5 py-3 text-[14px] font-bold text-white" @click="withdrawOpen = true"><ArrowUpRight class="h-4 w-4" :stroke-width="1.9" />Retirer</button>
-        </div>
-      </section>
-      <section class="rounded-2xl border border-green-100 bg-green-50 p-5.5">
-        <p class="m-0 text-label font-bold uppercase tracking-label text-green-700">Tirelire</p>
-        <p class="mb-0 mt-2.5 font-mono text-[34px] font-bold leading-none tracking-[-.02em] text-green-900">{{ formatFcfaShort(wallet.balanceSavings.value) }}</p>
-        <p class="mb-0 mt-2.5 text-[13px] leading-[1.55] text-green-900/80">Part réservée au logement : c'est elle qui paie un loyer ou une réservation. Les deux soldes ne bougent pas ensemble — une recharge crédite les deux, un revenu locatif ne crédite que le solde disponible.</p>
-      </section>
-    </div>
+        <!-- La seule phrase d'aide de la page : à quoi sert la part réservée, et ce que touche un retrait. -->
+        <p class="mb-0 mt-2.5 max-w-[520px] text-[12.5px] leading-[1.5] text-white/[.66]">La part réservée paie vos loyers et réservations ; un retrait puise d'abord dans la part libre.</p>
+      </div>
+      <div class="flex flex-none flex-wrap gap-2.5">
+        <button type="button" class="inline-flex items-center gap-1.5 rounded-md bg-white px-5 py-3 text-[14px] font-bold text-green-900" @click="openPay('recharge')"><Plus class="h-4 w-4" :stroke-width="2.2" />Recharger</button>
+        <button type="button" class="inline-flex items-center gap-1.5 rounded-md border border-white/40 px-5 py-3 text-[14px] font-bold text-white" @click="withdrawOpen = true"><ArrowUpRight class="h-4 w-4" :stroke-width="1.9" />Retirer</button>
+      </div>
+    </section>
 
     <WalletInconsistencyNote />
 

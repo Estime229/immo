@@ -35,7 +35,8 @@ const TAB_KEYS = TABS.map(t => t.key)
 const tab = ref<TabKey>('upcoming')
 const phaseOf = (b: BookingSummary) => bookingPhase(b, now.value)
 const counts = computed(() => Object.fromEntries(TABS.map(t => [t.key, block.items.value.filter(b => t.phases.includes(phaseOf(b))).length])) as Record<TabKey, number>)
-const tabOptions = computed(() => TABS.map(t => ({ value: t.key, label: counts.value[t.key] && t.key !== 'cancelled' ? `${t.label} (${counts.value[t.key]})` : t.label })))
+/* Compteur collé au libellé par une espace insécable : « À venir (1) » ne se coupe jamais en deux. */
+const tabOptions = computed(() => TABS.map(t => ({ value: t.key, label: counts.value[t.key] && t.key !== 'cancelled' ? `${t.label} (${counts.value[t.key]})` : t.label })))
 const rows = computed(() => {
   const t = TABS.find(x => x.key === tab.value)!
   return block.items.value
@@ -99,7 +100,7 @@ async function onPaid(b: BookingSummary) {
   actionError.value = ''
   await block.load()
   const fresh = block.items.value.find(x => x.id === b.id) ?? b
-  flash.value = `Séjour du ${formatDate(fresh.check_in)} au ${formatDate(fresh.check_out)} confirmé : ${formatFcfa(paidOf(fresh))} débités de votre tirelire. Le reçu est disponible ci-dessous.`
+  flash.value = `Séjour du ${formatDate(fresh.check_in)} au ${formatDate(fresh.check_out)} confirmé : ${formatFcfa(paidOf(fresh))} débités de votre part réservée au logement. Le reçu est disponible ci-dessous.`
   highlighted.value = fresh.id
   setTab(TABS.find(t => t.phases.includes(phaseOf(fresh)))?.key ?? 'upcoming')
   nextTick(() => document.getElementById(`booking-${fresh.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }))
@@ -172,8 +173,13 @@ async function downloadReceipt(b: BookingSummary) {
 
 <template>
   <div class="animate-[im-fade_.3s_ease_backwards]">
-    <div class="mb-4.5 overflow-x-auto">
-      <FormsSegmentedControl :model-value="tab" :options="tabOptions" size="sm" @update:model-value="setTab" />
+    <!--
+      Téléphone (390 px) : quatre onglets ne tiennent pas, et le contrôle se rétrécissait jusqu'à
+      couper « À / payer ». Ici il garde sa largeur naturelle (w-max, sans retour à la ligne), avec
+      un padding resserré, et défile à l'horizontale jusqu'au bord de l'écran, sans barre visible.
+    -->
+    <div class="-mx-4 mb-4.5 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:px-0 [&::-webkit-scrollbar]:hidden">
+      <FormsSegmentedControl class="w-max [&>button]:whitespace-nowrap max-sm:[&>button]:px-3" :model-value="tab" :options="tabOptions" size="sm" @update:model-value="setTab" />
     </div>
 
     <div v-if="flash" class="mb-4.5 flex items-start gap-3 rounded-md border border-ok-border bg-ok-bg px-3.5 py-2.5 text-[13px] font-semibold text-green-900">

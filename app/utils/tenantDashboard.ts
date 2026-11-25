@@ -1,23 +1,77 @@
-import { invoiceView } from './leases'
+import { invoiceView, sortInvoices } from './leases'
 import { bookingPhase } from './bookings'
 import type { BookingSummary, HousingRequestSummary, LeaseInvoice, LeaseSummary, NotificationItem, SignalSummary, WaitlistEntry } from '../types/tenant'
 
-export interface LateLeaseInfo {
+/** Une échéance et son bail : de quoi ouvrir le paiement (`/locataire/bail?lease=…&pay=…`). */
+export interface LeaseInvoiceInfo {
   lease: LeaseSummary
   invoice: LeaseInvoice
 }
 
+/** Fenêtre du rappel « Prochain loyer » : assez tôt pour recharger le wallet à temps. */
+export const UPCOMING_RENT_DAYS = 7
+
+/** Jour local AAAA-MM-JJ — même convention que `invoiceView` (leases.ts), qui compare des jours et non des instants. */
+function localDay(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+/**
+ * Échue = la date d'échéance est passée d'au moins un jour. Avant, la bannière
+ * comparait l'instant à minuit UTC du jour d'échéance : le jour même, elle
+ * criait « était dû » alors que l'échéancier affichait encore « À payer », et
+ * l'échéance n'aurait pu être ni « en retard » ni « à venir » proprement.
+ */
+function isPastDue(invoice: LeaseInvoice, now: Date) {
+  return invoice.due_date.slice(0, 10) < localDay(now)
+}
+
 /** Première facture non payée et échue, tous baux confondus — pilote la bannière d'alerte du tableau de bord. */
-export function findLateLeaseInvoice(leases: LeaseSummary[], now: Date = new Date()): LateLeaseInfo | null {
+export function findLateLeaseInvoice(leases: LeaseSummary[], now: Date = new Date()): LeaseInvoiceInfo | null {
   for (const lease of leases) {
     for (const invoice of lease.invoices ?? []) {
       // Échue et encore due — ni payée, ni annulée, ni remboursée (statuts réels, Lot 50).
-      if (invoiceView(invoice, now).payable && new Date(invoice.due_date) < now) {
+      if (invoiceView(invoice, now).payable && isPastDue(invoice, now)) {
         return { lease, invoice }
       }
     }
   }
   return null
+}
+
+/** Échéance la plus proche d'un bail qui est payable, pas encore échue et due d'ici `days` jours (bornes comprises). */
+function upcomingInvoiceOf(lease: LeaseSummary, now: Date, days: number): LeaseInvoice | null {
+  // Seul un bail actif (préavis compris, qui reste `active` côté API) a des loyers à payer : une
+  // échéance restée `pending` sur un bail signé non payé ou terminé ne doit pas afficher « Payer ».
+  if (lease.status !== 'active') return null
+  const today = localDay(now)
+  const limitDate = new Date(now)
+  limitDate.setDate(limitDate.getDate() + days)
+  const limit = localDay(limitDate)
+  return sortInvoices(lease.invoices).find((invoice) => {
+    const day = invoice.due_date.slice(0, 10)
+    // `overdue` est posé par le serveur après le délai de grâce : jamais « à venir », quelle que soit la date.
+    return invoiceView(invoice, now).payable && invoice.status !== 'overdue' && day >= today && day <= limit
+  }) ?? null
+}
+
+/**
+ * Prochain loyer à payer, tous baux confondus — la plus proche des échéances
+ * à venir sous `days` jours. Pilote la carte « Prochain loyer » de l'accueil :
+ * jusque-là, rien n'apparaissait avant que le loyer soit déjà en retard.
+ */
+export function findUpcomingLeaseInvoice(leases: LeaseSummary[], now: Date = new Date(), days = UPCOMING_RENT_DAYS): LeaseInvoiceInfo | null {
+  let best: LeaseInvoiceInfo | null = null
+  for (const lease of leases) {
+    const invoice = upcomingInvoiceOf(lease, now, days)
+    if (invoice && (!best || invoice.due_date.slice(0, 10) < best.invoice.due_date.slice(0, 10))) best = { lease, invoice }
+  }
+  return best
+}
+
+/** Clé de l'étape « loyer à venir » — l'accueil s'en sert pour ne pas répéter l'échéance déjà affichée en carte. */
+export function upcomingRentStepKey(invoiceId: string) {
+  return `lease-rent-${invoiceId}`
 }
 
 /** Nature de l'étape — choisit l'icône sur le tableau de bord. */
@@ -72,6 +126,20 @@ export function buildNextSteps(input: {
         to: `/locataire/bail?lease=${lease.id}`,
         kind: 'pay'
       })
+    } else if (lease.status === 'active') {
+      // Loyer à venir sous 7 jours, un par bail ; le loyer déjà échu reste l'affaire de la bannière rouge.
+      const invoice = upcomingInvoiceOf(lease, now, UPCOMING_RENT_DAYS)
+      if (invoice) {
+        const amount = `${Math.round(Number(invoice.amount) || 0).toLocaleString('fr-FR')} F`
+        steps.push({
+          key: upcomingRentStepKey(invoice.id),
+          label: `Loyer du ${shortDay(invoice.due_date)} à payer — ${unitName}`,
+          hint: [amount, lease.property?.name].filter(Boolean).join(' · '),
+          cta: 'Payer',
+          to: `/locataire/bail?lease=${lease.id}&pay=${invoice.id}`,
+          kind: 'pay'
+        })
+      }
     }
   }
 

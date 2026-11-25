@@ -102,6 +102,41 @@ export function validateRefund(value: string, retained: number): string | null {
   return null
 }
 
+/** Longueur visée d'un titre de mission : deux lignes au plus dans une carte sur mobile. */
+export const MISSION_TITLE_MAX = 60
+
+/**
+ * Titre d'une mission tiré du problème décrit — « Fuite sous l'évier de la
+ * cuisine » dit plus à l'artisan que le métier, qui retombait d'ailleurs sur
+ * « Intervention » tant que la liste des métiers n'était pas chargée.
+ * Première phrase (ou première ligne), sans son point final, coupée sur un mot
+ * au-delà de `max` caractères. Une « phrase » trop courte (« M. », « Urgent. »)
+ * n'est pas un titre : on garde alors la suite. Sans description : `fallback`.
+ * `complete` : le titre dit tout de la description (inutile de la répéter dessous).
+ */
+export function missionTitle(description: string | null | undefined, fallback: string, max = MISSION_TITLE_MAX): { text: string; complete: boolean } {
+  const full = (description ?? '').replace(/\s+/g, ' ').trim()
+  if (!full) return { text: fallback, complete: true }
+
+  const firstLine = (description ?? '').trim().split(/\r?\n/)[0]!.replace(/\s+/g, ' ').trim()
+  // Fin de phrase : . ! ? ou … suivi d'un espace ou de la fin (« 2.5 m » ne coupe pas),
+  // après au moins 10 caractères pour enjamber « M. » ou « Urgent. ».
+  const match = /^(.{10,}?[.!?…])(?=\s|$)/.exec(firstLine)
+  const sentence = (match ? match[1]! : firstLine).replace(/[.…]+$/, '').trim()
+
+  let text = sentence
+  if (text.length > max) {
+    const cut = text.slice(0, max + 1)
+    const lastSpace = cut.lastIndexOf(' ')
+    // Coupe sur le dernier mot entier ; un mot unique démesuré est coupé net.
+    text = `${(lastSpace > max / 2 ? cut.slice(0, lastSpace) : text.slice(0, max)).replace(/[\s,;:–—-]+$/, '')}…`
+  }
+  text = text.charAt(0).toUpperCase() + text.slice(1)
+
+  const complete = !text.endsWith('…') && full.replace(/[.…]+$/, '').trim() === sentence
+  return { text, complete }
+}
+
 /** « garantie jusqu'au 4 octobre (7 j restants) ». */
 export function warrantyLine(r: Pick<ArtisanRequestSummary, 'warranty_expires_at'>, now: Date = new Date()): string | null {
   if (!r.warranty_expires_at) return null

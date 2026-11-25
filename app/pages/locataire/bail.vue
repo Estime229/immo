@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ClipboardCheck, FileText, KeyRound, MessageSquare, Search, X } from '@lucide/vue'
+import { CircleCheck, ClipboardCheck, FileText, KeyRound, MessageSquare, Search, X } from '@lucide/vue'
 import type { AdvanceBufferStatus, InventoryDetail, PrepaidBufferStatus } from '~/types/tenant'
 import { ApiRequestError } from '~/utils/authenticatedFetcher'
 import { errorText } from '~/utils/apiErrors'
@@ -86,7 +86,7 @@ async function payEntry() {
     confirmingEntry.value = false
     leaseFlash.value = {
       leaseId: lease.id,
-      text: `Paiement d'entrée effectué : ${formatFcfa(total)} débités de votre tirelire. Votre bail est actif.`,
+      text: `Paiement d'entrée effectué : ${formatFcfa(total)} débités de votre part réservée au logement. Votre bail est actif.`,
       next: { label: "Prochaine étape : l'état des lieux d'entrée", to: `/locataire/edl?lease=${lease.id}` }
     }
   } catch (e) {
@@ -196,6 +196,20 @@ const exitInventory = computed(() => pickInventory(inventories.value, 'exit'))
 
 /* ---- Fin de bail ---- */
 const departure = computed(() => (activeLease.value ? noticeDepartureDate(activeLease.value) : null))
+
+/**
+ * Bail actif, en préavis ou terminé : le stepper n'avait plus rien à montrer
+ * (tout coché) et repoussait l'échéance sous la ligne de flottaison sur mobile.
+ * Une ligne le remplace ; il reste complet tant que le bail se prépare.
+ */
+const progressLine = computed(() => {
+  const l = activeLease.value
+  if (!l || !paidIn.value) return ''
+  if (phase.value === 'terminated') return l.end_date ? `Bail terminé le ${formatDate(l.end_date)}.` : 'Bail terminé.'
+  const entry = l.entry_paid_at ? ` le ${formatDate(l.entry_paid_at)}` : ''
+  if (phase.value === 'notice') return `Bail signé, entrée payée${entry} · préavis donné${departure.value ? `, départ prévu le ${formatDate(departure.value)}` : ''}.`
+  return `Bail signé et entrée payée${entry} : votre bail est actif.`
+})
 const confirmingCancelNotice = ref(false)
 const cancelNoticeLoading = ref(false)
 const cancelNoticeError = ref('')
@@ -281,16 +295,40 @@ async function writeLandlord() {
         <button type="button" aria-label="Masquer" class="flex-none text-green-900/70 hover:text-green-900" @click="leaseFlash = null"><X class="h-4 w-4" :stroke-width="1.9" /></button>
       </div>
 
+      <!--
+        Prochaine échéance juste sous l'en-tête, sur toute la largeur : c'est l'action du mois.
+        Elle était au 6e rang sur mobile (fin du panneau latéral, sous tout le contenu).
+      -->
+      <section
+        v-if="(phase === 'active' || phase === 'notice') && nextDue"
+        class="mb-4.5 flex flex-wrap items-center gap-x-4 gap-y-3 rounded-2xl border bg-white p-4.5"
+        :class="invoiceView(nextDue).tone === 'danger' ? 'border-danger-border' : 'border-[var(--border-subtle)]'"
+      >
+        <div class="min-w-0 flex-1">
+          <h2 class="m-0 text-label font-bold uppercase tracking-label text-[var(--text-faint)]">Prochaine échéance</h2>
+          <div class="mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1">
+            <span class="whitespace-nowrap font-mono text-xl font-bold tracking-[-.02em] text-green-900">{{ formatFcfa(Number(nextDue.amount)) }}</span>
+            <span class="whitespace-nowrap text-[13px] text-[var(--text-muted)]">due le <span class="font-mono">{{ shortDate(nextDue.due_date) }}</span></span>
+            <CoreBadge :tone="invoiceView(nextDue).tone">{{ invoiceView(nextDue).label }}</CoreBadge>
+          </div>
+        </div>
+        <CoreButton class="w-full sm:w-auto" :tone="invoiceView(nextDue).tone === 'danger' ? 'danger' : 'primary'" @click="openPay('loyer', nextDue.id)">Payer cette échéance</CoreButton>
+      </section>
+
       <div class="grid grid-cols-1 gap-4.5 lg:grid-cols-[minmax(0,1fr)_340px]">
         <!-- Contenu -->
         <div class="flex min-w-0 flex-col gap-4.5">
-          <section class="rounded-2xl border border-[var(--border-subtle)] bg-white p-5.5">
+          <!-- Parcours terminé (actif, préavis, terminé) : une ligne au lieu du stepper tout coché. -->
+          <p v-if="paidIn" class="m-0 flex items-start gap-2.5 rounded-xl border border-[var(--border-subtle)] bg-white px-4 py-3 text-[13px] leading-[1.5] text-[var(--text-secondary)]">
+            <CircleCheck class="mt-px h-4 w-4 flex-none text-green-600" :stroke-width="1.9" aria-hidden="true" />
+            <span class="min-w-0">{{ progressLine }}</span>
+          </p>
+          <section v-else class="rounded-2xl border border-[var(--border-subtle)] bg-white p-5.5">
             <h2 class="mb-4 mt-0 text-[15px] font-bold">Avancement</h2>
             <div v-if="phase !== 'cancelled_unpaid'" class="overflow-x-auto pb-1">
               <FeedbackStepper :steps="LEASE_STEPS" :current="leaseStepIndex(phase)" class="min-w-[520px]" />
             </div>
             <p v-if="phase === 'draft'" class="mb-0 mt-4 text-[13.5px] leading-[1.55] text-[var(--text-muted)]">{{ landlordName() }} prépare ce bail. Vous pourrez le lire et le signer dès qu'il vous l'aura envoyé.</p>
-            <p v-else-if="phase === 'terminated'" class="mb-0 mt-4 text-[13.5px] leading-[1.55] text-[var(--text-muted)]">Bail terminé le {{ formatDate(activeLease.end_date) }}.</p>
             <p v-else-if="phase === 'cancelled_unpaid'" class="m-0 text-[13.5px] leading-[1.55] text-[var(--text-muted)]">Ce bail a été annulé par le propriétaire : le paiement d'entrée n'a pas été fait dans les 72 heures suivant votre signature.</p>
             <p v-else-if="phase === 'inconsistent'" class="mb-0 mt-4 rounded-md border border-danger-border bg-danger-bg px-3.5 py-2.5 text-[13px] font-semibold text-danger-fg">
               Ce bail est dans un état incohérent (entrée payée mais bail non actif). Signalez-le au support pour qu'il soit rétabli.
@@ -339,7 +377,7 @@ async function writeLandlord() {
                 :class="autoDebitLoading ? 'pointer-events-none opacity-60' : ''"
                 :model-value="activeLease.auto_debit_enabled"
                 label="Prélèvement automatique"
-                hint="Le loyer est prélevé sur la tirelire à chaque échéance"
+                hint="Le loyer est prélevé sur la part réservée au logement à chaque échéance"
                 @update:model-value="toggleAutoDebit"
               />
               <p v-if="autoDebitError" class="mb-0 mt-2 text-[12.5px] font-semibold text-danger-fg">{{ autoDebitError }}</p>
@@ -405,19 +443,19 @@ async function writeLandlord() {
 
           <section v-else-if="phase === 'awaiting_entry' && entry" id="paiement-entree" class="rounded-2xl border border-[var(--border-escrow)] bg-white p-5.5">
             <h2 class="m-0 text-[15px] font-bold">Paiement d'entrée</h2>
-            <p class="mb-0 mt-1.5 text-[13px] leading-[1.55] text-[var(--text-muted)]">Dernière étape : le bail devient actif dès ce paiement, prélevé sur votre tirelire.</p>
+            <p class="mb-0 mt-1.5 text-[13px] leading-[1.55] text-[var(--text-muted)]">Dernière étape : le bail devient actif dès ce paiement, prélevé sur votre part réservée au logement.</p>
             <div class="mt-3.5 rounded-md border border-[var(--border-subtle)] px-4 py-3">
               <DataMoneyLine label="Caution" :value="formatFcfa(entry.deposit)" />
               <DataMoneyLine v-if="entry.advance" label="Avance sur loyer" :value="formatFcfa(entry.advance)" />
               <DataMoneyLine v-if="entry.prepaid" label="Loyers prépayés" :value="formatFcfa(entry.prepaid)" />
               <DataMoneyLine label="Total" :value="formatFcfa(entry.total)" total />
             </div>
-            <p v-if="wallet.state.value === 'success'" class="mb-0 mt-2.5 text-xs text-[var(--text-faint)]">Tirelire disponible : <span class="font-mono">{{ formatFcfa(wallet.spendable.value) }}</span></p>
+            <p v-if="wallet.state.value === 'success'" class="mb-0 mt-2.5 text-xs text-[var(--text-faint)]">Part réservée au logement : <span class="font-mono">{{ formatFcfa(wallet.spendable.value) }}</span></p>
             <p v-else-if="wallet.state.value === 'error'" class="mb-0 mt-2.5 text-[12.5px] font-semibold text-danger-fg">Solde indisponible. <button type="button" class="font-bold underline" @click="wallet.reload()">Réessayer</button></p>
             <WalletInconsistencyNote compact />
             <div v-if="entryShortfall > 0" class="mt-3 rounded-md border border-warn-border bg-warn-bg px-3.5 py-3 text-[13px] text-warn-fg-deep">
-              <p class="m-0 font-bold">Il vous manque <span class="font-mono">{{ formatFcfa(entryShortfall) }}</span> dans votre tirelire.</p>
-              <button type="button" class="mt-1 font-bold underline" @click="openPay('recharge')">Recharger ma tirelire</button>
+              <p class="m-0 font-bold">Il vous manque <span class="font-mono">{{ formatFcfa(entryShortfall) }}</span> sur votre part réservée au logement.</p>
+              <button type="button" class="mt-1 font-bold underline" @click="openPay('recharge')">Recharger mon wallet</button>
             </div>
             <p v-if="graceEnd" class="mb-0 mt-3 text-[12.5px] leading-[1.5]" :class="canBeCancelled ? 'font-semibold text-danger-fg' : 'text-[var(--text-muted)]'">
               {{ canBeCancelled ? `Le délai de 72 h est passé : ${landlordName()} peut désormais annuler ce bail.` : `Payez avant le ${formatDate(graceEnd)} à ${new Date(graceEnd).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })} : passé ce délai, le propriétaire pourra annuler le bail.` }}
@@ -426,7 +464,7 @@ async function writeLandlord() {
             <CoreInlineConfirm
               v-if="confirmingEntry"
               class="mt-3.5"
-              :message="`Débiter ${formatFcfa(entry.total)} de votre tirelire ? Il vous restera ${formatFcfa(wallet.spendable.value - entry.total)}.`"
+              :message="`Débiter ${formatFcfa(entry.total)} de votre part réservée au logement ? Il vous restera ${formatFcfa(wallet.spendable.value - entry.total)}.`"
               confirm-label="Payer"
               :loading="entryPaymentLoading"
               @confirm="payEntry"
@@ -435,12 +473,7 @@ async function writeLandlord() {
             <CoreButton v-else class="mt-3.5" full-width :disabled="entryShortfall > 0 || wallet.state.value !== 'success'" @click="confirmingEntry = true">Payer {{ formatFcfaShort(entry.total) }}</CoreButton>
           </section>
 
-          <section v-else-if="(phase === 'active' || phase === 'notice') && nextDue" class="rounded-2xl border border-[var(--border-subtle)] bg-white p-5.5">
-            <h2 class="m-0 text-[15px] font-bold">Prochaine échéance</h2>
-            <p class="mb-0 mt-3 font-mono text-xl font-bold tracking-[-.02em] text-green-900">{{ formatFcfa(Number(nextDue.amount)) }}</p>
-            <p class="mb-0 mt-1 text-xs text-[var(--text-faint)]">Due le <span class="font-mono">{{ shortDate(nextDue.due_date) }}</span> · <CoreBadge :tone="invoiceView(nextDue).tone">{{ invoiceView(nextDue).label }}</CoreBadge></p>
-            <CoreButton class="mt-4" full-width :tone="invoiceView(nextDue).tone === 'danger' ? 'danger' : 'primary'" @click="openPay('loyer', nextDue.id)">Payer cette échéance</CoreButton>
-          </section>
+          <!-- « Prochaine échéance » : remontée sous l'en-tête, voir plus haut. -->
 
           <section v-if="phase === 'active' || phase === 'notice'" class="rounded-2xl border border-[var(--border-subtle)] bg-white p-5.5">
             <h2 class="m-0 text-[15px] font-bold">Fin de bail</h2>

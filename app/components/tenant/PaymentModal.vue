@@ -247,7 +247,7 @@ onUnmounted(() => { cancelled = true })
 
 const title = computed(() => {
   if (mode.value === 'loyer') return step.value === 'done' ? 'Loyer payé' : 'Payer mon loyer'
-  return step.value === 'done' ? 'Recharge effectuée' : 'Recharger ma tirelire'
+  return step.value === 'done' ? 'Recharge effectuée' : 'Recharger mon wallet'
 })
 </script>
 
@@ -266,7 +266,7 @@ const title = computed(() => {
             </div>
             <div class="rounded-lg border border-[var(--border-subtle)] bg-white p-4">
               <p class="m-0 truncate font-mono text-xl font-bold tracking-[-.02em] text-green-900">{{ wallet.state.value === 'success' ? formatFcfaShort(wallet.spendable.value) : '…' }}</p>
-              <p class="mb-0 mt-1.5 text-[11.5px] text-[var(--text-muted)]">Tirelire disponible</p>
+              <p class="mb-0 mt-1.5 text-[11.5px] text-[var(--text-muted)]">Part réservée au logement</p>
             </div>
           </div>
           <p v-if="wallet.state.value === 'error'" class="mb-0 mt-3 text-[13px] font-semibold text-danger-fg">
@@ -274,11 +274,11 @@ const title = computed(() => {
           </p>
           <WalletInconsistencyNote compact />
           <div v-if="rentShortfall > 0" class="mt-3 rounded-md border border-warn-border bg-warn-bg px-3.5 py-3 text-[13px] text-warn-fg-deep">
-            <p class="m-0 font-bold">Il vous manque <span class="font-mono">{{ formatFcfa(rentShortfall) }}</span> dans votre tirelire.</p>
+            <p class="m-0 font-bold">Il vous manque <span class="font-mono">{{ formatFcfa(rentShortfall) }}</span> sur votre part réservée au logement.</p>
             <button type="button" class="mt-1.5 font-bold underline" @click="switchToRecharge(rentShortfall)">Recharger ce montant</button>
           </div>
           <p v-else-if="wallet.state.value === 'success'" class="mb-0 mt-3 text-[12.5px] text-[var(--text-muted)]">
-            Prélevé sur votre tirelire : il vous restera <span class="font-mono font-bold text-[var(--text-primary)]">{{ formatFcfa(wallet.spendable.value - rentAmount) }}</span> après ce paiement.
+            Prélevé sur votre part réservée au logement : il vous restera <span class="font-mono font-bold text-[var(--text-primary)]">{{ formatFcfa(wallet.spendable.value - rentAmount) }}</span> après ce paiement.
           </p>
           <p v-if="errorMessage" class="mb-0 mt-3 text-[13px] font-semibold text-danger-fg">{{ errorMessage }}</p>
         </template>
@@ -286,7 +286,7 @@ const title = computed(() => {
 
       <div v-else class="py-1 text-center">
         <div class="mx-auto grid h-14 w-14 animate-[im-pop_.5s_ease] place-items-center rounded-pill bg-green-600 text-white"><Check class="h-7 w-7" :stroke-width="2.4" /></div>
-        <p class="mb-0 mt-4 text-base font-bold"><span class="font-mono">{{ formatFcfa(paidAmount) }}</span> débités de votre tirelire</p>
+        <p class="mb-0 mt-4 text-base font-bold"><span class="font-mono">{{ formatFcfa(paidAmount) }}</span> débités de votre part réservée au logement</p>
         <p v-if="remainingInvoices.length" class="mx-auto mb-0 mt-2 max-w-[340px] text-[13.5px] leading-[1.55] text-[var(--text-muted)]">
           Il reste {{ remainingInvoices.length }} échéance{{ remainingInvoices.length > 1 ? 's' : '' }} à régler sur ce bail.
         </p>
@@ -299,7 +299,7 @@ const title = computed(() => {
     <template v-else>
       <template v-if="step === 'amount'">
         <p v-if="rechargeForRent" class="mb-4 mt-0 rounded-md border border-info-border bg-info-bg px-3.5 py-2.5 text-[13px] text-info-fg-deep">
-          Pour payer votre loyer, il manque <span class="font-mono font-bold">{{ formatFcfa(rechargeForRent.missing) }}</span> dans votre tirelire.
+          Pour payer votre loyer, il manque <span class="font-mono font-bold">{{ formatFcfa(rechargeForRent.missing) }}</span> sur votre part réservée au logement.
         </p>
         <label class="block">
           <span class="mb-[7px] block text-[12.5px] font-bold">Montant à recharger</span>
@@ -312,7 +312,7 @@ const title = computed(() => {
           <button v-for="p in RECHARGE_PRESETS" :key="p" type="button" class="flex-1 rounded-pill border bg-white py-2 font-mono text-[12.5px] font-bold transition-colors" :class="amountNum === p ? 'border-green-600 text-green-700' : 'border-[var(--border-default)] hover:border-green-600'" @click="amount = String(p)">{{ formatFcfaShort(p) }}</button>
         </div>
         <!-- La recharge alimente directement la tirelire (RecordTransaction type SAVING côté API, pas une étape séparée). -->
-        <p class="mb-0 mt-2.5 text-[12.5px] text-[var(--text-faint)]">Crédité sur votre tirelire dès la confirmation, pour payer un loyer ou une réservation.</p>
+        <p class="mb-0 mt-2.5 text-[12.5px] text-[var(--text-faint)]">Crédité sur votre wallet dès la confirmation et réservé au logement : il paiera un loyer ou une réservation.</p>
 
         <p class="mb-2 mt-4.5 text-[12.5px] font-bold">Moyen de paiement</p>
         <DataSkeletonCard v-if="gatewaysState === 'loading'" :height="52" :lines="0" />
@@ -371,9 +371,9 @@ const title = computed(() => {
 
       <div v-else class="py-1 text-center">
         <div class="mx-auto grid h-14 w-14 animate-[im-pop_.5s_ease] place-items-center rounded-pill bg-green-600 text-white"><Check class="h-7 w-7" :stroke-width="2.4" /></div>
-        <p class="mb-0 mt-4 text-base font-bold"><span class="font-mono">{{ formatFcfa(amountNum) }}</span> crédités sur votre tirelire</p>
+        <p class="mb-0 mt-4 text-base font-bold"><span class="font-mono">{{ formatFcfa(amountNum) }}</span> crédités sur votre wallet</p>
         <p class="mx-auto mb-0 mt-2 max-w-[340px] text-[13.5px] leading-[1.55] text-[var(--text-muted)]">
-          <template v-if="wallet.state.value === 'success'">Tirelire disponible : <span class="font-mono font-bold text-[var(--text-primary)]">{{ formatFcfa(wallet.spendable.value) }}</span>.</template>
+          <template v-if="wallet.state.value === 'success'">Part réservée au logement : <span class="font-mono font-bold text-[var(--text-primary)]">{{ formatFcfa(wallet.spendable.value) }}</span>.</template>
           <template v-if="rechargeForRent"> Vous pouvez maintenant régler votre loyer.</template>
         </p>
       </div>

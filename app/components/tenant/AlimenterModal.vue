@@ -74,7 +74,7 @@ const presets = computed(() => {
 const validation = computed(() => {
   if (!amountNum.value) return null
   if (amountNum.value > missing.value) return `Au maximum ${formatFcfa(missing.value)} : c'est ce qu'il manque pour atteindre le montant prévu au bail.`
-  if (wallet.state.value === 'success' && amountNum.value > available.value) return `Votre tirelire ne contient que ${formatFcfa(available.value)}.`
+  if (wallet.state.value === 'success' && amountNum.value > available.value) return `Votre part réservée au logement n'est que de ${formatFcfa(available.value)}.`
   return null
 })
 const shortOfSavings = computed(() => wallet.state.value === 'success' && amountNum.value > available.value && amountNum.value <= missing.value)
@@ -98,7 +98,7 @@ async function submit() {
     if (kind.value === 'advance') await leasesApi.topUpAdvanceBuffer(lease.id, amountNum.value)
     else await leasesApi.topUpPrepaidBuffer(lease.id, amountNum.value)
     await Promise.allSettled([loadBuffer(), wallet.reload()])
-    leaseFlash.value = { leaseId: lease.id, text: `${formatFcfa(amountNum.value)} versés sur votre ${bufferName.value}, prélevés sur votre tirelire.` }
+    leaseFlash.value = { leaseId: lease.id, text: `${formatFcfa(amountNum.value)} versés sur votre ${bufferName.value}, prélevés sur votre part réservée au logement.` }
     step.value = 'done'
   } catch (e) {
     errorMessage.value = e instanceof ApiRequestError ? errorText(e.mapped, "L'alimentation a échoué.") : "L'alimentation a échoué."
@@ -119,7 +119,7 @@ function pct(balance: number, target: number) {
     <template v-if="step !== 'done'">
       <p class="m-0 text-[13.5px] leading-[1.55] text-[var(--text-muted)]">
         {{ kind === 'advance' ? 'L\'avance couvre automatiquement une échéance manquée.' : 'Les loyers prépayés sont consommés en priorité sur vos prochaines échéances.' }}
-        Le montant est prélevé sur votre tirelire.
+        Le montant est prélevé sur votre part réservée au logement.
       </p>
 
       <DataSkeletonCard v-if="bufferState === 'loading'" class="mt-4" :height="96" :lines="0" />
@@ -143,7 +143,7 @@ function pct(balance: number, target: number) {
             </div>
             <div>
               <p class="m-0 font-mono text-lg font-bold text-green-900">{{ wallet.state.value === 'success' ? formatFcfaShort(available) : '…' }}</p>
-              <p class="mb-0 mt-0.5 text-[11.5px] text-[var(--text-muted)]">Tirelire disponible</p>
+              <p class="mb-0 mt-0.5 text-[11.5px] text-[var(--text-muted)]">Part réservée au logement</p>
             </div>
           </div>
         </div>
@@ -161,12 +161,12 @@ function pct(balance: number, target: number) {
             <button v-for="p in presets" :key="p.value" type="button" class="flex-1 whitespace-nowrap rounded-pill border bg-white px-3 py-2 font-mono text-[12.5px] font-bold" :class="amountNum === p.value ? 'border-green-600 text-green-700' : 'border-[var(--border-default)]'" @click="amount = String(p.value)">{{ p.label }}</button>
           </div>
           <p v-if="validation" class="mb-0 mt-2.5 text-[12.5px] font-semibold text-danger-fg">{{ validation }}</p>
-          <button v-if="shortOfSavings" type="button" class="mt-1.5 text-[12.5px] font-bold text-green-700 underline" @click="rechargeFirst">Recharger ma tirelire</button>
+          <button v-if="shortOfSavings" type="button" class="mt-1.5 text-[12.5px] font-bold text-green-700 underline" @click="rechargeFirst">Recharger mon wallet</button>
         </template>
         <CoreInlineConfirm
           v-else
           class="mt-4"
-          :message="`Débiter ${formatFcfa(amountNum)} de votre tirelire pour votre ${bufferName} ? Il vous restera ${formatFcfa(available - amountNum)}.`"
+          :message="`Débiter ${formatFcfa(amountNum)} de votre part réservée au logement pour votre ${bufferName} ? Il vous restera ${formatFcfa(available - amountNum)}.`"
           confirm-label="Verser"
           :loading="loading"
           @confirm="submit"
@@ -182,7 +182,7 @@ function pct(balance: number, target: number) {
       <p class="mb-0 mt-4 text-base font-bold"><span class="font-mono">{{ formatFcfa(amountNum) }}</span> versés</p>
       <p class="mx-auto mb-0 mt-2 max-w-[320px] text-[13.5px] leading-[1.55] text-[var(--text-muted)]">
         <template v-if="buffer">Votre {{ bufferName }} est à <span class="font-mono font-bold text-[var(--text-primary)]">{{ formatFcfaShort(buffer.balance) }} / {{ formatFcfaShort(buffer.target) }}</span>.</template>
-        <template v-if="wallet.state.value === 'success'"> Tirelire restante : <span class="font-mono font-bold text-[var(--text-primary)]">{{ formatFcfa(available) }}</span>.</template>
+        <template v-if="wallet.state.value === 'success'"> Part réservée restante : <span class="font-mono font-bold text-[var(--text-primary)]">{{ formatFcfa(available) }}</span>.</template>
       </p>
     </div>
 

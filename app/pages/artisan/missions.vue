@@ -3,7 +3,7 @@ import { ArrowLeft, CircleCheck, ClipboardList, Hourglass, Inbox, MapPin, Messag
 import type { ArtisanRequestSummary } from '~/types/artisan'
 import { ApiRequestError } from '~/utils/authenticatedFetcher'
 import { errorText } from '~/utils/apiErrors'
-import { interventionPhase, PHASE_LABEL_ARTISAN, PHASE_TONE } from '~/utils/artisanRequests'
+import { interventionPhase, missionTitle, PHASE_LABEL_ARTISAN, PHASE_TONE } from '~/utils/artisanRequests'
 import { useArtisanProfile } from '~/composables/useArtisanProfile'
 
 definePageMeta({ layout: 'artisan' })
@@ -167,6 +167,19 @@ function openTerminerModal(r: ArtisanRequestSummary) {
   modal.value = 'terminer'
 }
 
+/**
+ * Titre = le problème décrit (première phrase), pas le métier : « Intervention »
+ * (repli d'un métier non résolu) ne distinguait aucune mission d'une autre.
+ * Sans description, le métier reste le titre et n'est pas répété en sous-titre.
+ */
+function titleOf(r: ArtisanRequestSummary) {
+  return missionTitle(r.description, tradeLabel(r.trade_reference_id))
+}
+/** Métier en sous-titre — seulement s'il n'est pas déjà le titre, et s'il est résolu. */
+function tradeOf(r: ArtisanRequestSummary) {
+  return r.description?.trim() ? tradeLabel(r.trade_reference_id, '') : ''
+}
+
 function requesterName(r: ArtisanRequestSummary) {
   return r.requester ? [r.requester.first_name, r.requester.last_name].filter(Boolean).join(' ') || 'Le demandeur' : 'Le demandeur'
 }
@@ -269,11 +282,9 @@ function emptyAction() {
               <Wrench class="h-[18px] w-[18px]" :stroke-width="1.9" aria-hidden="true" />
             </div>
             <div class="min-w-0 flex-1">
-              <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
-                <p class="m-0 text-sm font-bold">{{ tradeLabel(m.trade_reference_id) }}</p>
-                <CoreBadge v-if="tab !== 'ouvertes'" :tone="PHASE_TONE[interventionPhase(m)]">{{ PHASE_LABEL_ARTISAN[interventionPhase(m)] }}</CoreBadge>
-              </div>
-              <p class="mb-0 mt-0.5 truncate text-[13px] text-[var(--text-muted)]">{{ m.unit?.name ?? 'Logement' }} · {{ requesterName(m) }}</p>
+              <p class="m-0 line-clamp-2 text-sm font-bold leading-snug [overflow-wrap:anywhere]">{{ titleOf(m).text }}</p>
+              <p class="mb-0 mt-0.5 truncate text-[13px] text-[var(--text-muted)]">{{ [m.unit?.name ?? 'Logement', tradeOf(m), requesterName(m)].filter(Boolean).join(' · ') }}</p>
+              <CoreBadge v-if="tab !== 'ouvertes'" class="mt-1.5" :tone="PHASE_TONE[interventionPhase(m)]">{{ PHASE_LABEL_ARTISAN[interventionPhase(m)] }}</CoreBadge>
               <p v-if="m.unit?.address" class="mb-0 mt-1 flex items-center gap-1 text-xs text-[var(--text-faint)]">
                 <MapPin class="h-3.5 w-3.5 flex-none" :stroke-width="1.9" aria-hidden="true" />
                 <span class="truncate">{{ m.unit.address }}</span>
@@ -295,10 +306,10 @@ function emptyAction() {
           <p v-if="flash" class="mb-4 mt-0 rounded-md border border-ok-border bg-ok-bg px-3.5 py-2.5 text-[13px] font-semibold text-green-900">{{ flash }}</p>
 
           <div class="flex flex-wrap items-start gap-x-3 gap-y-1.5">
-            <h2 class="m-0 min-w-0 flex-1 text-[17px] font-bold tracking-[-.015em]">{{ tradeLabel(selected.trade_reference_id) }}</h2>
+            <h2 class="m-0 min-w-0 flex-1 text-[17px] font-bold leading-snug tracking-[-.015em] [overflow-wrap:anywhere]">{{ titleOf(selected).text }}</h2>
             <CoreBadge v-if="tab !== 'ouvertes'" :tone="PHASE_TONE[interventionPhase(selected)]">{{ PHASE_LABEL_ARTISAN[interventionPhase(selected)] }}</CoreBadge>
           </div>
-          <p class="mb-0 mt-1 text-[13.5px] text-[var(--text-muted)]">{{ selected.unit?.name ?? 'Logement' }} · demandé le <span class="font-mono">{{ formatDay(selected.created_at) }}</span></p>
+          <p class="mb-0 mt-1 text-[13.5px] text-[var(--text-muted)]">{{ [selected.unit?.name ?? 'Logement', tradeOf(selected)].filter(Boolean).join(' · ') }} · demandé le <span class="font-mono">{{ formatDay(selected.created_at) }}</span></p>
 
           <p v-if="selected.unit?.address" class="mb-0 mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-[var(--text-secondary)]">
             <MapPin class="h-4 w-4 flex-none text-[var(--text-faint)]" :stroke-width="1.9" aria-hidden="true" />
@@ -308,7 +319,8 @@ function emptyAction() {
             </a>
           </p>
 
-          <p v-if="selected.description" class="mb-0 mt-4 text-sm leading-[1.6] text-[var(--text-secondary)] [overflow-wrap:anywhere]">{{ selected.description }}</p>
+          <!-- Description complète, sauf si le titre la dit déjà en entier (une seule phrase courte). -->
+          <p v-if="selected.description && !titleOf(selected).complete" class="mb-0 mt-4 whitespace-pre-line text-sm leading-[1.6] text-[var(--text-secondary)] [overflow-wrap:anywhere]">{{ selected.description }}</p>
 
           <!-- Photos du signalement d'origine, si cette demande en vient. -->
           <div v-if="selected.signal?.attachments?.length" class="mt-3.5 flex flex-wrap gap-2">

@@ -232,7 +232,9 @@ export function mapApiError(
     return {
       kind: 'insufficient_balance',
       fieldErrors: {},
-      bannerMessage: message
+      // Le message de l'API garde ses montants, mais l'interface ne parle plus de « tirelire » :
+      // le wallet affiche « part réservée au logement » (même notion, côté API balance_savings).
+      bannerMessage: message.replace(/tirelire/gi, 'part réservée au logement')
     }
   }
 

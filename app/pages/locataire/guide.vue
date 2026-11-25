@@ -13,8 +13,8 @@ const GUIDE_CARDS = [
   },
   {
     icon: PiggyBank,
-    title: 'La tirelire',
-    text: "C'est la part de votre wallet réservée au logement. Elle seule sert à payer un loyer, une entrée dans les lieux ou une réservation : un solde disponible ne suffit pas. Une recharge Mobile Money la crédite directement.",
+    title: 'La part réservée au logement',
+    text: "C'est la part de votre solde réservée au logement. Elle seule sert à payer un loyer, une entrée dans les lieux ou une réservation : un solde disponible ne suffit pas. Une recharge Mobile Money la crédite directement.",
     link: { label: 'Mon wallet', to: '/locataire/wallet' }
   },
   {

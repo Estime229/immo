@@ -15,7 +15,7 @@ const wallet = useTenantWallet()
       Un paiement a été accepté au-delà de votre solde réel : aucun paiement ni retrait n'est possible avant une recharge.<template v-if="!compact"> Si vous ne vous l'expliquez pas, contactez le support Bayo.</template>
     </template>
     <template v-else>
-      <strong>Votre tirelire affiche {{ formatFcfa(wallet.balanceSavings.value) }}, mais votre solde total n'est que de {{ formatFcfa(wallet.balanceTotal.value) }}.</strong>
+      <strong>Votre part réservée au logement affiche {{ formatFcfa(wallet.balanceSavings.value) }}, mais votre solde total n'est que de {{ formatFcfa(wallet.balanceTotal.value) }}.</strong>
       Seuls {{ formatFcfa(wallet.spendable.value) }} sont réellement utilisables pour un paiement.
     </template>
   </div>

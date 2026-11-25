@@ -3,7 +3,7 @@ import { ArrowRight, SearchX, Star, Wrench } from '@lucide/vue'
 import type { ArtisanRequestSummary } from '~/types/artisan'
 import type { GuideStep } from '~/components/layout/GuideChecklist.vue'
 import { verificationLink } from '~/utils/kycStatus'
-import { interventionPhase, PHASE_LABEL_ARTISAN } from '~/utils/artisanRequests'
+import { interventionPhase, missionTitle, PHASE_LABEL_ARTISAN } from '~/utils/artisanRequests'
 import { useArtisanProfile } from '~/composables/useArtisanProfile'
 
 definePageMeta({ layout: 'artisan' })
@@ -32,6 +32,18 @@ const completed = computed(() => mineBlock.items.value.filter(r => r.status === 
 const URGENCY = ['in_progress', 'disputed', 'agreed', 'open']
 const currentMission = computed(() => [...inProgress.value].sort((a, b) => URGENCY.indexOf(interventionPhase(a)) - URGENCY.indexOf(interventionPhase(b)))[0] ?? null)
 const others = computed(() => Math.max(0, inProgress.value.length - 1))
+/**
+ * Titre = le problème décrit (« Fuite sous l'évier… »), pas le métier : l'artisan connaît
+ * son métier, et celui-ci retombait sur « Intervention » tant que la liste n'était pas chargée.
+ * Logement et métier passent en sous-titre (métier omis s'il n'est pas résolu).
+ */
+const currentTitle = computed(() => (currentMission.value ? missionTitle(currentMission.value.description, tradeLabel(currentMission.value.trade_reference_id)).text : ''))
+const currentSubtitle = computed(() => {
+  const m = currentMission.value
+  if (!m) return ''
+  const trade = m.description?.trim() ? tradeLabel(m.trade_reference_id, '') : ''
+  return [m.unit?.name ?? 'Logement', trade].filter(Boolean).join(' · ')
+})
 
 const ratingTile = computed(() => {
   if (artisan.state.value === 'error') return { value: '—', label: 'Avis indisponibles' }
@@ -70,14 +82,16 @@ function formatDay(iso: string) {
     <LayoutGuideChecklist space="artisan" :steps="guideSteps" :ready="guideReady" />
 
     <!-- Mission la plus urgente, ou accueil -->
-    <section class="mb-4.5 rounded-2xl bg-[image:var(--gradient-balance)] p-5.5 text-white sm:p-6">
+    <!-- Aplat (pas de dégradé décoratif), comme les autres cartes sombres de la charte. -->
+    <section class="mb-4.5 rounded-2xl bg-[var(--surface-inverse)] p-5.5 text-white sm:p-6">
       <template v-if="currentMission">
         <div class="flex flex-wrap items-center gap-2.5">
           <span class="text-label font-bold uppercase tracking-label text-white/60">Mission en cours</span>
           <CoreBadge tone="onPhoto">{{ PHASE_LABEL_ARTISAN[interventionPhase(currentMission)] }}</CoreBadge>
         </div>
-        <p class="mb-0 mt-3 font-display text-[22px] font-bold tracking-[-.02em]">{{ tradeLabel(currentMission.trade_reference_id) }}</p>
-        <p class="mb-0 mt-1 text-sm text-white/[.82]">{{ currentMission.unit?.name ?? 'Logement' }}<template v-if="currentMission.unit?.address"> · {{ currentMission.unit.address }}</template></p>
+        <p class="mb-0 mt-3 font-display text-[22px] font-bold leading-tight tracking-[-.02em] [overflow-wrap:anywhere]">{{ currentTitle }}</p>
+        <p class="mb-0 mt-1.5 text-sm text-white/[.82]">{{ currentSubtitle }}</p>
+        <p v-if="currentMission.unit?.address" class="mb-0 mt-0.5 text-[13px] text-white/[.66] [overflow-wrap:anywhere]">{{ currentMission.unit.address }}</p>
         <div class="mt-4.5 flex flex-wrap items-center gap-x-4 gap-y-2.5">
           <CoreButton tone="secondary" @click="navigateTo(missionLink(currentMission))">Voir la mission</CoreButton>
           <NuxtLink v-if="others" to="/artisan/planning" class="inline-flex items-center gap-1 text-[13px] font-bold text-white/90 hover:text-white">

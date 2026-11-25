@@ -101,7 +101,7 @@ async function readContract() {
       <div class="mx-auto grid h-14 w-14 animate-[im-pop_.5s_ease] place-items-center rounded-pill bg-green-600 text-white"><Check class="h-7 w-7" :stroke-width="2.4" /></div>
       <p class="mb-0 mt-4 text-base font-bold">Votre signature est enregistrée</p>
       <p class="mx-auto mb-0 mt-2 max-w-[320px] text-[13.5px] leading-[1.55] text-[var(--text-muted)]">
-        Dernière étape : le paiement d'entrée<template v-if="entry"> (<span class="font-mono">{{ formatFcfa(entry.total) }}</span>)</template>, prélevé sur votre tirelire. Il active le bail.
+        Dernière étape : le paiement d'entrée<template v-if="entry"> (<span class="font-mono">{{ formatFcfa(entry.total) }}</span>)</template>, prélevé sur votre part réservée au logement. Il active le bail.
       </p>
     </div>
 

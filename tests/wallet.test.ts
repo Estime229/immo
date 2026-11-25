@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { gatewayNeedsPhone, gatewaySupported, normalizeBeninPhone, pendingWithdrawal, spendableSavings, validateRecharge, validateWithdrawal, walletInconsistent, withdrawalMethodLabel } from '../app/utils/wallet'
+import { gatewayNeedsPhone, gatewaySupported, normalizeBeninPhone, pendingWithdrawal, spendableSavings, transactionStatusBadge, validateRecharge, validateWithdrawal, walletAmount, walletBreakdown, walletBreakdownLine, walletInconsistent, withdrawalMethodLabel } from '../app/utils/wallet'
 import type { WithdrawalRequest } from '../app/types/wallet'
 
 const w = (over: Partial<WithdrawalRequest>): WithdrawalRequest => ({ id: 'w', amount: '1000.00', method: 'MTN_MOMO', phone_number: '+22997000000', status: 'processed', created_at: '2026-09-20T10:00:00Z', ...over })
@@ -15,6 +15,58 @@ describe('soldes (#82)', () => {
     expect(walletInconsistent(-9000, 14000)).toBe(true)
     expect(walletInconsistent(71000, 0)).toBe(false)
     expect(walletInconsistent(5000, 5000)).toBe(false)
+  })
+})
+
+describe('solde unique et sa répartition', () => {
+  const fmt = (n: number) => `${n} F`
+
+  it('lit les montants en chaîne de l\'API sans les concaténer', () => {
+    expect(walletAmount('125000.00')).toBe(125000)
+    expect(walletAmount(' 95000.50 ')).toBe(95000.5)
+    expect(walletAmount(42)).toBe(42)
+    expect(walletAmount(null)).toBe(0)
+    expect(walletAmount(undefined)).toBe(0)
+    expect(walletAmount('')).toBe(0)
+    expect(walletAmount('abc')).toBe(0)
+  })
+
+  it('le total est balance_total : la tirelire en fait partie, elle ne s\'y ajoute pas', () => {
+    // Recharge de 120 000 : l'API crédite les deux soldes du même montant.
+    expect(walletBreakdown('120000.00', '120000.00')).toEqual({ total: 120000, reserved: 120000, free: 0 })
+    expect(walletBreakdown('135000.00', '95000.00')).toEqual({ total: 135000, reserved: 95000, free: 40000 })
+  })
+
+  it('plafonne la part réservée au total et ne rend jamais de part négative', () => {
+    expect(walletBreakdown('7000.00', '30000.00')).toEqual({ total: 7000, reserved: 7000, free: 0 })
+    expect(walletBreakdown('-9000.00', '14000.00')).toEqual({ total: -9000, reserved: 0, free: 0 })
+    expect(walletBreakdown(null, undefined)).toEqual({ total: 0, reserved: 0, free: 0 })
+  })
+
+  it('formule la ligne sous le solde selon les parts', () => {
+    expect(walletBreakdownLine(walletBreakdown('135000', '95000'), fmt)).toBe('dont 95000 F réservés au logement (loyers et réservations) · 40000 F libres')
+    expect(walletBreakdownLine(walletBreakdown('50000', '0'), fmt)).toMatch(/^aucune part réservée/)
+    expect(walletBreakdownLine(walletBreakdown('50000', '50000'), fmt)).toMatch(/^entièrement réservés/)
+    expect(walletBreakdownLine(walletBreakdown('0', '0'), fmt)).toBe('')
+    expect(walletBreakdownLine(walletBreakdown('-9000', '14000'), fmt)).toBe('')
+  })
+})
+
+describe('historique : badge de statut', () => {
+  it('ne badge pas un mouvement terminé, quelle que soit la casse', () => {
+    expect(transactionStatusBadge('completed')).toBeNull()
+    expect(transactionStatusBadge('COMPLETED')).toBeNull()
+  })
+  it('signale ce qui apprend quelque chose', () => {
+    expect(transactionStatusBadge('pending')).toEqual({ label: 'En attente', tone: 'warn' })
+    expect(transactionStatusBadge('processing')?.label).toBe('En cours')
+    expect(transactionStatusBadge('failed')).toEqual({ label: 'Échoué', tone: 'danger' })
+    expect(transactionStatusBadge('cancelled')?.label).toBe('Annulé')
+    expect(transactionStatusBadge('refunded')?.label).toBe('Remboursé')
+  })
+  it('garde visible un statut inconnu ou absent', () => {
+    expect(transactionStatusBadge('weird')?.label).toBe('Statut inconnu')
+    expect(transactionStatusBadge(null)?.label).toBe('Statut inconnu')
   })
 })
 

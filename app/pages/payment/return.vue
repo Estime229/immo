@@ -107,8 +107,8 @@ const amountLabel = computed(() => (amount.value ? formatFcfa(amount.value) : ''
         <h1 class="mb-0 mt-4 font-display text-[22px] font-bold tracking-[-.02em]">Recharge confirmée</h1>
         <p class="mx-auto mb-0 mt-2 max-w-[340px] text-[13.5px] leading-[1.6] text-[var(--text-muted)]">
           <template v-if="alreadyCredited">Ce paiement avait déjà été confirmé : rien n'a été crédité une seconde fois.</template>
-          <template v-else-if="amountLabel"><span class="font-mono font-bold text-green-900">{{ amountLabel }}</span> crédités sur votre tirelire, pour payer un loyer ou une réservation.</template>
-          <template v-else>Le montant est crédité sur votre tirelire, pour payer un loyer ou une réservation.</template>
+          <template v-else-if="amountLabel"><span class="font-mono font-bold text-green-900">{{ amountLabel }}</span> crédités sur votre wallet et réservés au logement, pour payer un loyer ou une réservation.</template>
+          <template v-else>Le montant est crédité sur votre wallet et réservé au logement, pour payer un loyer ou une réservation.</template>
         </p>
 
         <div class="mt-5 rounded-md border border-info-border bg-info-bg px-3.5 py-3 text-left text-[13px] leading-[1.55] text-info-fg-deep">
@@ -118,12 +118,12 @@ const amountLabel = computed(() => (amount.value ? formatFcfa(amount.value) : ''
         <div class="mt-5 flex flex-col gap-2.5">
           <template v-if="hasOpener && !closeFailed">
             <CoreButton full-width @click="closeTab">Revenir à l'onglet du paiement</CoreButton>
-            <NuxtLink to="/locataire/wallet" class="rounded-pill border border-[var(--border-default)] bg-white px-4 py-[9px] text-[13px] font-bold text-sand-900">Voir ma tirelire ici</NuxtLink>
+            <NuxtLink to="/locataire/wallet" class="rounded-pill border border-[var(--border-default)] bg-white px-4 py-[9px] text-[13px] font-bold text-sand-900">Voir mon wallet ici</NuxtLink>
           </template>
           <template v-else>
             <p v-if="closeFailed" class="m-0 text-[12.5px] text-[var(--text-muted)]">Le navigateur n'a pas fermé cet onglet : fermez-le vous-même, ou continuez ici.</p>
             <NuxtLink to="/locataire/wallet" class="flex items-center justify-center gap-1.5 rounded-md bg-[image:var(--action-primary)] px-5 py-3 text-[14px] font-bold text-white shadow-action">
-              Voir ma tirelire<ArrowRight class="h-4 w-4" :stroke-width="1.9" />
+              Voir mon wallet<ArrowRight class="h-4 w-4" :stroke-width="1.9" />
             </NuxtLink>
           </template>
           <div class="flex flex-wrap justify-center gap-x-4 gap-y-1.5 pt-1">
@@ -163,13 +163,13 @@ const amountLabel = computed(() => (amount.value ? formatFcfa(amount.value) : ''
         <span class="mx-auto grid h-[46px] w-[46px] place-items-center rounded-pill bg-danger-bg text-danger-fg"><CircleAlert class="h-5 w-5" :stroke-width="1.9" /></span>
         <h1 class="mb-0 mt-4 font-display text-[22px] font-bold tracking-[-.02em]">Vérification impossible</h1>
         <p class="mx-auto mb-0 mt-2 max-w-[360px] text-[13.5px] leading-[1.6] text-[var(--text-muted)]">
-          <template v-if="state === 'unknown'">Cette page ne permet pas d'identifier le paiement. Consultez votre tirelire pour voir s'il a été pris en compte.</template>
+          <template v-if="state === 'unknown'">Cette page ne permet pas d'identifier le paiement. Consultez votre wallet pour voir s'il a été pris en compte.</template>
           <template v-else>{{ message }} S'il a été débité, ne payez pas une seconde fois : réessayez la vérification ou écrivez-nous.</template>
         </p>
         <div class="mt-5 flex flex-col gap-2.5">
           <CoreButton v-if="state === 'error'" full-width @click="verify"><span class="inline-flex items-center gap-1.5"><RefreshCw class="h-4 w-4" :stroke-width="1.9" />Réessayer la vérification</span></CoreButton>
           <NuxtLink v-else to="/locataire/wallet" class="flex items-center justify-center gap-1.5 rounded-md bg-[image:var(--action-primary)] px-5 py-3 text-[14px] font-bold text-white shadow-action">
-            Voir ma tirelire<ArrowRight class="h-4 w-4" :stroke-width="1.9" />
+            Voir mon wallet<ArrowRight class="h-4 w-4" :stroke-width="1.9" />
           </NuxtLink>
           <NuxtLink :to="supportLink" class="rounded-pill border border-[var(--border-default)] bg-white px-4 py-[9px] text-[13px] font-bold text-sand-900">Signaler un problème de paiement</NuxtLink>
         </div>

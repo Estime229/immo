@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowRight, BedDouble, CalendarDays, ChevronRight, ClipboardCheck, FileSignature, Home, Megaphone, MessageSquare, Search, Wallet as WalletIcon } from '@lucide/vue'
+import { ArrowRight, BedDouble, CalendarClock, CalendarDays, ChevronRight, ClipboardCheck, FileSignature, Home, Megaphone, MessageSquare, Search, Wallet as WalletIcon } from '@lucide/vue'
 import type { Component } from 'vue'
 import type { BookingSummary } from '~/types/tenant'
 import type { GuideStep } from '~/components/layout/GuideChecklist.vue'
@@ -8,7 +8,11 @@ import { ApiRequestError } from '~/utils/authenticatedFetcher'
 import { errorText } from '~/utils/apiErrors'
 import { bookingPhase, PHASE_LABEL, PHASE_TONE } from '~/utils/bookings'
 import { leasePhase, LEASE_PHASE_TONE, TENANT_LEASE_PHASE_LABEL } from '~/utils/leases'
-import { buildActivityFeed, buildNextSteps, findLateLeaseInvoice, inventorySignSteps, type DashboardStepKind } from '~/utils/tenantDashboard'
+import { walletBreakdown, walletBreakdownLine } from '~/utils/wallet'
+import {
+  buildActivityFeed, buildNextSteps, findLateLeaseInvoice, findUpcomingLeaseInvoice, inventorySignSteps, upcomingRentStepKey,
+  type DashboardStepKind, type LeaseInvoiceInfo
+} from '~/utils/tenantDashboard'
 
 definePageMeta({ layout: 'locataire' })
 
@@ -16,17 +20,9 @@ const wallet = useTenantWallet()
 const { canAct: identityVerified } = useVerification()
 const { openPay } = usePaymentModal()
 
-/** Explication complète (solde vs tirelire) montrée une fois sur le tableau de bord, puis
- * remplacée par la ligne courte habituelle — cookie plutôt que localStorage pour que le
- * serveur la lise au rendu et évite le flash d'affichage avant hydratation (voir AppDownloadBanner). */
-const walletIntroDismissed = useCookie<string | null>('immo_wallet_intro_dismissed', {
-  default: () => null,
-  sameSite: 'lax',
-  maxAge: 60 * 60 * 24 * 365
-})
-function dismissWalletIntro() {
-  walletIntroDismissed.value = '1'
-}
+/** Un seul solde, et ce qui en est réservé au logement — le mot « tirelire » et son explication ne sont plus montrés ici. */
+const walletSplit = computed(() => walletBreakdown(wallet.wallet.value?.balance_total, wallet.wallet.value?.balance_savings))
+const walletSplitLine = computed(() => walletBreakdownLine(walletSplit.value, formatFcfaShort))
 
 const bookingsApi = useBookingsApi()
 const housingRequestsApi = useHousingRequestsApi()
@@ -73,15 +69,20 @@ function formatDate(iso: string) {
   return new Date(iso.length === 10 ? `${iso}T12:00:00` : iso).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
 }
 
-/* ---- Bannière loyer en retard ---- */
+/* ---- Loyer : bannière de retard, sinon carte « Prochain loyer » ---- */
 const lateInfo = computed(() => findLateLeaseInvoice(leasesBlock.leases.value))
 const dashAlert = computed(() => {
   const info = lateInfo.value
   if (!info) return ''
   return `Le loyer de ${info.lease.unit?.name ?? 'votre logement'} — ${formatFcfa(Number(info.invoice.amount))} — était dû le ${formatDate(info.invoice.due_date)}`
 })
-function payLateLease() {
-  const info = lateInfo.value
+/**
+ * Le retard garde la priorité : une seule invitation à payer en haut de page,
+ * la plus urgente. L'échéance à venir reste alors visible dans « Prochaines étapes ».
+ */
+const upcomingInfo = computed(() => (lateInfo.value ? null : findUpcomingLeaseInvoice(leasesBlock.leases.value)))
+/** Même parcours pour un loyer en retard ou à venir : l'écran du bail ouvre le paiement de cette échéance (`?pay=`). */
+function payLeaseInvoice(info: LeaseInvoiceInfo | null) {
   navigateTo(info ? `/locataire/bail?lease=${info.lease.id}&pay=${info.invoice.id}` : '/locataire/bail')
 }
 
@@ -143,12 +144,21 @@ async function loadInventorySteps() {
 }
 watch(() => [leasesBlock.leases.value, stays.value.map(b => b.id).join()], loadInventorySteps, { immediate: true })
 
-const nextSteps = computed(() => [...inventorySteps.value, ...buildNextSteps({
-  leases: leasesBlock.leases.value,
-  bookings: bookingsBlock.items.value,
-  housingRequests: housingRequestsBlock.items.value,
-  waitlist: waitlistBlock.items.value
-})])
+/*
+ * L'échéance déjà affichée en carte « Prochain loyer » n'est pas répétée ici :
+ * même montant, même date, même bouton deux fois sur l'écran. La liste garde
+ * en revanche les loyers à venir des autres baux, et celui que la bannière de
+ * retard empêche d'afficher en carte.
+ */
+const nextSteps = computed(() => {
+  const shownInCard = upcomingInfo.value ? upcomingRentStepKey(upcomingInfo.value.invoice.id) : null
+  return [...inventorySteps.value, ...buildNextSteps({
+    leases: leasesBlock.leases.value,
+    bookings: bookingsBlock.items.value,
+    housingRequests: housingRequestsBlock.items.value,
+    waitlist: waitlistBlock.items.value
+  }).filter(s => s.key !== shownInCard)]
+})
 const nextStepsLoading = computed(() =>
   [leasesBlock.state.value, bookingsBlock.state.value, housingRequestsBlock.state.value, waitlistBlock.state.value].includes('loading')
 )
@@ -204,9 +214,20 @@ function retryActivity() {
   <div class="@container animate-[im-fade_.3s_ease_backwards]">
     <LayoutKycNotice space="locataire" />
     <LayoutGuideChecklist space="locataire" :steps="guideSteps" :ready="guideReady" />
-    <FeedbackAlertBanner v-if="lateInfo" tone="danger" action-label="Payer maintenant" class="mb-5" @action="payLateLease">
+    <FeedbackAlertBanner v-if="lateInfo" tone="danger" action-label="Payer maintenant" class="mb-5" @action="payLeaseInvoice(lateInfo)">
       {{ dashAlert }}
     </FeedbackAlertBanner>
+    <!-- Loyer à venir sous 7 jours : rappelé avant qu'il ne passe en retard, avec le même parcours de paiement. -->
+    <section v-else-if="upcomingInfo" class="mb-5 flex flex-wrap items-center gap-x-3.5 gap-y-3 rounded-2xl border border-[var(--border-subtle)] bg-white p-4">
+      <div class="grid h-10 w-10 flex-none place-items-center rounded-md bg-warn-bg text-warn-fg"><CalendarClock class="h-[18px] w-[18px]" :stroke-width="1.9" /></div>
+      <div class="min-w-0 flex-1">
+        <p class="m-0 text-sm font-bold leading-snug">
+          Prochain loyer : <span class="whitespace-nowrap font-mono">{{ formatFcfaShort(Number(upcomingInfo.invoice.amount)) }}</span>, le <span class="whitespace-nowrap">{{ formatDate(upcomingInfo.invoice.due_date) }}</span>
+        </p>
+        <p class="mb-0 mt-0.5 truncate text-xs text-[var(--text-faint)]">{{ [upcomingInfo.lease.unit?.name, upcomingInfo.lease.property?.name].filter(Boolean).join(' — ') || 'Votre logement' }}</p>
+      </div>
+      <CoreButton size="sm" class="w-full sm:w-auto" @click="payLeaseInvoice(upcomingInfo)">Payer</CoreButton>
+    </section>
 
     <div class="grid grid-cols-1 gap-4.5 @5xl:grid-cols-[1.35fr_1fr]">
       <section class="rounded-2xl border border-[var(--border-subtle)] bg-white p-5.5">
@@ -286,37 +307,22 @@ function retryActivity() {
           <NuxtLink to="/locataire/wallet" class="inline-flex items-center gap-1 text-[12.5px] font-bold text-green-700">Détail <ArrowRight class="h-3.5 w-3.5" :stroke-width="1.9" /></NuxtLink>
         </div>
         <!--
-          Tablette : le wallet occupe toute la largeur — soldes puis « Recharger » à gauche,
-          explication à droite (sinon un grand vide restait sous les soldes). Téléphone et
-          bureau : une seule colonne, dans l'ordre soldes, explication, bouton.
+          Un seul solde, sa répartition dessous, puis « Recharger ». Tablette : le wallet
+          occupe toute la largeur — solde à gauche, bouton à droite (sinon un grand vide).
+          Téléphone et bureau : une seule colonne.
         -->
-        <div class="grid grid-cols-1 gap-3 @xl:grid-cols-2 @xl:gap-x-5 @5xl:grid-cols-1 @5xl:gap-x-0">
-          <div v-if="wallet.state.value === 'loading' || wallet.state.value === 'idle'" class="@xl:col-start-1 @xl:row-start-1 @5xl:col-start-auto @5xl:row-start-auto"><DataSkeletonCard :height="70" :lines="1" /></div>
+        <div class="flex flex-col gap-3.5 @xl:flex-row @xl:items-end @xl:justify-between @xl:gap-5 @5xl:flex-col @5xl:items-stretch @5xl:gap-3.5">
+          <div v-if="wallet.state.value === 'loading' || wallet.state.value === 'idle'" class="min-w-0 @xl:flex-1"><DataSkeletonCard :height="70" :lines="1" /></div>
           <!-- Un solde inconnu ne s'affiche jamais « 0 F ». -->
-          <p v-else-if="wallet.state.value === 'error'" class="m-0 rounded-md border border-danger-border bg-danger-bg px-3.5 py-3 text-[13px] font-semibold text-danger-fg @xl:col-start-1 @xl:row-start-1 @5xl:col-start-auto @5xl:row-start-auto">
-            Soldes indisponibles pour le moment.
+          <p v-else-if="wallet.state.value === 'error'" class="m-0 rounded-md border border-danger-border bg-danger-bg px-3.5 py-3 text-[13px] font-semibold text-danger-fg @xl:flex-1">
+            Solde indisponible pour le moment.
             <button type="button" class="ml-1 font-bold underline" @click="wallet.reload()">Réessayer</button>
           </p>
-          <div v-else class="grid grid-cols-2 gap-3 @xl:col-start-1 @xl:row-start-1 @5xl:col-start-auto @5xl:row-start-auto">
-            <div class="min-w-0 rounded-lg border border-[var(--border-subtle)] bg-white p-4">
-              <p class="m-0 truncate font-mono text-xl font-bold tracking-[-.02em] text-green-900">{{ formatFcfaShort(wallet.balanceTotal.value) }}</p>
-              <p class="mb-0 mt-1.5 text-[11.5px] text-[var(--text-muted)]">Solde disponible</p>
-            </div>
-            <div class="min-w-0 rounded-lg border border-green-100 bg-green-50 p-4">
-              <p class="m-0 truncate font-mono text-xl font-bold tracking-[-.02em] text-green-900">{{ formatFcfaShort(wallet.balanceSavings.value) }}</p>
-              <p class="mb-0 mt-1.5 text-[11.5px] text-green-700">Tirelire</p>
-            </div>
+          <div v-else class="min-w-0 @xl:flex-1">
+            <p class="m-0 font-mono text-[28px] font-bold leading-none tracking-[-.02em] text-green-900">{{ formatFcfaShort(walletSplit.total) }}</p>
+            <p v-if="walletSplitLine" class="mb-0 mt-2 text-[12.5px] leading-[1.5] text-[var(--text-muted)]">{{ walletSplitLine }}</p>
           </div>
-          <div v-if="!walletIntroDismissed" class="self-start rounded-md border border-green-100 bg-green-50 px-3.5 py-3 @xl:col-start-2 @xl:row-span-2 @xl:row-start-1 @5xl:col-start-auto @5xl:row-span-1 @5xl:row-start-auto">
-            <p class="mb-0 text-[12.5px] leading-[1.5] text-green-900">
-              La tirelire est la part réservée au logement : c'est elle qui sert à payer un loyer ou une réservation. Les deux soldes ne bougent pas ensemble — une recharge crédite les deux, un revenu locatif ne crédite que le solde disponible.
-            </p>
-            <button type="button" class="mt-2 text-[12px] font-bold text-green-700 underline" @click="dismissWalletIntro">Compris</button>
-          </div>
-          <p v-else class="m-0 self-start text-[12.5px] leading-[1.5] text-[var(--text-muted)] @xl:col-start-2 @xl:row-span-2 @xl:row-start-1 @5xl:col-start-auto @5xl:row-span-1 @5xl:row-start-auto">
-            La tirelire est la part réservée au logement : c'est elle qui sert à payer un loyer ou une réservation.
-          </p>
-          <button type="button" class="mt-0.5 block w-full self-start rounded-md bg-[image:var(--action-primary)] py-3 text-center text-sm font-bold text-white shadow-action @xl:col-start-1 @xl:row-start-2 @5xl:col-start-auto @5xl:row-start-auto" @click="openPay('recharge')">Recharger</button>
+          <button type="button" class="block w-full flex-none rounded-md bg-[image:var(--action-primary)] py-3 text-center text-sm font-bold text-white shadow-action @xl:w-auto @xl:px-8 @5xl:w-full" @click="openPay('recharge')">Recharger</button>
         </div>
       </section>
     </div>
@@ -332,8 +338,9 @@ function retryActivity() {
             Certaines informations n'ont pas pu être chargées ({{ failedSteps.join(', ') }}) : la liste peut être incomplète.
             <button type="button" class="ml-2 font-bold underline" @click="retrySteps">Réessayer</button>
           </FeedbackAlertBanner>
+          <!-- Le loyer rappelé en carte n'est pas listé ici : « Rien n'attend de votre part » le contredirait. -->
           <p v-if="!nextSteps.length && !failedSteps.length" class="mb-0 mt-3 flex items-center gap-2.5 rounded-md bg-ok-bg p-3.5 text-[13.5px] font-semibold text-green-900">
-            Rien n'attend de votre part : baux, séjours et demandes sont à jour.
+            {{ upcomingInfo ? "Rien d'autre n'attend de votre part que le prochain loyer, rappelé en haut de page." : "Rien n'attend de votre part : baux, séjours et demandes sont à jour." }}
           </p>
           <div v-for="n in nextSteps" :key="n.key" class="flex items-center gap-3 border-b border-sand-200 py-3 last:border-b-0">
             <div class="grid h-9 w-9 flex-none place-items-center rounded-md" :class="n.kind === 'pay' ? 'bg-warn-bg text-warn-fg' : n.kind === 'stay' ? 'bg-info-bg text-info-fg' : 'bg-green-50 text-green-700'">

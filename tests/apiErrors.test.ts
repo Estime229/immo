@@ -59,11 +59,11 @@ describe('mapApiError', () => {
     expect(mapped.bannerMessage).toContain('Loi 2022-30')
   })
 
-  it('reconnaît un message de solde insuffisant mentionnant la tirelire et le laisse passer tel quel', () => {
+  it('reconnaît un message de solde insuffisant mentionnant la tirelire et le reformule avec le vocabulaire du wallet', () => {
     const payload = { statusCode: 409, message: 'Solde de votre tirelire insuffisant pour ce paiement.' }
     const mapped = mapApiError(payload, 409)
     expect(mapped.kind).toBe('insufficient_balance')
-    expect(mapped.bannerMessage).toBe(payload.message)
+    expect(mapped.bannerMessage).toBe('Solde de votre part réservée au logement insuffisant pour ce paiement.')
   })
 
   it('401 est neutre : c\'est l\'appelant (fetcher authentifié) qui décide de rafraîchir', () => {

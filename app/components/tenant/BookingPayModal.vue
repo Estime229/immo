@@ -57,7 +57,7 @@ const refreshNote = ref('')
 async function refreshWallet(manual = false) {
   if (step.value !== 'form' || blocking.value) return
   await wallet.reload()
-  if (manual) refreshNote.value = wallet.state.value !== 'success' ? 'Solde indisponible pour le moment.' : shortfall.value > 0 ? 'Votre tirelire ne suffit pas encore.' : ''
+  if (manual) refreshNote.value = wallet.state.value !== 'success' ? 'Solde indisponible pour le moment.' : shortfall.value > 0 ? 'Votre part réservée au logement ne suffit pas encore.' : ''
 }
 function onVisible() {
   if (document.visibilityState === 'visible' && shortfall.value > 0) refreshWallet()
@@ -135,7 +135,7 @@ function close() {
           <DataMoneyLine v-if="preview?.applied" label="Réduction" :value="`-${formatFcfa(preview.discount_amount)}`" tone="credit" />
           <DataMoneyLine label="Total à payer" :value="formatFcfa(displayTotal)" total />
           <p class="mb-0 mt-2 text-[12px] text-[var(--text-muted)]">
-            Prélevé sur votre tirelire<template v-if="wallet.state.value === 'success'"> · <span class="font-mono">{{ formatFcfa(wallet.spendable.value) }}</span> disponibles</template><template v-else-if="wallet.state.value === 'loading'"> · lecture du solde…</template>.
+            Prélevé sur votre part réservée au logement<template v-if="wallet.state.value === 'success'"> · <span class="font-mono">{{ formatFcfa(wallet.spendable.value) }}</span> disponibles</template><template v-else-if="wallet.state.value === 'loading'"> · lecture du solde…</template>.
           </p>
         </div>
         <p v-if="wallet.state.value === 'error'" class="mb-0 mt-2.5 text-[13px] font-semibold text-danger-fg">
@@ -144,11 +144,11 @@ function close() {
 
         <WalletInconsistencyNote compact />
         <div v-if="shortfall > 0" class="mt-3 rounded-md border border-warn-border bg-warn-bg px-3.5 py-3 text-[13px] text-warn-fg-deep">
-          <p class="m-0 font-bold">Il vous manque <span class="font-mono">{{ formatFcfa(shortfall) }}</span> dans votre tirelire.</p>
+          <p class="m-0 font-bold">Il vous manque <span class="font-mono">{{ formatFcfa(shortfall) }}</span> sur votre part réservée au logement.</p>
           <p class="mb-0 mt-1">Rechargez-la en Mobile Money dans un nouvel onglet, puis revenez ici<template v-if="hold && !hold.expired"> avant la fin des <span class="font-mono">{{ hold.minutesRemaining }}</span> minutes</template> : le solde est relu à votre retour.</p>
           <div class="mt-2.5 flex flex-wrap gap-2">
             <NuxtLink to="/locataire/wallet" target="_blank" class="inline-flex items-center gap-1.5 rounded-pill border border-warn-border bg-white px-3.5 py-2 text-[12.5px] font-bold text-warn-fg-deep">
-              Recharger ma tirelire <ExternalLink class="h-3.5 w-3.5" :stroke-width="1.9" />
+              Recharger mon wallet <ExternalLink class="h-3.5 w-3.5" :stroke-width="1.9" />
             </NuxtLink>
             <button type="button" class="inline-flex items-center gap-1.5 rounded-pill px-3 py-2 text-[12.5px] font-bold text-warn-fg-deep underline disabled:opacity-60" :disabled="wallet.state.value === 'loading'" @click="refreshWallet(true)">
               <RefreshCw class="h-3.5 w-3.5" :stroke-width="1.9" />{{ wallet.state.value === 'loading' ? 'Lecture…' : "J'ai rechargé" }}
