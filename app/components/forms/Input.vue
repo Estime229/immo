@@ -4,7 +4,7 @@ interface InputProps {
   label?: string
   hint?: string
   invalid?: boolean
-  /** Space Mono — pour montants, numéros Mobile Money, références */
+  /** Police des chiffres (chiffres de largeur égale) — pour montants, numéros Mobile Money, références */
   mono?: boolean
   modelValue?: string
   type?: string

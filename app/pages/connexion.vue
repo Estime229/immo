@@ -396,7 +396,7 @@ async function submitReset() {
 
 <template>
   <div class="grid min-h-screen grid-cols-1 lg:grid-cols-[1fr_480px]">
-    <div class="relative hidden items-end overflow-hidden bg-[image:var(--gradient-hero)] p-11 lg:flex">
+    <div class="relative hidden items-end overflow-hidden bg-green-900 p-11 lg:flex">
       <div
         v-for="(src, i) in HERO_IMAGES"
         :key="src"

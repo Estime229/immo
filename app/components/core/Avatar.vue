@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { avatarPaletteIndex } from '~/utils/avatar'
 /** Pastille d'initiales, ou photo si `avatarUrl` est fourni (voir `useUserApi().uploadAvatar`). */
 interface AvatarProps {
   /** Nom complet ; les deux premières initiales sont extraites */
@@ -13,12 +14,15 @@ interface AvatarProps {
 
 const props = withDefaults(defineProps<AvatarProps>(), { size: 40 })
 
-const PALETTE = ['var(--color-green-600)', 'var(--color-clay-500)', 'var(--color-info-fg)', '#8a2440', 'var(--color-sand-800)']
+/* Teintes de la charte uniquement (vert, terracotta, sable), toutes lisibles avec des initiales
+   blanches (contraste ≥ 4,5:1). Le bordeaux et le bleu canard d'avant sortaient de la palette et
+   donnaient un effet de couleurs tirées au hasard dans les listes. */
+const PALETTE = ['var(--color-green-700)', 'var(--color-clay-500)', 'var(--color-green-900)', 'var(--color-sand-800)', 'var(--color-clay-700)']
 
 const initials = computed(() =>
   props.name.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase()
 )
-const background = computed(() => props.color || PALETTE[props.name.length % PALETTE.length])
+const background = computed(() => props.color || PALETTE[avatarPaletteIndex(props.name, PALETTE.length)])
 const fontSize = computed(() => Math.round(props.size * 0.32))
 
 const imgFailed = ref(false)

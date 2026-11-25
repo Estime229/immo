@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Nunito:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Nunito:wght@400;500;600;700;800&display=swap");
 @import "tailwindcss";
 /* Jetons de l'espace admin (/admin/*) — importés ici pour partager le même @theme. */
 @import "./admin.css";
@@ -11,7 +11,12 @@
   --font-display: "Bricolage Grotesque", "Nunito", system-ui, sans-serif;
   --font-body: "Nunito", system-ui, -apple-system, sans-serif;
   --font-sans: "Nunito", system-ui, -apple-system, sans-serif;
-  --font-mono: "Space Mono", ui-monospace, "SFMono-Regular", monospace;
+  /* Police des chiffres (montants, dates, compteurs). Elle était en Space Mono, une police à
+     chasse fixe : au milieu d'une phrase (« le 1 janvier 2027 », « 24 nov. ») elle cassait la
+     lecture et donnait un air de terminal. C'est désormais Nunito avec des chiffres de largeur
+     égale (voir `.font-mono` plus bas), qui alignent toujours les montants en colonne. Le nom
+     `mono` reste pour ne pas réécrire les ~400 classes `font-mono` de l'application. */
+  --font-mono: "Nunito", system-ui, -apple-system, sans-serif;
 
   /* Le "black" de la marque est 800, pas le 900 par défaut de Tailwind */
   --font-weight-black: 800;
@@ -63,7 +68,9 @@
   --color-clay-100: #fdf1dd;
   --color-clay-200: #f0e3d0;
   --color-clay-300: #d9c4a3;
-  --color-clay-500: #c77f3e;
+  /* Foncé depuis #c77f3e : le texte blanc sur les boutons et pastilles terracotta n'atteignait
+     que 3,2:1 de contraste ; #ad632b atteint 4,6:1 (minimum WCAG AA : 4,5:1). */
+  --color-clay-500: #ad632b;
   --color-clay-700: #8a6116;
   --color-clay-900: #6b5b45;
 
@@ -117,8 +124,10 @@
   --shadow-raised: 0 14px 32px rgba(26, 23, 20, 0.11);
   --shadow-panel: 0 16px 40px rgba(26, 23, 20, 0.14);
   --shadow-overlay: 0 16px 38px rgba(26, 23, 20, 0.3);
-  --shadow-action: 0 6px 16px rgba(31, 111, 74, 0.3);
-  --shadow-accent: 0 8px 20px rgba(199, 127, 62, 0.36);
+  /* Ombres des boutons volontairement courtes : un halo coloré large sous chaque bouton faisait
+     partie de l'effet « interface générée » que la direction artistique écarte. */
+  --shadow-action: 0 2px 6px rgba(31, 111, 74, 0.18);
+  --shadow-accent: 0 2px 6px rgba(173, 99, 43, 0.2);
 
   /* ---- Mouvement ---- */
   --ease-standard: cubic-bezier(0.2, 0.8, 0.3, 1);
@@ -142,21 +151,23 @@
 
   --text-primary: var(--color-ink);
   --text-secondary: var(--color-sand-800);
-  --text-muted: var(--color-sand-700);
-  --text-faint: var(--color-sand-600);
+  /* Contraste mesuré : faint ≥ 4,5:1 jusque sur les zones creusées les plus foncées (sand-200,
+     4,55:1 ; 4,9:1 sur le fond de page), muted 6,3:1, secondary 7:1. Avant, faint (sand-600)
+     n'atteignait que 2,8:1, illisible en plein soleil sur un téléphone. Muted est foncé d'un
+     cran pour garder la hiérarchie entre les trois. */
+  --text-muted: #665b4a;
+  --text-faint: #776b58;
   --text-on-dark: var(--color-white);
   --text-brand: var(--color-green-700);
   --text-money-locked: var(--color-clay-700);
 
-  --action-primary: linear-gradient(140deg, var(--color-green-500), var(--color-green-700));
+  /* Aplat, plus de dégradé. La valeur reste une « image » d'une seule couleur parce qu'une
+     trentaine de fichiers l'appliquent via `bg-[image:var(--action-primary)]`. */
   --action-primary-solid: var(--color-green-600);
+  --action-primary: linear-gradient(var(--action-primary-solid), var(--action-primary-solid));
   --action-accent: var(--color-clay-500);
   --action-danger: var(--color-danger-fg);
 
-  --gradient-hero: radial-gradient(90% 120% at 78% 8%, rgba(255, 255, 255, 0.5), transparent 55%),
-    linear-gradient(155deg, var(--color-green-100) 0%, var(--color-green-400) 46%, var(--color-green-900) 100%);
-  --gradient-balance: radial-gradient(90% 130% at 85% 10%, rgba(199, 127, 62, 0.5), transparent 60%),
-    linear-gradient(130deg, var(--color-green-800), var(--color-green-950));
 
   /* Hauteur réservée sous le contenu pour la barre d'onglets flottante mobile
      (LayoutMobileTabBar : 10px d'écart + 58px + 12px de marge interne + bordure, + 8px d'air). */
@@ -171,6 +182,12 @@ body {
   background: var(--surface-page);
   color: var(--text-primary);
   font-family: var(--font-body);
+}
+
+/* Chiffres de largeur égale partout où `font-mono` est posé : les montants restent alignés en
+   colonne sans recourir à une police à chasse fixe (voir --font-mono). */
+.font-mono {
+  font-variant-numeric: tabular-nums lining-nums;
 }
 
 @layer base {

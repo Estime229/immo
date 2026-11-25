@@ -32,7 +32,7 @@ async function submit() {
 
 <template>
   <div class="grid min-h-screen grid-cols-1 font-body lg:grid-cols-[1fr_480px]">
-    <div class="relative hidden items-end overflow-hidden bg-[image:var(--gradient-hero)] p-11 lg:flex">
+    <div class="relative hidden items-end overflow-hidden bg-green-900 p-11 lg:flex">
       <div class="absolute inset-0 bg-cover bg-center" style="background-image: url(/images/hero/hero-2.jpg)" />
       <div class="absolute inset-0 bg-[image:linear-gradient(180deg,rgba(18,60,41,.15)_35%,rgba(18,60,41,.85)_100%)]" />
       <NuxtLink to="/" class="absolute left-11 top-9 z-10 flex items-center gap-2.5">

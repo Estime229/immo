@@ -62,7 +62,7 @@ const search = ref('')
       <h2 class="mb-5 font-display text-title-3 font-bold tracking-title-3">Données — annonces et montants</h2>
       <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <DataPropertyCard
-          photo="radial-gradient(120% 80% at 20% 0%, rgba(255,255,255,.42), transparent 58%), linear-gradient(148deg, #cfe3d4, #7fb489 52%, #164c33)"
+          photo="linear-gradient(var(--color-green-100), var(--color-green-100))"
           title="Unité A1 — Étoile"
           subtitle="Fidjrossè · 68 m²"
           price="75 000 F"

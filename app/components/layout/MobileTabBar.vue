@@ -43,7 +43,7 @@ const TAB_CLASS = 'group relative z-[1] flex h-full w-full flex-col items-center
           class="pointer-events-none absolute inset-y-0 left-0 p-[3px] transition-[transform,opacity] duration-[420ms] ease-[var(--ease-standard)] motion-reduce:transition-none"
           :style="indicatorStyle"
         >
-          <span class="block h-full w-full rounded-[20px] bg-[image:linear-gradient(150deg,var(--color-green-600),var(--color-green-800))] shadow-[0_6px_16px_rgba(26,93,62,.35)]" />
+          <span class="block h-full w-full rounded-[20px] bg-green-700 shadow-[0_2px_6px_rgba(26,93,62,.22)]" />
         </li>
         <li v-for="tab in items" :key="tab.key" class="min-w-0 flex-1">
           <component
