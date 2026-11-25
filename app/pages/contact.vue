@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowRight, CircleCheck, Mail, MapPin, MessageCircle, Phone } from '@lucide/vue'
+import { ArrowRight, CircleCheck, MapPin, MessageCircle, Phone } from '@lucide/vue'
 import { ApiRequestError } from '~/utils/authenticatedFetcher'
 import { errorText } from '~/utils/apiErrors'
 import { IMMO_CONTACT, telHref, validateContact, whatsappHref } from '~/utils/contact'
@@ -7,7 +7,8 @@ import { IMMO_CONTACT, telHref, validateContact, whatsappHref } from '~/utils/co
 /**
  * Lot 56 : le formulaire affichait « Message envoyé » (avec une référence
  * inventée) sans rien envoyer. Il passe maintenant par `POST /contact`.
- * Coordonnées : une seule source (`IMMO_CONTACT`), en liens tel:, wa.me et mailto:.
+ * Coordonnées : une seule source (`IMMO_CONTACT`), en liens tel: et wa.me. Pas d'adresse e-mail
+ * publique (décision produit) : le formulaire ci-dessous en tient lieu.
  */
 const SUBJECTS = [
   'Question sur une annonce',
@@ -77,8 +78,7 @@ function resetContact() {
 
 const CHANNELS = [
   { key: 'whatsapp', icon: MessageCircle, label: 'WhatsApp', value: IMMO_CONTACT.whatsapp, href: whatsappHref(IMMO_CONTACT.whatsapp), mono: true, external: true },
-  { key: 'phone', icon: Phone, label: 'Téléphone', value: IMMO_CONTACT.phone, href: telHref(IMMO_CONTACT.phone), mono: true, external: false },
-  { key: 'email', icon: Mail, label: 'Email', value: IMMO_CONTACT.email, href: `mailto:${IMMO_CONTACT.email}`, mono: false, external: false }
+  { key: 'phone', icon: Phone, label: 'Téléphone', value: IMMO_CONTACT.phone, href: telHref(IMMO_CONTACT.phone), mono: true, external: false }
 ]
 </script>
 

@@ -3,6 +3,7 @@ import { ArrowLeftRight, ArrowRight, ChevronRight, CircleQuestionMark, Globe, He
 import type { UserRole } from '~/types/auth'
 import { roleHomePath, roleLabel } from '~/utils/roleRoutes'
 import { draftFromQuery, summarizeSearch } from '~/utils/searchPill'
+import { displayName as cityDisplayName } from '~/utils/displayName'
 
 const route = useRoute()
 const favorites = usePropertyFavorites()
@@ -101,7 +102,12 @@ const NAV_LINKS = [
  */
 const searchOpen = ref(false)
 const accountOpen = ref(false)
-const searchSummary = computed(() => summarizeSearch(route.path === '/recherche' ? draftFromQuery(route.query) : null))
+/** Ville du résumé en casse lisible (« ABOMEY-CALAVI » → « Abomey-Calavi ») ; l'URL garde le nom brut. */
+const searchSummary = computed(() => {
+  if (route.path !== '/recherche') return summarizeSearch(null)
+  const draft = draftFromQuery(route.query)
+  return summarizeSearch({ ...draft, city: cityDisplayName(draft.city) })
+})
 
 function openAccount() {
   accountOpen.value = true

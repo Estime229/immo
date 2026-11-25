@@ -2,7 +2,8 @@
 import { BedDouble, ChevronDown, Droplets, House, LoaderCircle, MapPin, RefreshCw, Search, SearchX, SlidersHorizontal, Wallet, X, Zap } from '@lucide/vue'
 import type { PropertySearchFilters, PropertySearchResult } from '~/types/property'
 import { flattenSearchResults, type ListingCard } from '~/utils/propertyListing'
-import { resolveLocation, type MapMarker } from '~/utils/geo'
+import { approximateArea, resolveLocation, type MapMarker } from '~/utils/geo'
+import { displayName } from '~/utils/displayName'
 import { classifyRental, displayPrice, filterByRental, mapLimited, modeFromCard, RENTAL_SUFFIX, type RentalKey, type RentalMode } from '~/utils/rentalMode'
 import { filtersFromQuery, filtersToQuery, rememberSearch, sameSearch, SEARCH_QUERY_KEYS, searchPath, type SearchFiltersState, type SearchSort, type SearchView } from '~/utils/searchPill'
 
@@ -31,9 +32,9 @@ const sort = ref<SearchSort>(initial.sort)
 /** Point d'entrée depuis les catégories de l'accueil — pas de contrôle dans le tiroir, mais une pastille retirable. */
 const unitTypeId = ref(initial.unitType)
 
-const searchMode = ref<'filtres' | 'naturel'>('filtres')
-const natural = ref('')
-const naturalRun = ref(false)
+const searchMode = ref<'filtres' | 'motscles'>('filtres')
+const keywords = ref('')
+const keywordsRun = ref(false)
 
 const filtersOpen = ref(false)
 const view = ref<SearchView>(initial.view)
@@ -43,7 +44,7 @@ const cities = ref<{ id: string; name: string }[]>([])
 const neighborhoods = ref<{ id: string; name: string }[]>([])
 const waterOptions = ref<{ code: string; label: string }[]>([])
 const meterOptions = ref<{ code: string; label: string }[]>([])
-const unitTypeOptions = ref<{ id: string; label: string }[]>([])
+const unitTypeOptions = ref<{ id: string; code: string; label: string }[]>([])
 
 async function loadNeighborhoods(name: string) {
   const city = cities.value.find(c => c.name === name)
@@ -60,7 +61,7 @@ onMounted(async () => {
     cities.value = c
     waterOptions.value = water.map(e => ({ code: e.code, label: e.labels.fr ?? e.code }))
     meterOptions.value = meter.map(e => ({ code: e.code, label: e.labels.fr ?? e.code }))
-    unitTypeOptions.value = unitTypes.map(e => ({ id: e.id, label: e.labels.fr ?? e.code }))
+    unitTypeOptions.value = unitTypes.map(e => ({ id: e.id, code: e.code, label: e.labels.fr ?? e.code }))
   } catch {
     // Sans référentiels, le tiroir propose moins de choix : la recherche, elle, fonctionne.
   }
@@ -76,7 +77,7 @@ watch(cityName, name => {
   loadNeighborhoods(name)
 })
 
-const neighborhoodChips = computed(() => neighborhoods.value.map(n => ({ label: n.name, active: neighborhoodId.value === n.id, pick: () => { neighborhoodId.value = neighborhoodId.value === n.id ? '' : n.id } })))
+const neighborhoodChips = computed(() => neighborhoods.value.map(n => ({ label: displayName(n.name), active: neighborhoodId.value === n.id, pick: () => { neighborhoodId.value = neighborhoodId.value === n.id ? '' : n.id } })))
 const bedChips = computed(() => ([['', 'Toutes'], ['1', '1+'], ['2', '2+'], ['3', '3+']] as [string, string][])
   .map(([v, l]) => ({ label: l, active: v === '' ? !minBedrooms.value : minBedrooms.value === v, pick: () => { minBedrooms.value = v } })))
 const waterChips = computed(() => [{ code: '', label: 'Toutes' }, ...waterOptions.value]
@@ -93,9 +94,9 @@ const budgetRangeLabel = computed(() => (budget.value ? `jusqu'à ${formatFcfa(N
 
 const activeChips = computed(() => {
   const items: { key: string; label: string; remove: () => void }[] = []
-  if (cityName.value) items.push({ key: 'city', label: cityName.value, remove: () => { cityName.value = '' } })
+  if (cityName.value) items.push({ key: 'city', label: displayName(cityName.value), remove: () => { cityName.value = '' } })
   const nb = neighborhoods.value.find(n => n.id === neighborhoodId.value)
-  if (nb) items.push({ key: 'neighborhood', label: nb.name, remove: () => { neighborhoodId.value = '' } })
+  if (nb) items.push({ key: 'neighborhood', label: displayName(nb.name), remove: () => { neighborhoodId.value = '' } })
   if (budget.value) items.push({ key: 'budget', label: `≤ ${formatFcfa(Number(budget.value))}`, remove: () => { budget.value = '' } })
   if (minBedrooms.value && minBedrooms.value !== '0') items.push({ key: 'beds', label: `${minBedrooms.value}+ ch.`, remove: () => { minBedrooms.value = '' } })
   const w = waterOptions.value.find(o => o.code === waterSource.value)
@@ -120,40 +121,58 @@ function resetFilters() {
   unitTypeId.value = ''
 }
 
-/* ---- Recherche en langage naturel (heuristique client, sur les vrais référentiels une fois chargés) ---- */
-function parseNatural(text: string) {
+/*
+ * ---- Recherche par mots-clés ----
+ * Repérage simple, dans le navigateur, de trois sortes de mots : un nom de ville du référentiel,
+ * « N chambre(s) » ou « studio », et un nombre de 4 à 7 chiffres pris pour le budget. Les mots
+ * reconnus deviennent des filtres ordinaires, le reste est ignoré. Ce n'est ni de l'IA ni une
+ * compréhension du langage : l'onglet s'appelait « Décrire ma recherche » et répondait « Nous avons
+ * compris », ce qui laissait croire le contraire. Les libellés disent maintenant ce qui se passe.
+ */
+type KeywordKey = 'city' | 'beds' | 'unitType' | 'budget'
+function parseKeywords(text: string) {
   const t = text.toLowerCase()
-  const out: { key: string; value: string; label: string }[] = []
+  const out: { key: KeywordKey; value: string; label: string }[] = []
   const city = cities.value.find(c => t.includes(c.name.toLowerCase()))
-  if (city) out.push({ key: 'city', value: city.name, label: city.name })
+  if (city) out.push({ key: 'city', value: city.name, label: displayName(city.name) })
   const m = t.match(/(\d)\s*chambre/)
   if (m) out.push({ key: 'beds', value: m[1]!, label: `${m[1]}+ chambres` })
-  else if (/studio/.test(t)) out.push({ key: 'beds', value: '0', label: 'Studio' })
+  else if (/studio/.test(t)) {
+    // « studio » = le type de logement du référentiel (un filtre « 0 chambre minimum » ne filtrait rien).
+    const studio = unitTypeOptions.value.find(o => o.code === 'studio')
+    if (studio) out.push({ key: 'unitType', value: studio.id, label: studio.label })
+  }
   const b = t.replace(/\s/g, '').match(/(\d{4,7})/)
   if (b) out.push({ key: 'budget', value: b[1]!, label: `Max ${formatFcfa(Number(b[1]))}` })
   return out
 }
-const naturalCriteria = computed(() => (naturalRun.value ? parseNatural(natural.value) : []))
-const naturalUnderstood = computed(() => naturalRun.value && naturalCriteria.value.length > 0)
-const naturalFailed = computed(() => naturalRun.value && naturalCriteria.value.length === 0)
-const criteria = computed(() => naturalCriteria.value.map(c => ({
+const keywordCriteria = computed(() => (keywordsRun.value ? parseKeywords(keywords.value) : []))
+const keywordsFound = computed(() => keywordsRun.value && keywordCriteria.value.length > 0)
+const keywordsMissed = computed(() => keywordsRun.value && keywordCriteria.value.length === 0)
+const criteria = computed(() => keywordCriteria.value.map(c => ({
   label: c.label,
-  remove: () => { if (c.key === 'city') cityName.value = ''; if (c.key === 'beds') minBedrooms.value = ''; if (c.key === 'budget') budget.value = '' }
+  remove: () => {
+    if (c.key === 'city') cityName.value = ''
+    if (c.key === 'beds') minBedrooms.value = ''
+    if (c.key === 'unitType') unitTypeId.value = ''
+    if (c.key === 'budget') budget.value = ''
+  }
 })))
-function runNatural() {
-  naturalRun.value = true
-  const crit = parseNatural(natural.value)
+function runKeywords() {
+  keywordsRun.value = true
+  const crit = parseKeywords(keywords.value)
   resetFilters()
   query.value = ''
   crit.forEach(c => {
     if (c.key === 'city') cityName.value = c.value
     if (c.key === 'beds') minBedrooms.value = c.value
+    if (c.key === 'unitType') unitTypeId.value = c.value
     if (c.key === 'budget') budget.value = c.value
   })
   search()
 }
-function onNaturalKey(e: KeyboardEvent) {
-  if (e.key === 'Enter') runNatural()
+function onKeywordsKey(e: KeyboardEvent) {
+  if (e.key === 'Enter') runKeywords()
 }
 
 /* ---- Type de location : à la nuit / au mois ---- */
@@ -208,7 +227,7 @@ const sortModel = computed<SearchSort>({
   set: v => { sort.value = v; search() }
 })
 
-const SEARCH_TABS = [{ value: 'filtres', label: 'Par filtres' }, { value: 'naturel', label: 'Décrire ma recherche' }]
+const SEARCH_TABS = [{ value: 'filtres', label: 'Par filtres' }, { value: 'motscles', label: 'Par mots-clés' }]
 const VIEW_TABS = [{ value: 'liste', label: 'Liste' }, { value: 'carte', label: 'Carte' }]
 
 /* ---- Résultats réels ---- */
@@ -429,9 +448,11 @@ function clearAll() {
 }
 
 const hoveredId = ref<string | null>(null)
+/** Recherche « à la nuit » ou « au mois » : la fiche d'un logement proposé dans les deux modes s'ouvre sur celui-là. */
 function openListing(l: ListingCard) {
   if (l.virtual || !l.propertyId) return
-  navigateTo(`/biens/${l.propertyId}?unit=${l.unitId}`)
+  const mode = applied.value.mode
+  navigateTo({ path: `/biens/${l.propertyId}`, query: mode === 'tous' ? { unit: l.unitId } : { unit: l.unitId, mode } })
 }
 async function onFavorite(l: ListingCard) {
   if (!l.propertyId) return
@@ -440,7 +461,9 @@ async function onFavorite(l: ListingCard) {
 }
 
 /* ---- Vue carte : vraie carte (Leaflet / OpenStreetMap) ----
- * Biens avec un GPS valable → pastille prix à l'emplacement exact.
+ * Biens avec un GPS valable → pastille prix dans leur secteur (`approximateArea`, ≈ 400 m) :
+ * l'adresse reste masquée jusqu'à la visite, comme sur la fiche — la carte de recherche ne doit
+ * pas révéler le point exact que la fiche cache.
  * Les autres (la majorité aujourd'hui) → regroupés par ville en une zone
  * approximative ; un clic sur la zone filtre la recherche sur cette ville. */
 const mapMarkers = computed(() => {
@@ -453,7 +476,8 @@ const mapMarkers = computed(() => {
     if (!loc) continue
     if (loc.precise) {
       const first = propertyListings[0]!
-      precise.push({ id: first.unitId, lat: loc.lat, lng: loc.lng, precise: true, label: `${Math.round(first.price / 1000)}k` })
+      const area = approximateArea(loc)
+      precise.push({ id: first.unitId, lat: area.lat, lng: area.lng, precise: true, label: `${Math.round(first.price / 1000)}k` })
     } else {
       const city = p.city!.name
       const zone = zones.get(city) ?? { lat: loc.lat, lng: loc.lng, count: 0 }
@@ -461,7 +485,7 @@ const mapMarkers = computed(() => {
       zones.set(city, zone)
     }
   }
-  const approx: MapMarker[] = [...zones].map(([city, z]) => ({ id: `zone:${city}`, lat: z.lat, lng: z.lng, precise: false, label: `${city} · ${z.count} logement${z.count > 1 ? 's' : ''}`, shortLabel: String(z.count), weight: z.count }))
+  const approx: MapMarker[] = [...zones].map(([city, z]) => ({ id: `zone:${city}`, lat: z.lat, lng: z.lng, precise: false, label: `${displayName(city)} · ${z.count} logement${z.count > 1 ? 's' : ''}`, shortLabel: String(z.count), weight: z.count }))
   return [...approx, ...precise]
 })
 const approxCount = computed(() => mapMarkers.value.filter(m => !m.precise).length)
@@ -523,7 +547,7 @@ function onMapSelect(id: string) {
           <div class="mt-4 flex flex-col gap-1.5 rounded-[22px] bg-white p-1.5 shadow-[0_12px_40px_rgba(26,61,41,.10)] ring-1 ring-black/[.03] sm:flex-row sm:items-center sm:gap-0 sm:rounded-pill">
             <label class="flex flex-1 items-center gap-3 px-4 sm:px-5">
               <Search class="h-[18px] w-[18px] flex-none text-[var(--text-faint)]" :stroke-width="2" />
-              <input v-model="query" type="search" enterkeyhint="search" placeholder="Nom, ville, description…" aria-label="Mots-clés" class="h-[50px] w-full border-0 bg-transparent text-[15px] font-medium outline-none placeholder:text-[var(--text-faint)]" @keydown.enter="search">
+              <input v-model="query" type="search" enterkeyhint="search" placeholder="Nom, ville, description…" aria-label="Texte libre : nom, ville, description" class="h-[50px] w-full border-0 bg-transparent text-[15px] font-medium outline-none placeholder:text-[var(--text-faint)]" @keydown.enter="search">
             </label>
             <div class="mx-3 h-px bg-sand-200 sm:mx-1 sm:h-7 sm:w-px" />
             <select v-model="sortModel" aria-label="Trier les résultats" class="h-[46px] cursor-pointer rounded-pill border-0 bg-transparent px-4 text-[13.5px] font-semibold text-[var(--text-secondary)] outline-none hover:bg-sand-100 sm:h-11">
@@ -579,7 +603,7 @@ function onMapSelect(id: string) {
               <div class="relative">
                 <select v-model="cityName" aria-label="Ville" class="h-12 w-full cursor-pointer appearance-none rounded-2xl border-0 bg-sand-50 pl-4 pr-10 text-[14px] font-semibold text-[var(--text-primary)] outline-none ring-1 ring-sand-200 transition-shadow focus:ring-2 focus:ring-green-300">
                   <option value="">Toutes les villes</option>
-                  <option v-for="c in cities" :key="c.id" :value="c.name">{{ c.name }}</option>
+                  <option v-for="c in cities" :key="c.id" :value="c.name">{{ displayName(c.name) }}</option>
                 </select>
                 <ChevronDown class="pointer-events-none absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-faint)]" :stroke-width="2" />
               </div>
@@ -632,15 +656,16 @@ function onMapSelect(id: string) {
         </aside>
       </template>
 
-      <div v-if="searchMode === 'naturel'" class="mt-4 rounded-[22px] bg-white p-1.5 shadow-[0_12px_40px_rgba(26,61,41,.10)] ring-1 ring-black/[.03]">
+      <div v-if="searchMode === 'motscles'" class="mt-4 rounded-[22px] bg-white p-1.5 shadow-[0_12px_40px_rgba(26,61,41,.10)] ring-1 ring-black/[.03]">
         <div class="flex flex-col gap-1.5 sm:flex-row sm:items-center">
-          <input v-model="natural" placeholder="studio calme à Calavi vers 40 000" aria-label="Décrivez le logement recherché" class="h-[50px] min-w-0 flex-1 rounded-pill border-0 bg-transparent px-5 text-[15px] font-medium outline-none placeholder:text-[var(--text-faint)]" @keydown="onNaturalKey">
-          <button type="button" class="flex h-[46px] items-center justify-center gap-2 rounded-pill bg-green-700 px-6 text-sm font-bold text-white shadow-[0_6px_16px_rgba(26,93,62,.22)] transition-colors hover:bg-green-800 sm:h-11" @click="runNatural">
+          <input v-model="keywords" type="search" enterkeyhint="search" placeholder="Ex. : Cotonou 2 chambres 80 000" aria-label="Mots-clés : ville, nombre de chambres, budget" aria-describedby="keywords-help" class="h-[50px] min-w-0 flex-1 rounded-pill border-0 bg-transparent px-5 text-[15px] font-medium outline-none placeholder:text-[var(--text-faint)]" @keydown="onKeywordsKey">
+          <button type="button" class="flex h-[46px] items-center justify-center gap-2 rounded-pill bg-green-700 px-6 text-sm font-bold text-white shadow-[0_6px_16px_rgba(26,93,62,.22)] transition-colors hover:bg-green-800 sm:h-11" @click="runKeywords">
             <Search class="h-4 w-4" :stroke-width="2.2" />Rechercher
           </button>
         </div>
-        <div v-if="naturalUnderstood" class="flex flex-wrap items-center gap-2 px-3.5 pb-2.5 pt-2">
-          <span class="text-[13.5px] text-[var(--text-muted)]">Nous avons compris :</span>
+        <p v-if="!keywordsRun" id="keywords-help" class="mb-1 mt-0.5 px-5 text-[12.5px] text-[var(--text-muted)]">Mots reconnus : une ville, un nombre de chambres (« 2 chambres »), « studio », un budget en FCFA. Exemples : « Cotonou studio 40 000 », « Porto-Novo 3 chambres ».</p>
+        <div v-if="keywordsFound" class="flex flex-wrap items-center gap-2 px-3.5 pb-2.5 pt-2">
+          <span class="text-[13.5px] text-[var(--text-muted)]">Filtres appliqués :</span>
           <span v-for="c in criteria" :key="c.label" class="inline-flex items-center gap-1.5 rounded-pill border border-green-100 bg-green-50 py-1.5 pl-3.5 pr-1.5 text-[13px] font-bold text-green-800">
             {{ c.label }}
             <button type="button" class="grid h-6 w-6 place-items-center rounded-pill text-green-600 hover:bg-green-100" :aria-label="`Retirer ${c.label}`" @click="c.remove(); search()">
@@ -648,10 +673,10 @@ function onMapSelect(id: string) {
             </button>
           </span>
         </div>
-        <div v-if="naturalFailed" class="m-1.5 mt-2 rounded-[18px] bg-sand-50 px-6 py-8 text-center">
+        <div v-if="keywordsMissed" class="m-1.5 mt-2 rounded-[18px] bg-sand-50 px-6 py-8 text-center">
           <div class="mx-auto grid h-[46px] w-[46px] place-items-center rounded-pill bg-green-50 text-green-700"><SearchX class="h-5 w-5" :stroke-width="1.9" /></div>
-          <p class="mb-0 mt-3.5 text-[15px] font-bold">Nous n'avons pas compris votre demande</p>
-          <p class="mx-auto mb-4 mt-1.5 max-w-[440px] text-[13.5px] text-[var(--text-muted)]">Précisez une ville, un nombre de chambres ou un budget — par exemple « 2 chambres à Cotonou sous 100 000 ».</p>
+          <p class="mb-0 mt-3.5 text-[15px] font-bold">Aucun mot-clé reconnu</p>
+          <p class="mx-auto mb-4 mt-1.5 max-w-[440px] text-[13.5px] text-[var(--text-muted)]">Indiquez une ville, un nombre de chambres ou un budget — par exemple « Cotonou 2 chambres 100 000 ».</p>
           <CoreButton tone="secondary" size="sm" @click="searchMode = 'filtres'">Utiliser plutôt les filtres</CoreButton>
         </div>
       </div>

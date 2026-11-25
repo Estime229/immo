@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { Mail, ShieldCheck } from '@lucide/vue'
+import { MessageCircle, ShieldCheck } from '@lucide/vue'
 import { IMMO_CONTACT } from '~/utils/contact'
 
 /**
- * Pied de page public. Adresse et email viennent de `IMMO_CONTACT` (même source que /contact :
+ * Pied de page public. L'adresse vient de `IMMO_CONTACT` (même source que /contact :
  * le pied de page affichait une autre adresse). Retirés : icônes « Nous suivre » sans lien et
  * badge « Loi 2022-30 » sans source. Les liens légaux ouvrent le bon onglet (`?doc=`).
  */
@@ -59,9 +59,10 @@ const year = new Date().getFullYear()
         <p class="mb-0 mt-[9px] text-sm leading-[1.6] text-white/[.82]">
           <template v-for="(line, i) in IMMO_CONTACT.addressLines" :key="line">{{ line }}<br v-if="i < IMMO_CONTACT.addressLines.length - 1"></template>
         </p>
-        <a :href="`mailto:${IMMO_CONTACT.email}`" class="mt-2.5 inline-flex items-center gap-2 text-sm text-white/[.82] transition-colors hover:text-white">
-          <Mail class="h-4 w-4" :stroke-width="1.9" />{{ IMMO_CONTACT.email }}
-        </a>
+        <!-- Plus d'adresse e-mail publique (décision produit) : le formulaire de contact la remplace. -->
+        <NuxtLink to="/contact" class="mt-2.5 inline-flex items-center gap-2 text-sm text-white/[.82] transition-colors hover:text-white">
+          <MessageCircle class="h-4 w-4" :stroke-width="1.9" />Nous écrire
+        </NuxtLink>
         <div class="mt-[26px] flex w-fit items-center gap-2 rounded-md border border-white/[.22] px-3.5 py-2.5">
           <ShieldCheck class="h-4 w-4 text-white/90" :stroke-width="1.9" />
           <span class="text-[11.5px] font-black leading-[1.15] tracking-[.02em] text-white/90">CAUTION<br>SÉQUESTRÉE</span>

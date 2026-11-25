@@ -1,18 +1,18 @@
 <script setup lang="ts">
-import type { Component } from 'vue'
-import { ArrowRight, CalendarDays, Check, ChevronLeft, ChevronRight, ClipboardCheck, MapPin, Moon, Search, ShieldCheck, Smartphone } from '@lucide/vue'
+import { ArrowRight, Check, ChevronLeft, ChevronRight, ClipboardCheck, MapPin, Search, ShieldCheck, Smartphone } from '@lucide/vue'
 import type { PropertySearchResult } from '~/types/property'
 import { flattenSearchResults, type ListingCard } from '~/utils/propertyListing'
 import { classifyRental, mapLimited, modeFromCard, type RentalMode } from '~/utils/rentalMode'
 import { buildSearchQuery, digitsOnly } from '~/utils/searchPill'
 import { normalizeCity, rankCities } from '~/utils/geo'
+import { displayName } from '~/utils/displayName'
 
 const { photos, formatFcfaShort } = useProperties()
 const searchApi = usePropertySearchApi()
 const refData = useReferenceData()
 const favorites = usePropertyFavorites()
 
-/* ---- Barre de recherche ---- */
+/* ---- Barre de recherche (ordinateur seulement : sur mobile, la pilule de l'en-tête et sa feuille suffisent) ---- */
 const query = ref('')
 const cityName = ref('')
 /** Chiffres seuls (« 100 000 F » → 100000), comme la feuille de recherche mobile : `/recherche` fait `Number(budget)`. */
@@ -26,13 +26,14 @@ function onBudgetInput(e: Event) {
 }
 const cities = ref<{ id: string; name: string }[]>([])
 
+/** Le sélecteur nuit / mois fait partie du formulaire : la recherche suit le mode affiché sur la page. */
 function runSearch() {
-  navigateTo({ path: '/recherche', query: buildSearchQuery({ q: query.value, city: cityName.value, budget: budget.value, mode: 'tous' }) })
+  navigateTo({ path: '/recherche', query: buildSearchQuery({ q: query.value, city: cityName.value, budget: budget.value, mode: activeRental.value }) })
 }
 
-const popularChips = computed(() => rankedCities.value.slice(0, 4).map(c => ({ label: `Logements à ${c.name}`, city: c.name })))
+const popularChips = computed(() => rankedCities.value.slice(0, 4).map(c => ({ label: `Logements à ${displayName(c.name)}`, city: c.name })))
 function pickPopular(chip: { city: string }) {
-  navigateTo({ path: '/recherche', query: { city: chip.city } })
+  navigateTo(cityLink(chip.city))
 }
 
 /* ---- Héros — carrousel (purement décoratif, aucune donnée à intégrer) ---- */
@@ -43,6 +44,10 @@ onMounted(() => {
   heroTimer = setInterval(() => { heroIndex.value = (heroIndex.value + 1) % HERO_PHOTO_INDEXES.length }, 5000)
 })
 onUnmounted(() => clearInterval(heroTimer))
+/** Entrées de `photos` : valeurs de la propriété `background` (image ou aplat), taille et cadrage remis après le raccourci. */
+function heroStyle(idx: number, i: number) {
+  return { background: photos[idx], backgroundSize: 'cover', backgroundPosition: 'center', opacity: heroIndex.value === i ? 1 : 0 }
+}
 
 /* ---- Catégories réelles — comptées via GET /property/search?unit_type_id=..., un vrai type de logement par catégorie ---- */
 /**
@@ -137,56 +142,36 @@ async function loadListings() {
   }
 }
 
-/* ---- Deux façons de louer : à la nuit / au mois — moodboard classé sur les vraies grilles tarifaires ---- */
+/* ---- Deux façons de louer : à la nuit / au mois — classées sur les vraies grilles tarifaires ---- */
 type RentalKey = 'nuit' | 'mois'
-/**
- * Visuels éditoriaux, pas les photos des annonces : celles-ci sont déposées
- * librement par les propriétaires (et, sur l'instance de test, n'importe quoi)
- * — elles restent dans les sections d'annonces réelles de la page. Une photo
- * principale, un détail recadré, un aplat de couleur portant les mots-clés :
- * la composition classique d'une planche d'ambiance.
- */
-interface MoodImage { bg: string; size: string; pos: string }
-/** `swatch` : aplat plein (pastille, bouton) ; `panel` / `ink` : fond clair et texte d'accent du bloc « l'autre mode ». */
-const RENTAL_META: Record<RentalKey, { label: string; eyebrow: string; tagline: string; suffix: string; main: MoodImage; detail: MoodImage; swatch: string; panel: string; ink: string; icon: Component; keywords: string[] }> = {
+/** `swatch` : pastille de couleur du mode dans le sélecteur ; `hint` : ce que le mode veut dire, sous le sélecteur. */
+const RENTAL_META: Record<RentalKey, { label: string; eyebrow: string; hint: string; suffix: string; swatch: string }> = {
   nuit: {
     label: 'À la nuit',
     eyebrow: 'Courte durée',
-    tagline: 'Meublés prêts à vivre, pour quelques nuits ou quelques semaines.',
+    hint: 'Meublés prêts à vivre, réservation en ligne, sans bail.',
     suffix: '/ nuit',
-    main: { bg: 'url(/images/hero/hero-3.jpg)', size: 'cover', pos: 'center 62%' },
-    detail: { bg: 'url(/images/hero/hero-3.jpg)', size: '320%', pos: '8% 78%' },
-    swatch: 'bg-clay-500',
-    panel: 'border-clay-200 bg-clay-50',
-    ink: 'text-clay-500',
-    icon: Moon,
-    keywords: ['Meublé', 'Réservation en ligne', 'Sans bail']
+    swatch: 'bg-clay-500'
   },
   mois: {
     label: 'Au mois',
     eyebrow: 'Longue durée',
-    tagline: 'Location classique : bail signé en ligne, caution séquestrée par Bayo.',
+    hint: 'Location classique : bail signé en ligne, caution séquestrée par Bayo.',
     suffix: '/ mois',
-    main: { bg: 'url(/images/hero/hero-1.jpg)', size: 'cover', pos: '62% center' },
-    detail: { bg: 'url(/images/hero/hero-2.jpg)', size: 'cover', pos: 'center' },
-    swatch: 'bg-green-800',
-    panel: 'border-green-100 bg-green-50',
-    ink: 'text-green-700',
-    icon: CalendarDays,
-    keywords: ['Bail signé', 'Caution séquestrée', 'Loyer Mobile Money']
+    swatch: 'bg-green-800'
   }
-}
-function moodStyle(m: MoodImage) {
-  return { backgroundImage: m.bg, backgroundSize: m.size, backgroundPosition: m.pos }
 }
 const RENTAL_KEYS: RentalKey[] = ['nuit', 'mois']
 const rentalUnits = ref<Record<RentalKey, ListingCard[]>>({ nuit: [], mois: [] })
 const rentalLoading = ref(true)
 
 /**
- * Le choix nuit / mois est proposé dans une modale à la première visite, puis retenu un an —
- * en cookie, lu au rendu serveur, pour que la page s'affiche directement dans le bon mode
- * (même raison que AppDownloadBanner). La pastille flottante rouvre la modale.
+ * UN seul sélecteur nuit / mois sur la page, sous la barre de recherche (et sous le héros sur
+ * mobile) : il filtre les annonces, la recherche, les liens par ville. Avant, le même choix
+ * revenait six fois (modale à l'arrivée, pastille flottante qui recouvrait « Rechercher » sur
+ * mobile, bloc « l'autre mode », liens doublés par ville…). Le choix est retenu un an en cookie,
+ * lu au rendu serveur, pour que la page s'affiche directement dans le bon mode ; la feuille de
+ * recherche mobile (LayoutSearchSheet) le lit aussi.
  */
 const rentalChoice = useCookie<string | null>('immo_rental_mode', {
   default: () => null,
@@ -194,28 +179,10 @@ const rentalChoice = useCookie<string | null>('immo_rental_mode', {
   maxAge: 60 * 60 * 24 * 365
 })
 const activeRental = ref<RentalKey>(rentalChoice.value === 'mois' ? 'mois' : 'nuit')
-const rentalModalOpen = ref(false)
-/** Ouverte depuis le bloc « l'autre mode » en bas de page : après un changement, on remonte aux annonces. */
-const scrollAfterChoice = ref(false)
-function openRentalModal(fromBottom = false) {
-  scrollAfterChoice.value = fromBottom
-  rentalModalOpen.value = true
-}
 function chooseRental(key: RentalKey) {
-  const changed = key !== activeRental.value
   activeRental.value = key
   rentalChoice.value = key
-  rentalModalOpen.value = false
-  if (changed && scrollAfterChoice.value) nextTick(scrollToListings)
 }
-/** Fermée sans choisir : le mode affiché est retenu, la modale ne revient pas à chaque visite. */
-function closeRentalModal() {
-  rentalChoice.value = activeRental.value
-  rentalModalOpen.value = false
-}
-onMounted(() => {
-  if (!rentalChoice.value) rentalModalOpen.value = true
-})
 
 async function loadRentalModes(cards: ListingCard[]) {
   const cache = rentalModeCache.value
@@ -241,21 +208,14 @@ async function loadRentalModes(cards: ListingCard[]) {
     if (m.monthly !== null) mois.push({ ...c, price: m.monthly })
   })
   rentalUnits.value = { nuit: nuit.sort((a, b) => a.price - b.price), mois: mois.sort((a, b) => a.price - b.price) }
-  if (!nuit.length && mois.length) activeRental.value = 'mois'
+  // Aucun logement à la nuit mais des logements au mois, et aucun choix fait : la page s'ouvre au mois plutôt que vide.
+  if (!nuit.length && mois.length && !rentalChoice.value) activeRental.value = 'mois'
 }
 
-function rentalFrom(key: RentalKey): string {
-  const prices = rentalUnits.value[key].map(u => u.price).filter(p => p > 0)
-  return prices.length ? formatFcfaShort(Math.min(...prices)) : ''
-}
-function rentalCount(key: RentalKey): string {
-  const n = rentalUnits.value[key].length
-  return `${n} logement${n > 1 ? 's' : ''}`
-}
 /**
- * Sections par ville filtrées sur le mode choisi plus haut : un visiteur qui
- * a cliqué « À la nuit » ne voit plus que des logements réservables à la nuit,
- * au prix de la nuit. Un logement proposé dans les deux modes apparaît dans les deux.
+ * Sections par ville filtrées sur le mode choisi : un visiteur qui a choisi « À la nuit » ne voit
+ * que des logements réservables à la nuit, au prix de la nuit. Un logement proposé dans les deux
+ * modes apparaît dans les deux.
  */
 const cityGroups = computed<CityGroup[]>(() => {
   const units = rentalUnits.value[activeRental.value]
@@ -265,15 +225,6 @@ const cityGroups = computed<CityGroup[]>(() => {
     .sort((a, b) => b.units.length - a.units.length)
     .slice(0, 4)
 })
-
-/* ---- En fin de page : un aperçu de l'autre mode, pour qui s'est trompé de porte ---- */
-const otherRental = computed<RentalKey>(() => (activeRental.value === 'nuit' ? 'mois' : 'nuit'))
-const otherUnits = computed(() => rentalUnits.value[otherRental.value].slice(0, 8))
-const listingsAnchor = ref<HTMLElement | null>(null)
-function scrollToListings() {
-  const el = listingsAnchor.value
-  if (el) window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 90, behavior: 'smooth' })
-}
 
 async function loadCities() {
   try {
@@ -302,12 +253,14 @@ function stackPhoto(group: CityGroup, index: 0 | 1) {
   return (group.units[index] ?? group.units[0])?.photoUrl ?? null
 }
 
+/** « Tout afficher » d'une ville : les mêmes logements que la rangée, donc dans le mode choisi. */
 function seeAllCity(name: string) {
-  navigateTo({ path: '/recherche', query: { city: name } })
+  navigateTo(cityLink(name))
 }
+/** Le mode suit jusqu'à la fiche : un logement proposé dans les deux modes s'y ouvre sur celui de la page. */
 function openListing(l: ListingCard) {
   if (l.virtual || !l.propertyId) return
-  navigateTo(`/biens/${l.propertyId}?unit=${l.unitId}`)
+  navigateTo({ path: `/biens/${l.propertyId}`, query: { unit: l.unitId, mode: activeRental.value } })
 }
 async function onFavorite(l: ListingCard) {
   if (!l.propertyId) return
@@ -316,39 +269,34 @@ async function onFavorite(l: ListingCard) {
 }
 
 /*
- * ---- Explorer par ville — suit le mode choisi pour la page (plus d'onglets qui mélangeaient durée
- * et type de logement). Chaque carte dit ce qu'on trouvera en cliquant : nombre de logements et
- * prix de départ, tirés des annonces chargées plus haut. Une ville sans annonce n'envoie pas sur
- * une recherche vide : elle propose aux propriétaires d'y publier.
+ * ---- Explorer par ville — suit le mode choisi pour la page : UN lien par ville, vers la
+ * recherche de cette ville dans ce mode (plus de second lien vers l'autre mode). Chaque carte
+ * dit ce qu'on trouvera en cliquant : nombre de logements et prix de départ, tirés des annonces
+ * chargées plus haut. Une ville sans annonce n'envoie pas sur une recherche vide : elle propose
+ * aux propriétaires d'y publier.
  */
 const rankedCities = computed(() => rankCities(cities.value, [...rentalUnits.value.nuit, ...rentalUnits.value.mois].map(u => u.cityName).filter(Boolean)))
-interface CityStats { count: number; from: number; otherCount: number }
-function statsByCity(key: RentalKey) {
-  const stats = new Map<string, { count: number; from: number }>()
-  for (const u of rentalUnits.value[key]) {
+interface CityStats { count: number; from: number }
+const cityStats = computed(() => {
+  const stats = new Map<string, CityStats>()
+  for (const u of rentalUnits.value[activeRental.value]) {
     const k = normalizeCity(u.cityName)
     const s = stats.get(k) ?? { count: 0, from: 0 }
     stats.set(k, { count: s.count + 1, from: u.price > 0 && (!s.from || u.price < s.from) ? u.price : s.from })
   }
-  return stats
-}
-const cityStats = computed(() => {
-  const own = statsByCity(activeRental.value)
-  const other = statsByCity(otherRental.value)
-  return (name: string): CityStats => {
-    const k = normalizeCity(name)
-    return { count: own.get(k)?.count ?? 0, from: own.get(k)?.from ?? 0, otherCount: other.get(k)?.count ?? 0 }
-  }
+  return (name: string): CityStats => stats.get(normalizeCity(name)) ?? { count: 0, from: 0 }
 })
 const exploreCities = computed(() => rankCities(cities.value, rentalUnits.value[activeRental.value].map(u => u.cityName).filter(Boolean)).slice(0, 6))
 /** Le nombre et « pas encore d'annonce » ne sont sûrs que si toutes les annonces publiées ont été chargées. */
 const statsReliable = computed(() => catalogComplete.value && !listingsError.value)
-function cityLink(city: string, mode: RentalKey = activeRental.value) {
-  return { path: '/recherche', query: { city, mode } }
+/** Recherche d'une ville dans le mode de la page — le nom brut est gardé pour le filtre de l'API. */
+function cityLink(city: string) {
+  return { path: '/recherche', query: { city, mode: activeRental.value } }
 }
 function plural(n: number, word: string) {
   return `${n} ${word}${n > 1 ? 's' : ''}`
 }
+const modeText = computed(() => (activeRental.value === 'nuit' ? 'à la nuit' : 'au mois'))
 const allCitiesOpen = ref(false)
 const citySearch = ref('')
 const cityLetters = computed(() => {
@@ -378,404 +326,328 @@ const LANDLORD_POINTS = ['Publiez votre bien', 'Loyers encaissés par Mobile Mon
 </script>
 
 <template>
-  <div class="animate-[im-fade_.35s_ease_backwards]">
-    <!-- Héros -->
-    <section class="mx-auto max-w-[1240px] px-[26px] pt-5">
-      <div class="relative flex min-h-[430px] items-end overflow-hidden rounded-3xl">
-        <div
-          v-for="(idx, i) in HERO_PHOTO_INDEXES"
-          :key="idx"
-          class="absolute inset-0 bg-cover bg-center transition-opacity duration-[900ms] ease-in-out"
-          :style="{ backgroundImage: photos[idx], opacity: heroIndex === i ? 1 : 0 }"
-        />
-        <div class="absolute inset-0 bg-[image:linear-gradient(180deg,rgba(18,60,41,0)_32%,rgba(18,60,41,.74)_100%)]" />
-        <div class="relative w-full p-6 pb-16 sm:p-10">
-          <h1 v-reveal="{ y: 32, duration: .9 }" class="m-0 max-w-[620px] text-balance font-display text-[38px] font-extrabold leading-[1.04] tracking-hero text-white sm:text-hero">
-            Louez en toute confiance au Bénin.
-          </h1>
-          <p v-reveal="{ y: 24, delay: .15, duration: .9 }" class="mb-0 mt-3.5 max-w-[500px] text-[15px] leading-[1.5] text-white/90 sm:text-[16.5px]">
-            Caution séquestrée par Bayo pendant le bail, état des lieux signé des deux côtés, propriétaires vérifiés.
-          </p>
-        </div>
-        <div class="absolute bottom-[38px] right-6 z-[3] flex gap-2 sm:bottom-[34px] sm:right-[30px]">
-          <span
+  <!--
+    Colonne flexible : sur mobile (< md), les annonces passent juste sous le héros compact
+    (`max-md:order-*` sur les catégories et la fin de page), pour qu'elles se voient dès le
+    premier écran (390 × 844). Sur ordinateur, l'ordre du document est l'ordre affiché.
+  -->
+  <div class="flex animate-[im-fade_.35s_ease_backwards] flex-col">
+    <div>
+      <!-- Héros : compact sur mobile (titre court, sans formulaire), carrousel et formulaire sur ordinateur -->
+      <section class="mx-auto max-w-[1240px] px-[26px] pt-4 md:pt-5">
+        <div class="relative flex min-h-[150px] items-end overflow-hidden rounded-3xl md:min-h-[430px]">
+          <div
             v-for="(idx, i) in HERO_PHOTO_INDEXES"
             :key="idx"
-            class="h-2 cursor-pointer rounded-pill transition-all"
-            :style="{ width: heroIndex === i ? '26px' : '8px', background: heroIndex === i ? '#fff' : 'rgba(255,255,255,.45)' }"
-            @click="heroIndex = i"
+            class="absolute inset-0 transition-opacity duration-[900ms] ease-in-out"
+            :style="heroStyle(idx, i)"
           />
-        </div>
-      </div>
-
-      <!-- Barre de recherche -->
-      <div class="relative z-20 mx-auto -mt-6 max-w-[940px]">
-        <div class="flex flex-col gap-1 rounded-2xl border border-[var(--border-subtle)] bg-white p-2.5 shadow-panel sm:flex-row sm:items-stretch sm:gap-0 sm:rounded-pill sm:py-2 sm:pl-2.5 sm:pr-2">
-          <label class="flex flex-[1.6] cursor-text flex-col justify-center px-4 py-1.5 sm:px-5">
-            <span class="text-[11px] font-black uppercase tracking-[.05em] text-[var(--text-faint)]">Où</span>
-            <input v-model="query" placeholder="Nom, description…" class="mt-0.5 w-full border-0 bg-transparent text-[15px] font-semibold text-[var(--text-primary)] outline-none" @keydown.enter="runSearch">
-          </label>
-          <div class="mx-1 h-px w-auto bg-sand-300 sm:mx-0 sm:my-2 sm:h-auto sm:w-px" />
-          <label class="relative flex flex-1 flex-col justify-center px-4 py-1.5 sm:px-5">
-            <span class="text-[11px] font-black uppercase tracking-[.05em] text-[var(--text-faint)]">Ville</span>
-            <select v-model="cityName" class="mt-0.5 cursor-pointer appearance-none border-0 bg-transparent text-[15px] font-semibold text-[var(--text-primary)] outline-none">
-              <option value="">Toutes</option>
-              <option v-for="c in cities" :key="c.id" :value="c.name">{{ c.name }}</option>
-            </select>
-          </label>
-          <div class="mx-1 h-px w-auto bg-sand-300 sm:mx-0 sm:my-2 sm:h-auto sm:w-px" />
-          <label class="flex flex-1 cursor-text flex-col justify-center px-4 py-1.5 sm:px-5">
-            <span class="text-[11px] font-black uppercase tracking-[.05em] text-[var(--text-faint)]">Budget max</span>
-            <span class="mt-0.5 flex items-baseline gap-1.5">
-              <input :value="budgetDisplay" inputmode="numeric" placeholder="Peu importe" aria-label="Budget maximum en FCFA" class="w-full min-w-0 border-0 bg-transparent font-mono text-[15px] font-semibold text-[var(--text-primary)] outline-none placeholder:font-body" @input="onBudgetInput" @keydown.enter="runSearch">
-              <span v-if="budget" class="text-[12px] font-bold text-[var(--text-muted)]">FCFA</span>
-            </span>
-          </label>
-          <button
-            type="button"
-            class="flex items-center justify-center gap-2.5 rounded-pill bg-[image:var(--action-primary)] px-7 py-3.5 text-[15px] font-bold text-white shadow-action transition-transform hover:scale-[1.03] sm:py-0"
-            @click="runSearch"
-          >
-            <Search class="h-[18px] w-[18px] flex-none" :stroke-width="2.2" />Rechercher
-          </button>
-        </div>
-        <div v-if="popularChips.length" class="mt-4 flex flex-wrap items-center justify-center gap-2">
-          <span class="text-[12.5px] font-semibold text-[var(--text-faint)]">Populaire :</span>
-          <button
-            v-for="chip in popularChips"
-            :key="chip.label"
-            type="button"
-            class="rounded-pill border border-[var(--border-default)] bg-white/70 px-3.5 py-2 text-[12.5px] font-semibold text-[var(--text-secondary)] transition-all hover:border-green-600 hover:text-green-700"
-            @click="pickPopular(chip)"
-          >{{ chip.label }}</button>
-        </div>
-      </div>
-    </section>
-
-    <!-- Deux façons de louer — proposé dans une modale (première visite, puis via la pastille flottante) -->
-    <CoreModal :open="rentalModalOpen" title="À la nuit ou au mois ?" width="880px" @close="closeRentalModal">
-      <p class="mb-4 mt-0 text-[14px] leading-[1.5] text-[var(--text-muted)]">Les logements présentés sur la page suivront votre choix — vous pourrez le changer à tout moment.</p>
-      <div class="grid grid-cols-1 gap-3.5 md:grid-cols-2">
-        <button
-          v-for="key in RENTAL_KEYS"
-          :key="key"
-          type="button"
-          :aria-pressed="activeRental === key"
-          class="group relative overflow-hidden rounded-3xl text-left outline-none transition-[transform,box-shadow] duration-[var(--duration-base)] hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-green-600"
-          :class="activeRental === key ? 'shadow-panel ring-[3px] ring-green-600 ring-offset-2 ring-offset-white' : 'shadow-card'"
-          @click="chooseRental(key)"
-        >
-          <div class="grid h-[250px] grid-cols-3 grid-rows-2 gap-1.5 bg-white sm:h-[270px]">
-            <div class="relative col-span-2 row-span-2 overflow-hidden">
-              <div class="absolute inset-0 bg-sand-300 bg-no-repeat transition-transform duration-500 group-hover:scale-[1.03]" :style="moodStyle(RENTAL_META[key].main)" />
-              <div class="pointer-events-none absolute inset-0 bg-[image:linear-gradient(180deg,rgba(18,29,24,0)_28%,rgba(18,29,24,.84)_100%)]" />
-            </div>
-            <div class="bg-sand-300 bg-no-repeat" :style="moodStyle(RENTAL_META[key].detail)" />
-            <div class="flex flex-col justify-end gap-1 p-3 sm:p-4" :class="RENTAL_META[key].swatch">
-              <span v-for="k in RENTAL_META[key].keywords" :key="k" class="text-[11.5px] font-bold leading-tight text-white/[.92] sm:text-[12.5px]">{{ k }}</span>
-            </div>
-          </div>
-          <span
-            v-if="activeRental === key"
-            class="absolute right-4 top-4 inline-flex items-center gap-1 rounded-pill bg-white px-3 py-1.5 text-[11.5px] font-black text-green-800"
-          ><Check class="h-3.5 w-3.5" :stroke-width="2.6" />Sélectionné</span>
-          <div class="pointer-events-none absolute bottom-0 left-0 w-2/3 p-4 sm:p-6">
-            <span class="inline-block rounded-pill bg-white/[.18] px-3 py-1 text-[11px] font-black uppercase tracking-[.06em] text-white backdrop-blur-[4px]">{{ RENTAL_META[key].eyebrow }}</span>
-            <p class="mb-0 mt-2.5 font-display text-[28px] font-extrabold leading-none tracking-[-.03em] text-white sm:text-[34px]">{{ RENTAL_META[key].label }}</p>
-            <p class="mb-0 mt-2 hidden max-w-[380px] text-[14px] leading-[1.5] text-white/[.86] sm:block">{{ RENTAL_META[key].tagline }}</p>
-            <p class="mb-0 mt-3 text-[13px] font-bold text-white">
-              <template v-if="rentalLoading">Chargement…</template>
-              <template v-else-if="listingsError">Logements indisponibles pour le moment</template>
-              <template v-else>
-                {{ rentalCount(key) }}<template v-if="rentalFrom(key)"> · dès <span class="font-mono">{{ rentalFrom(key) }}</span> {{ RENTAL_META[key].suffix }}</template>
-              </template>
+          <!-- Voile sombre sur la photo : lisibilité du titre blanc. -->
+          <div class="absolute inset-0 bg-[image:linear-gradient(180deg,rgba(18,60,41,0)_32%,rgba(18,60,41,.74)_100%)]" />
+          <div class="relative w-full p-5 md:p-10 md:pb-16">
+            <h1 v-reveal="{ y: 32, duration: .9 }" class="m-0 max-w-[620px] text-balance font-display text-[27px] font-extrabold leading-[1.08] tracking-hero text-white md:text-hero">
+              <span class="md:hidden">Louez en confiance au Bénin.</span>
+              <span class="hidden md:inline">Louez en toute confiance au Bénin.</span>
+            </h1>
+            <p v-reveal="{ y: 24, delay: .15, duration: .9 }" class="mb-0 mt-3.5 hidden max-w-[500px] text-[16.5px] leading-[1.5] text-white/90 md:block">
+              Caution séquestrée par Bayo pendant le bail, état des lieux signé des deux côtés, propriétaires vérifiés.
             </p>
           </div>
-        </button>
-      </div>
-    </CoreModal>
-
-    <!-- Catégories — pictogrammes de plan, une tuile par type de logement -->
-    <section v-reveal v-if="categoriesLoading || categories.length" class="mx-auto max-w-[1240px] px-[26px] pt-12">
-      <h2 class="mb-5 mt-0 font-display text-title-2 font-bold tracking-title-2">Trouvez le lieu qui vous correspond</h2>
-      <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        <template v-if="categoriesLoading">
-          <DataSkeletonCard v-for="i in 6" :key="i" :height="164" :lines="0" />
-        </template>
-        <template v-else>
-          <button
-            v-for="c in categories"
-            :key="c.code"
-            type="button"
-            class="group flex flex-col items-start gap-4 rounded-2xl border border-[var(--border-subtle)] bg-white p-4.5 text-left transition-[transform,border-color] duration-[var(--duration-base)] hover:-translate-y-0.5 hover:border-green-600"
-            @click="pickCategory(c)"
-          >
-            <span class="grid h-[72px] w-[72px] place-items-center rounded-xl" :class="c.empty ? 'bg-sand-100 text-[var(--text-faint)]' : 'bg-green-50 text-green-700'">
-              <SearchCategoryIcon :code="c.code" class="h-14 w-14" />
-            </span>
-            <span>
-              <span class="block text-[15px] font-bold text-[var(--text-primary)]">{{ c.label }}</span>
-              <span class="mt-0.5 block text-[12.5px] text-[var(--text-muted)]">{{ c.empty ? 'Aucune annonce pour l’instant' : 'Voir les logements' }}</span>
-            </span>
-          </button>
-        </template>
-      </div>
-    </section>
-
-    <!-- Annonces : ancre de défilement, puis erreur ou absence de logement dans le mode choisi -->
-    <div ref="listingsAnchor" />
-    <section v-reveal v-if="!rentalLoading && (listingsError || !rentalUnits[activeRental].length)" class="mx-auto max-w-[1240px] px-[26px] pt-11">
-      <FeedbackAlertBanner v-if="listingsError" tone="danger">
-        Impossible de charger les logements pour le moment.
-        <button type="button" class="ml-2 font-bold underline" @click="loadListings">Réessayer</button>
-      </FeedbackAlertBanner>
-      <div v-else class="rounded-2xl border border-dashed border-[var(--border-default)] bg-white px-5 py-8 text-center">
-        <span class="mx-auto grid h-[46px] w-[46px] place-items-center rounded-pill bg-green-50 text-green-700"><Search class="h-5 w-5" :stroke-width="1.9" /></span>
-        <p class="mb-0 mt-3 text-[13.5px] text-[var(--text-muted)]">Aucun logement {{ activeRental === 'nuit' ? 'à la nuit' : 'au mois' }} parmi les annonces les plus récentes.</p>
-        <NuxtLink :to="{ path: '/recherche', query: { mode: activeRental } }" class="mt-3 inline-flex items-center gap-1.5 text-[13px] font-bold text-green-700">Chercher dans toutes les annonces<ArrowRight class="h-4 w-4" :stroke-width="1.9" /></NuxtLink>
-      </div>
-    </section>
-
-    <!-- Sections par ville — squelette pendant le chargement -->
-    <section v-reveal v-if="listingsLoading || rentalLoading" class="mx-auto max-w-[1240px] px-[26px] pt-11">
-      <div class="mb-[18px] h-[23px] w-[220px] animate-[im-shimmer_1.3s_linear_infinite] rounded-pill bg-[linear-gradient(90deg,var(--color-sand-200)_25%,var(--color-sand-100)_50%,var(--color-sand-200)_75%)] bg-[length:460px_100%]" />
-      <div class="flex gap-[18px] overflow-x-auto pb-1">
-        <div v-for="i in 5" :key="i" class="w-[214px] flex-none">
-          <DataSkeletonCard :height="186" />
-        </div>
-      </div>
-    </section>
-
-    <!-- Sections par ville -->
-    <section v-reveal v-for="(group, gi) in (rentalLoading ? [] : cityGroups)" :key="`${activeRental}-${group.name}`" class="mx-auto max-w-[1240px] px-[26px] pt-11">
-      <div class="mb-[18px] flex items-center justify-between">
-        <div class="flex items-center gap-3">
-          <h2 class="m-0 font-display text-[23px] font-bold tracking-[-.025em]">{{ group.name }}</h2>
-          <button type="button" class="grid h-[30px] w-[30px] place-items-center rounded-pill border border-[var(--border-default)] bg-white text-sm text-sand-900" :aria-label="`Tous les logements à ${group.name}`" @click="seeAllCity(group.name)"><ArrowRight class="h-4 w-4" :stroke-width="1.9" /></button>
-        </div>
-        <div class="flex gap-2.5">
-          <button type="button" class="grid h-9 w-9 place-items-center rounded-pill border border-[var(--border-default)] bg-white text-sm text-sand-900" aria-label="Précédents" @click="scrollCity(gi, -1)"><ChevronLeft class="h-4 w-4" :stroke-width="1.9" /></button>
-          <button type="button" class="grid h-9 w-9 place-items-center rounded-pill border border-[var(--border-default)] bg-white text-sm text-sand-900" aria-label="Suivants" @click="scrollCity(gi, 1)"><ChevronRight class="h-4 w-4" :stroke-width="1.9" /></button>
-        </div>
-      </div>
-      <div :ref="(el) => setCityRail(gi, el)" class="flex gap-[18px] overflow-x-auto pb-1" style="scrollbar-width: none">
-        <div v-for="u in group.units" :key="u.unitId" class="w-[214px] flex-none">
-          <SearchPropertyCard
-            :listing="u"
-            :price-suffix="RENTAL_META[activeRental].suffix"
-            :favorite="u.propertyId ? favorites.isFavoriteProperty(u.propertyId) : false"
-            @open="openListing(u)"
-            @favorite="onFavorite(u)"
-          />
-        </div>
-        <div
-          class="flex h-[286px] w-[214px] flex-none cursor-pointer flex-col items-center justify-center gap-3.5 rounded-xl border border-[var(--border-subtle)] bg-white transition-shadow hover:shadow-raised"
-          @click="seeAllCity(group.name)"
-        >
-          <div class="relative h-[52px] w-16">
-            <div class="absolute left-2 top-0 h-11 w-11 rotate-[-8deg] rounded-sm bg-cover bg-center shadow-[0_2px_6px_rgba(0,0,0,.14)]" :style="stackPhoto(group, 0) ? { backgroundImage: `url(${stackPhoto(group, 0)})` } : {}" />
-            <div class="absolute left-4 top-1.5 h-11 w-11 rotate-[7deg] rounded-sm bg-cover bg-center shadow-[0_2px_6px_rgba(0,0,0,.14)]" :style="stackPhoto(group, 1) ? { backgroundImage: `url(${stackPhoto(group, 1)})` } : {}" />
+          <div class="absolute bottom-[34px] right-[30px] z-[3] hidden gap-2 md:flex">
+            <span
+              v-for="(idx, i) in HERO_PHOTO_INDEXES"
+              :key="idx"
+              class="h-2 cursor-pointer rounded-pill transition-all"
+              :style="{ width: heroIndex === i ? '26px' : '8px', background: heroIndex === i ? '#fff' : 'rgba(255,255,255,.45)' }"
+              @click="heroIndex = i"
+            />
           </div>
-          <span class="text-[14.5px] font-bold text-sand-900">Tout afficher</span>
         </div>
-      </div>
-    </section>
 
-    <!-- L'autre mode de location, en fin de parcours : texte à gauche, ses annonces à droite, aux couleurs du mode -->
-    <section v-reveal v-if="!rentalLoading && otherUnits.length" class="mx-auto max-w-[1240px] px-[26px] pt-14">
-      <div class="grid grid-cols-1 gap-7 rounded-3xl border p-6 sm:p-8 lg:grid-cols-[300px_minmax(0,1fr)] lg:items-center lg:gap-10" :class="RENTAL_META[otherRental].panel">
-        <div>
-          <p class="m-0 text-[12.5px] font-black uppercase tracking-[.08em]" :class="RENTAL_META[otherRental].ink">{{ RENTAL_META[otherRental].eyebrow }}</p>
-          <h2 class="mb-0 mt-2 font-display text-[26px] font-bold leading-[1.15] tracking-[-.03em]">Vous cherchez plutôt {{ otherRental === 'nuit' ? 'à la nuit' : 'au mois' }} ?</h2>
-          <p class="mb-0 mt-2.5 text-[14.5px] leading-[1.55] text-[var(--text-secondary)]">{{ RENTAL_META[otherRental].tagline }}</p>
-          <div class="mt-4 flex flex-wrap gap-1.5">
-            <span v-for="k in RENTAL_META[otherRental].keywords" :key="k" class="rounded-pill bg-white px-3 py-1.5 text-[12px] font-bold text-[var(--text-secondary)]">{{ k }}</span>
+        <div class="relative z-20 mx-auto mt-4 max-w-[940px] md:-mt-6">
+          <!-- Barre de recherche : ordinateur seulement (sur mobile, l'en-tête « Où cherchez-vous ? » ouvre la même recherche) -->
+          <div class="hidden rounded-pill border border-[var(--border-subtle)] bg-white py-2 pl-2.5 pr-2 shadow-panel md:flex md:items-stretch">
+            <label class="flex flex-[1.6] cursor-text flex-col justify-center px-5 py-1.5">
+              <span class="text-[11px] font-black uppercase tracking-[.05em] text-[var(--text-faint)]">Où</span>
+              <input v-model="query" placeholder="Nom, description…" class="mt-0.5 w-full border-0 bg-transparent text-[15px] font-semibold text-[var(--text-primary)] outline-none" @keydown.enter="runSearch">
+            </label>
+            <div class="my-2 w-px bg-sand-300" />
+            <label class="relative flex flex-1 flex-col justify-center px-5 py-1.5">
+              <span class="text-[11px] font-black uppercase tracking-[.05em] text-[var(--text-faint)]">Ville</span>
+              <select v-model="cityName" class="mt-0.5 cursor-pointer appearance-none border-0 bg-transparent text-[15px] font-semibold text-[var(--text-primary)] outline-none">
+                <option value="">Toutes</option>
+                <option v-for="c in cities" :key="c.id" :value="c.name">{{ displayName(c.name) }}</option>
+              </select>
+            </label>
+            <div class="my-2 w-px bg-sand-300" />
+            <label class="flex flex-1 cursor-text flex-col justify-center px-5 py-1.5">
+              <span class="text-[11px] font-black uppercase tracking-[.05em] text-[var(--text-faint)]">Budget max</span>
+              <span class="mt-0.5 flex items-baseline gap-1.5">
+                <input :value="budgetDisplay" inputmode="numeric" placeholder="Peu importe" aria-label="Budget maximum en FCFA" class="w-full min-w-0 border-0 bg-transparent font-mono text-[15px] font-semibold text-[var(--text-primary)] outline-none placeholder:font-body" @input="onBudgetInput" @keydown.enter="runSearch">
+                <span v-if="budget" class="text-[12px] font-bold text-[var(--text-muted)]">FCFA</span>
+              </span>
+            </label>
+            <button
+              type="button"
+              class="flex items-center justify-center gap-2.5 rounded-pill bg-[image:var(--action-primary)] px-7 text-[15px] font-bold text-white shadow-action transition-transform hover:scale-[1.03]"
+              @click="runSearch"
+            >
+              <Search class="h-[18px] w-[18px] flex-none" :stroke-width="2.2" />Rechercher
+            </button>
           </div>
-          <button
-            type="button"
-            class="mt-5 inline-flex items-center gap-2 whitespace-nowrap rounded-pill px-5 py-3 text-[13.5px] font-bold text-white transition-transform hover:scale-[1.03]"
-            :class="RENTAL_META[otherRental].swatch"
-            @click="openRentalModal(true)"
-          >
-            <component :is="RENTAL_META[otherRental].icon" class="h-4 w-4" :stroke-width="2" />
-            Afficher la page {{ otherRental === 'nuit' ? 'à la nuit' : 'au mois' }}
-          </button>
-        </div>
-        <div class="min-w-0">
-          <div class="mb-3 flex justify-end">
-            <NuxtLink
-              :to="{ path: '/recherche', query: { mode: otherRental } }"
-              class="group inline-flex items-center gap-1.5 text-[13.5px] font-bold underline-offset-4 hover:underline"
-              :class="RENTAL_META[otherRental].ink"
-            >Voir plus<ArrowRight class="h-4 w-4 transition-transform group-hover:translate-x-0.5" :stroke-width="2" /></NuxtLink>
-          </div>
-          <div class="-mx-6 flex gap-[18px] overflow-x-auto px-6 pb-1 sm:-mx-8 sm:px-8 lg:mx-0 lg:px-0" style="scrollbar-width: none">
-            <div v-for="u in otherUnits" :key="`other-${otherRental}-${u.unitId}`" class="w-[214px] flex-none">
-              <SearchPropertyCard
-                :listing="u"
-                :price-suffix="RENTAL_META[otherRental].suffix"
-                :favorite="u.propertyId ? favorites.isFavoriteProperty(u.propertyId) : false"
-                @open="openListing(u)"
-                @favorite="onFavorite(u)"
-              />
+
+          <!-- Le seul sélecteur nuit / mois de la page : il règle la recherche ci-dessus et les annonces ci-dessous. -->
+          <div class="flex flex-col gap-2 md:mt-5 md:flex-row md:items-center md:justify-center md:gap-4">
+            <div class="grid grid-cols-2 gap-1 rounded-pill bg-sand-200 p-1 md:inline-grid" role="radiogroup" aria-label="Type de location">
+              <button
+                v-for="key in RENTAL_KEYS"
+                :key="key"
+                type="button"
+                role="radio"
+                :aria-checked="activeRental === key"
+                class="flex items-center justify-center gap-2 rounded-pill px-5 py-2.5 text-[14px] font-bold transition-all duration-[var(--duration-base)]"
+                :class="activeRental === key ? 'bg-white text-green-800 shadow-card' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'"
+                @click="chooseRental(key)"
+              >
+                <span class="h-2 w-2 flex-none rounded-pill" :class="RENTAL_META[key].swatch" aria-hidden="true" />{{ RENTAL_META[key].label }}
+              </button>
             </div>
+            <p class="m-0 hidden text-[13.5px] text-[var(--text-muted)] md:block">{{ RENTAL_META[activeRental].hint }}</p>
+          </div>
+
+          <div v-if="popularChips.length" class="mt-4 hidden flex-wrap items-center justify-center gap-2 md:flex">
+            <span class="text-[12.5px] font-semibold text-[var(--text-faint)]">Populaire :</span>
+            <button
+              v-for="chip in popularChips"
+              :key="chip.label"
+              type="button"
+              class="rounded-pill border border-[var(--border-default)] bg-white/70 px-3.5 py-2 text-[12.5px] font-semibold text-[var(--text-secondary)] transition-all hover:border-green-600 hover:text-green-700"
+              @click="pickPopular(chip)"
+            >{{ chip.label }}</button>
           </div>
         </div>
-      </div>
-    </section>
+      </section>
+    </div>
 
-    <!-- Explorer par ville : suit le mode de la page ; chaque carte dit ce qu'on trouvera en cliquant -->
-    <section v-reveal v-if="cities.length" class="mx-auto max-w-[1240px] px-[26px] pt-14">
-      <div class="mb-5">
-        <h2 class="m-0 font-display text-title-2 font-bold tracking-title-2">Explorer par ville</h2>
-        <p class="mb-0 mt-1.5 text-[14.5px] leading-[1.5] text-[var(--text-muted)]">
-          Logements {{ activeRental === 'nuit' ? 'à la nuit' : 'au mois' }}, en {{ RENTAL_META[activeRental].eyebrow.toLowerCase() }}.
-          <button type="button" class="cursor-pointer font-bold text-green-700 underline-offset-2 hover:underline" @click="openRentalModal()">Changer</button>
-        </p>
-      </div>
-      <div v-if="rentalLoading" class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <div v-for="i in 6" :key="i" :class="{ 'max-sm:hidden': i > 4 }" class="h-[82px] animate-[im-pulse_1.6s_ease-in-out_infinite] rounded-2xl bg-sand-100" />
-      </div>
-      <div v-else class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <template v-for="(c, i) in exploreCities" :key="`${activeRental}-${c.id}`">
-          <!-- Aucune annonce dans ce mode (compte sûr) : pas de lien vers une recherche vide -->
+    <!-- Catégories — pictogrammes de plan, une tuile par type de logement (après les annonces sur mobile) -->
+    <div class="max-md:order-1">
+      <section v-reveal v-if="categoriesLoading || categories.length" class="mx-auto max-w-[1240px] px-[26px] pt-12">
+        <h2 class="mb-5 mt-0 font-display text-title-2 font-bold tracking-title-2">Trouvez le lieu qui vous correspond</h2>
+        <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          <template v-if="categoriesLoading">
+            <DataSkeletonCard v-for="i in 6" :key="i" :height="164" :lines="0" />
+          </template>
+          <template v-else>
+            <button
+              v-for="c in categories"
+              :key="c.code"
+              type="button"
+              class="group flex flex-col items-start gap-4 rounded-2xl border border-[var(--border-subtle)] bg-white p-4.5 text-left transition-[transform,border-color] duration-[var(--duration-base)] hover:-translate-y-0.5 hover:border-green-600"
+              @click="pickCategory(c)"
+            >
+              <span class="grid h-[72px] w-[72px] place-items-center rounded-xl" :class="c.empty ? 'bg-sand-100 text-[var(--text-faint)]' : 'bg-green-50 text-green-700'">
+                <SearchCategoryIcon :code="c.code" class="h-14 w-14" />
+              </span>
+              <span>
+                <span class="block text-[15px] font-bold text-[var(--text-primary)]">{{ c.label }}</span>
+                <span class="mt-0.5 block text-[12.5px] text-[var(--text-muted)]">{{ c.empty ? 'Aucune annonce pour l’instant' : 'Voir les logements' }}</span>
+              </span>
+            </button>
+          </template>
+        </div>
+      </section>
+    </div>
+
+    <!-- Annonces du mode choisi, par ville -->
+    <div>
+      <!-- Erreur, ou aucun logement dans le mode choisi -->
+      <section v-reveal v-if="!rentalLoading && (listingsError || !rentalUnits[activeRental].length)" class="mx-auto max-w-[1240px] px-[26px] pt-8 md:pt-11">
+        <FeedbackAlertBanner v-if="listingsError" tone="danger">
+          Impossible de charger les logements pour le moment.
+          <button type="button" class="ml-2 font-bold underline" @click="loadListings">Réessayer</button>
+        </FeedbackAlertBanner>
+        <div v-else class="rounded-2xl border border-dashed border-[var(--border-default)] bg-white px-5 py-8 text-center">
+          <span class="mx-auto grid h-[46px] w-[46px] place-items-center rounded-pill bg-green-50 text-green-700"><Search class="h-5 w-5" :stroke-width="1.9" /></span>
+          <p class="mb-0 mt-3 text-[13.5px] text-[var(--text-muted)]">Aucun logement {{ modeText }} parmi les annonces les plus récentes.</p>
+          <NuxtLink :to="{ path: '/recherche', query: { mode: activeRental } }" class="mt-3 inline-flex items-center gap-1.5 text-[13px] font-bold text-green-700">Chercher dans toutes les annonces<ArrowRight class="h-4 w-4" :stroke-width="1.9" /></NuxtLink>
+        </div>
+      </section>
+
+      <!-- Squelette pendant le chargement -->
+      <section v-reveal v-if="listingsLoading || rentalLoading" class="mx-auto max-w-[1240px] px-[26px] pt-8 md:pt-11">
+        <div class="mb-[18px] h-[23px] w-[220px] animate-[im-shimmer_1.3s_linear_infinite] rounded-pill bg-[linear-gradient(90deg,var(--color-sand-200)_25%,var(--color-sand-100)_50%,var(--color-sand-200)_75%)] bg-[length:460px_100%]" />
+        <div class="flex gap-[18px] overflow-x-auto pb-1">
+          <div v-for="i in 5" :key="i" class="w-[214px] flex-none">
+            <DataSkeletonCard :height="186" />
+          </div>
+        </div>
+      </section>
+
+      <section v-reveal v-for="(group, gi) in (rentalLoading ? [] : cityGroups)" :key="`${activeRental}-${group.name}`" class="mx-auto max-w-[1240px] px-[26px] pt-8 md:pt-11">
+        <div class="mb-[18px] flex items-center justify-between">
+          <div class="flex min-w-0 items-center gap-3">
+            <h2 class="m-0 truncate font-display text-[23px] font-bold tracking-[-.025em]">{{ displayName(group.name) }}</h2>
+            <button type="button" class="grid h-[30px] w-[30px] flex-none place-items-center rounded-pill border border-[var(--border-default)] bg-white text-sm text-sand-900" :aria-label="`Tous les logements ${modeText} à ${displayName(group.name)}`" @click="seeAllCity(group.name)"><ArrowRight class="h-4 w-4" :stroke-width="1.9" /></button>
+          </div>
+          <div class="flex gap-2.5">
+            <button type="button" class="grid h-9 w-9 place-items-center rounded-pill border border-[var(--border-default)] bg-white text-sm text-sand-900" aria-label="Précédents" @click="scrollCity(gi, -1)"><ChevronLeft class="h-4 w-4" :stroke-width="1.9" /></button>
+            <button type="button" class="grid h-9 w-9 place-items-center rounded-pill border border-[var(--border-default)] bg-white text-sm text-sand-900" aria-label="Suivants" @click="scrollCity(gi, 1)"><ChevronRight class="h-4 w-4" :stroke-width="1.9" /></button>
+          </div>
+        </div>
+        <div :ref="(el) => setCityRail(gi, el)" class="flex gap-[18px] overflow-x-auto pb-1" style="scrollbar-width: none">
+          <div v-for="u in group.units" :key="u.unitId" class="w-[214px] flex-none">
+            <SearchPropertyCard
+              :listing="u"
+              :price-suffix="RENTAL_META[activeRental].suffix"
+              :favorite="u.propertyId ? favorites.isFavoriteProperty(u.propertyId) : false"
+              @open="openListing(u)"
+              @favorite="onFavorite(u)"
+            />
+          </div>
           <div
-            v-if="statsReliable && !cityStats(c.name).count"
-            :class="{ 'max-sm:hidden': i >= 4 }"
-            class="flex items-center gap-4 rounded-2xl border border-dashed border-[var(--border-default)] p-4"
+            class="flex h-[286px] w-[214px] flex-none cursor-pointer flex-col items-center justify-center gap-3.5 rounded-xl border border-[var(--border-subtle)] bg-white transition-shadow hover:shadow-raised"
+            @click="seeAllCity(group.name)"
           >
-            <span class="grid h-12 w-12 flex-none place-items-center rounded-xl bg-sand-100 text-[var(--text-faint)]">
-              <MapPin class="h-5 w-5" :stroke-width="1.9" />
-            </span>
-            <span class="min-w-0 flex-1">
-              <span class="block truncate text-[16px] font-bold text-[var(--text-secondary)]">{{ c.name }}</span>
-              <NuxtLink v-if="cityStats(c.name).otherCount" :to="cityLink(c.name, otherRental)" class="mt-0.5 inline-flex items-center gap-1 text-[13px] font-semibold text-green-700 hover:underline">
-                {{ plural(cityStats(c.name).otherCount, 'logement') }} {{ otherRental === 'nuit' ? 'à la nuit' : 'au mois' }}<ArrowRight class="h-3.5 w-3.5" :stroke-width="2" />
-              </NuxtLink>
-              <span v-else class="mt-0.5 block truncate text-[13px] text-[var(--text-muted)]">
-                Pas encore d'annonce · <NuxtLink to="/louer" class="font-semibold text-green-700 hover:underline">Publier ici</NuxtLink>
-              </span>
-            </span>
+            <div class="relative h-[52px] w-16">
+              <div class="absolute left-2 top-0 h-11 w-11 rotate-[-8deg] rounded-sm bg-cover bg-center shadow-[0_2px_6px_rgba(0,0,0,.14)]" :style="stackPhoto(group, 0) ? { backgroundImage: `url(${stackPhoto(group, 0)})` } : {}" />
+              <div class="absolute left-4 top-1.5 h-11 w-11 rotate-[7deg] rounded-sm bg-cover bg-center shadow-[0_2px_6px_rgba(0,0,0,.14)]" :style="stackPhoto(group, 1) ? { backgroundImage: `url(${stackPhoto(group, 1)})` } : {}" />
+            </div>
+            <span class="text-[14.5px] font-bold text-sand-900">Tout afficher</span>
           </div>
-          <NuxtLink
-            v-else
-            :to="cityLink(c.name)"
-            :class="{ 'max-sm:hidden': i >= 4 }"
-            class="group flex items-center gap-4 rounded-2xl border border-[var(--border-subtle)] bg-white p-4 transition-[border-color,box-shadow] duration-[var(--duration-base)] hover:border-green-600 hover:shadow-card"
-          >
-            <span class="grid h-12 w-12 flex-none place-items-center rounded-xl bg-green-50 text-green-700">
-              <MapPin class="h-5 w-5" :stroke-width="1.9" />
-            </span>
-            <span class="min-w-0 flex-1">
-              <span class="block truncate text-[16px] font-bold text-[var(--text-primary)]">{{ c.name }}</span>
-              <span class="mt-0.5 block text-[13px] leading-[1.4] text-[var(--text-muted)]">
-                {{ statsReliable ? plural(cityStats(c.name).count, 'logement') : 'Voir les logements' }}<template v-if="cityStats(c.name).from"> · dès <strong class="font-bold text-[var(--text-primary)]">{{ formatFcfaShort(cityStats(c.name).from) }}</strong> {{ RENTAL_META[activeRental].suffix }}</template>
-              </span>
-            </span>
-            <span class="grid h-9 w-9 flex-none place-items-center rounded-pill bg-sand-100 text-[var(--text-secondary)] transition-colors group-hover:bg-green-600 group-hover:text-white">
-              <ArrowRight class="h-4 w-4" :stroke-width="1.9" />
-            </span>
-          </NuxtLink>
-        </template>
-      </div>
-      <button
-        v-if="cities.length > exploreCities.length"
-        type="button"
-        class="mt-4 inline-flex cursor-pointer items-center gap-2 rounded-pill border border-[var(--border-default)] bg-white px-5 py-3 text-[14px] font-bold text-[var(--text-primary)] transition-colors hover:border-green-600 hover:text-green-700"
-        @click="openAllCities"
-      >
-        <MapPin class="h-4 w-4" :stroke-width="2" />Toutes les villes ({{ cities.length }})
-      </button>
-    </section>
-
-    <CoreModal :open="allCitiesOpen" title="Toutes les villes" width="720px" @close="allCitiesOpen = false">
-      <p class="mb-3 mt-0 text-[14px] text-[var(--text-muted)]">Logements {{ activeRental === 'nuit' ? 'à la nuit' : 'au mois' }}, dans les {{ cities.length }} communes du Bénin.</p>
-      <label class="sticky top-0 z-10 -mx-1 flex items-center gap-2.5 rounded-pill border border-[var(--border-default)] bg-white px-4 py-3 focus-within:border-green-600">
-        <Search class="h-4 w-4 flex-none text-[var(--text-faint)]" :stroke-width="2" />
-        <input v-model="citySearch" type="search" placeholder="Rechercher une ville…" aria-label="Rechercher une ville" class="w-full min-w-0 border-0 bg-transparent text-[15px] font-semibold text-[var(--text-primary)] outline-none">
-      </label>
-      <p v-if="!cityLetters.length" class="mb-1 mt-6 text-center text-[14px] text-[var(--text-muted)]">Aucune ville ne correspond à « {{ citySearch }} ».</p>
-      <div v-for="g in cityLetters" :key="g.letter" class="mt-4">
-        <p class="m-0 mb-1.5 text-label font-bold uppercase tracking-label text-[var(--text-faint)]">{{ g.letter }}</p>
-        <div class="grid grid-cols-2 gap-1 sm:grid-cols-3">
-          <NuxtLink
-            v-for="c in g.cities"
-            :key="c.id"
-            :to="cityLink(c.name)"
-            :class="statsReliable && !cityStats(c.name).count ? 'text-[var(--text-faint)]' : 'text-[var(--text-secondary)]'"
-            class="flex min-w-0 items-center gap-1.5 rounded-md px-2.5 py-2 text-[14px] font-semibold hover:bg-green-50 hover:text-green-700"
-            @click="allCitiesOpen = false"
-          >
-            <span class="truncate">{{ c.name }}</span>
-            <span v-if="statsReliable && cityStats(c.name).count" class="flex-none rounded-pill bg-green-50 px-1.5 text-[11.5px] font-bold text-green-700">{{ cityStats(c.name).count }}</span>
-          </NuxtLink>
         </div>
-      </div>
-    </CoreModal>
+      </section>
+    </div>
 
-    <!-- Confiance : l'argument à gauche, les trois protections en liste à droite -->
-    <section v-reveal class="mx-auto max-w-[1240px] px-[26px] pt-14">
-      <div class="grid grid-cols-1 gap-8 rounded-3xl border border-[var(--border-subtle)] bg-white p-6 sm:p-10 lg:grid-cols-[minmax(0,.85fr)_minmax(0,1.15fr)] lg:gap-14">
-        <div>
-          <p class="m-0 text-[12.5px] font-black uppercase tracking-[.08em] text-clay-500">Pourquoi Bayo</p>
-          <h2 class="mb-0 mt-2.5 font-display text-title-2 font-bold tracking-title-2 text-[var(--text-primary)]">Louer, sans la peur de se faire avoir</h2>
-          <p class="mb-0 mt-3 max-w-[420px] text-[15.5px] leading-[1.6] text-[var(--text-secondary)]">
-            Trois protections concrètes contre la caution gardée par le bailleur et l'état des lieux contesté.
+    <div class="max-md:order-2">
+      <!-- Explorer par ville : un lien par ville, dans le mode de la page -->
+      <section v-reveal v-if="cities.length" class="mx-auto max-w-[1240px] px-[26px] pt-14">
+        <div class="mb-5">
+          <h2 class="m-0 font-display text-title-2 font-bold tracking-title-2">Explorer par ville</h2>
+          <p class="mb-0 mt-1.5 text-[14.5px] leading-[1.5] text-[var(--text-muted)]">
+            Logements {{ modeText }}, en {{ RENTAL_META[activeRental].eyebrow.toLowerCase() }}.
           </p>
         </div>
-        <ul class="m-0 flex list-none flex-col divide-y divide-[var(--border-subtle)] p-0">
-          <li v-for="t in TRUST_ITEMS" :key="t.title" class="flex gap-4 py-5 first:pt-0 last:pb-0">
-            <span class="grid h-11 w-11 flex-none place-items-center rounded-lg" :class="[t.tint, t.ink]"><component :is="t.icon" class="h-5 w-5" :stroke-width="1.9" /></span>
-            <div>
-              <p class="m-0 font-display text-lg font-bold tracking-[-.02em] text-[var(--text-primary)]">{{ t.title }}</p>
-              <p class="mb-0 mt-1.5 text-sm leading-[1.6] text-[var(--text-muted)]">{{ t.text }}</p>
-            </div>
-          </li>
-        </ul>
-      </div>
-    </section>
-
-    <!-- CTA bailleur -->
-    <section v-reveal class="mx-auto max-w-[1240px] px-[26px] pt-11">
-      <div class="relative overflow-hidden rounded-3xl bg-green-900 p-7 sm:p-10">
-        <SearchCategoryIcon code="maison" class="pointer-events-none absolute -bottom-12 -right-8 h-[280px] w-[280px] text-white/[.06]" />
-        <div class="relative flex flex-col gap-7 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <p class="m-0 text-[12.5px] font-black uppercase tracking-[.08em] text-clay-300">Propriétaires</p>
-            <h2 class="mb-0 mt-2.5 font-display text-[30px] font-bold tracking-[-.03em] text-white">Vous avez un bien à louer ?</h2>
-            <ul class="m-0 mt-4 flex list-none flex-col gap-2.5 p-0 sm:flex-row sm:flex-wrap sm:gap-x-6">
-              <li v-for="point in LANDLORD_POINTS" :key="point" class="flex items-center gap-2.5 text-[14.5px] text-white/[.86]">
-                <span class="grid h-5 w-5 flex-none place-items-center rounded-pill bg-white/[.12] text-clay-300"><Check class="h-3 w-3" :stroke-width="3" /></span>
-                {{ point }}
-              </li>
-            </ul>
-          </div>
-          <NuxtLink
-            to="/louer"
-            class="inline-flex items-center gap-2 self-start whitespace-nowrap rounded-md bg-clay-500 px-7 py-4 text-[15px] font-bold text-white shadow-accent transition-transform hover:scale-[1.03] lg:self-auto"
-          >Publier une annonce<ArrowRight class="h-4 w-4" :stroke-width="2.2" /></NuxtLink>
+        <div v-if="rentalLoading" class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div v-for="i in 6" :key="i" :class="{ 'max-sm:hidden': i > 4 }" class="h-[82px] animate-[im-pulse_1.6s_ease-in-out_infinite] rounded-2xl bg-sand-100" />
         </div>
-      </div>
-    </section>
-
-    <!-- Pastille flottante : rappelle le mode nuit/mois qui filtre la page et rouvre la modale de choix.
-         Teleport vers body : le wrapper de page a une animation d'entrée (`animate-[im-fade_...]`) qui, même
-         terminée, fait de lui un containing block pour tout descendant `fixed` (comportement Chromium connu
-         sur un ancêtre ayant animé `transform`) — sans Teleport le badge se positionne dans le flux de la page
-         au lieu du viewport, vérifié en direct (bounding box à y≈2968 au lieu d'un point fixe de l'écran). -->
-    <Teleport to="body">
-      <Transition name="im-fade">
+        <div v-else class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <template v-for="(c, i) in exploreCities" :key="`${activeRental}-${c.id}`">
+            <!-- Aucune annonce dans ce mode (compte sûr) : pas de lien vers une recherche vide -->
+            <div
+              v-if="statsReliable && !cityStats(c.name).count"
+              :class="{ 'max-sm:hidden': i >= 4 }"
+              class="flex items-center gap-4 rounded-2xl border border-dashed border-[var(--border-default)] p-4"
+            >
+              <span class="grid h-12 w-12 flex-none place-items-center rounded-xl bg-sand-100 text-[var(--text-faint)]">
+                <MapPin class="h-5 w-5" :stroke-width="1.9" />
+              </span>
+              <span class="min-w-0 flex-1">
+                <span class="block truncate text-[16px] font-bold text-[var(--text-secondary)]">{{ displayName(c.name) }}</span>
+                <span class="mt-0.5 block truncate text-[13px] text-[var(--text-muted)]">
+                  Pas encore d'annonce {{ modeText }} · <NuxtLink to="/louer" class="font-semibold text-green-700 hover:underline">Publier ici</NuxtLink>
+                </span>
+              </span>
+            </div>
+            <NuxtLink
+              v-else
+              :to="cityLink(c.name)"
+              :class="{ 'max-sm:hidden': i >= 4 }"
+              class="group flex items-center gap-4 rounded-2xl border border-[var(--border-subtle)] bg-white p-4 transition-[border-color,box-shadow] duration-[var(--duration-base)] hover:border-green-600 hover:shadow-card"
+            >
+              <span class="grid h-12 w-12 flex-none place-items-center rounded-xl bg-green-50 text-green-700">
+                <MapPin class="h-5 w-5" :stroke-width="1.9" />
+              </span>
+              <span class="min-w-0 flex-1">
+                <span class="block truncate text-[16px] font-bold text-[var(--text-primary)]">{{ displayName(c.name) }}</span>
+                <span class="mt-0.5 block text-[13px] leading-[1.4] text-[var(--text-muted)]">
+                  {{ statsReliable ? plural(cityStats(c.name).count, 'logement') : 'Voir les logements' }}<template v-if="cityStats(c.name).from"> · dès <strong class="font-bold text-[var(--text-primary)]">{{ formatFcfaShort(cityStats(c.name).from) }}</strong> {{ RENTAL_META[activeRental].suffix }}</template>
+                </span>
+              </span>
+              <span class="grid h-9 w-9 flex-none place-items-center rounded-pill bg-sand-100 text-[var(--text-secondary)] transition-colors group-hover:bg-green-600 group-hover:text-white">
+                <ArrowRight class="h-4 w-4" :stroke-width="1.9" />
+              </span>
+            </NuxtLink>
+          </template>
+        </div>
         <button
-          v-if="!rentalModalOpen"
+          v-if="cities.length > exploreCities.length"
           type="button"
-          class="fixed bottom-[calc(var(--mobile-tabbar-space)+8px)] right-4 z-30 flex items-center gap-2.5 sm:right-6 lg:bottom-6 rounded-pill border border-[var(--border-subtle)] bg-[var(--surface-page)]/95 px-4 py-3 shadow-panel backdrop-blur-md transition-transform hover:-translate-y-0.5"
-          @click="openRentalModal()"
+          class="mt-4 inline-flex cursor-pointer items-center gap-2 rounded-pill border border-[var(--border-default)] bg-white px-5 py-3 text-[14px] font-bold text-[var(--text-primary)] transition-colors hover:border-green-600 hover:text-green-700"
+          @click="openAllCities"
         >
-          <span class="h-2.5 w-2.5 flex-none rounded-pill" :class="RENTAL_META[activeRental].swatch" />
-          <span class="text-[13px] font-bold text-[var(--text-primary)]">{{ RENTAL_META[activeRental].label }}</span>
-          <span class="text-[11.5px] text-[var(--text-faint)]">changer</span>
+          <MapPin class="h-4 w-4" :stroke-width="2" />Toutes les villes ({{ cities.length }})
         </button>
-      </Transition>
-    </Teleport>
+      </section>
+
+      <CoreModal :open="allCitiesOpen" title="Toutes les villes" width="720px" @close="allCitiesOpen = false">
+        <p class="mb-3 mt-0 text-[14px] text-[var(--text-muted)]">Logements {{ modeText }}, dans les {{ cities.length }} communes du Bénin.</p>
+        <label class="sticky top-0 z-10 -mx-1 flex items-center gap-2.5 rounded-pill border border-[var(--border-default)] bg-white px-4 py-3 focus-within:border-green-600">
+          <Search class="h-4 w-4 flex-none text-[var(--text-faint)]" :stroke-width="2" />
+          <input v-model="citySearch" type="search" placeholder="Rechercher une ville…" aria-label="Rechercher une ville" class="w-full min-w-0 border-0 bg-transparent text-[15px] font-semibold text-[var(--text-primary)] outline-none">
+        </label>
+        <p v-if="!cityLetters.length" class="mb-1 mt-6 text-center text-[14px] text-[var(--text-muted)]">Aucune ville ne correspond à « {{ citySearch }} ».</p>
+        <div v-for="g in cityLetters" :key="g.letter" class="mt-4">
+          <p class="m-0 mb-1.5 text-label font-bold uppercase tracking-label text-[var(--text-faint)]">{{ g.letter }}</p>
+          <div class="grid grid-cols-2 gap-1 sm:grid-cols-3">
+            <NuxtLink
+              v-for="c in g.cities"
+              :key="c.id"
+              :to="cityLink(c.name)"
+              :class="statsReliable && !cityStats(c.name).count ? 'text-[var(--text-faint)]' : 'text-[var(--text-secondary)]'"
+              class="flex min-w-0 items-center gap-1.5 rounded-md px-2.5 py-2 text-[14px] font-semibold hover:bg-green-50 hover:text-green-700"
+              @click="allCitiesOpen = false"
+            >
+              <span class="truncate">{{ displayName(c.name) }}</span>
+              <span v-if="statsReliable && cityStats(c.name).count" class="flex-none rounded-pill bg-green-50 px-1.5 text-[11.5px] font-bold text-green-700">{{ cityStats(c.name).count }}</span>
+            </NuxtLink>
+          </div>
+        </div>
+      </CoreModal>
+
+      <!-- Confiance : l'argument à gauche, les trois protections en liste à droite -->
+      <section v-reveal class="mx-auto max-w-[1240px] px-[26px] pt-14">
+        <div class="grid grid-cols-1 gap-8 rounded-3xl border border-[var(--border-subtle)] bg-white p-6 sm:p-10 lg:grid-cols-[minmax(0,.85fr)_minmax(0,1.15fr)] lg:gap-14">
+          <div>
+            <p class="m-0 text-[12.5px] font-black uppercase tracking-[.08em] text-clay-500">Pourquoi Bayo</p>
+            <h2 class="mb-0 mt-2.5 font-display text-title-2 font-bold tracking-title-2 text-[var(--text-primary)]">Louer, sans la peur de se faire avoir</h2>
+            <p class="mb-0 mt-3 max-w-[420px] text-[15.5px] leading-[1.6] text-[var(--text-secondary)]">
+              Trois protections concrètes contre la caution gardée par le bailleur et l'état des lieux contesté.
+            </p>
+          </div>
+          <ul class="m-0 flex list-none flex-col divide-y divide-[var(--border-subtle)] p-0">
+            <li v-for="t in TRUST_ITEMS" :key="t.title" class="flex gap-4 py-5 first:pt-0 last:pb-0">
+              <span class="grid h-11 w-11 flex-none place-items-center rounded-lg" :class="[t.tint, t.ink]"><component :is="t.icon" class="h-5 w-5" :stroke-width="1.9" /></span>
+              <div>
+                <p class="m-0 font-display text-lg font-bold tracking-[-.02em] text-[var(--text-primary)]">{{ t.title }}</p>
+                <p class="mb-0 mt-1.5 text-sm leading-[1.6] text-[var(--text-muted)]">{{ t.text }}</p>
+              </div>
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- CTA bailleur -->
+      <section v-reveal class="mx-auto max-w-[1240px] px-[26px] pt-11">
+        <div class="relative overflow-hidden rounded-3xl bg-green-900 p-7 sm:p-10">
+          <SearchCategoryIcon code="maison" class="pointer-events-none absolute -bottom-12 -right-8 h-[280px] w-[280px] text-white/[.06]" />
+          <div class="relative flex flex-col gap-7 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p class="m-0 text-[12.5px] font-black uppercase tracking-[.08em] text-clay-300">Propriétaires</p>
+              <h2 class="mb-0 mt-2.5 font-display text-[30px] font-bold tracking-[-.03em] text-white">Vous avez un bien à louer ?</h2>
+              <ul class="m-0 mt-4 flex list-none flex-col gap-2.5 p-0 sm:flex-row sm:flex-wrap sm:gap-x-6">
+                <li v-for="point in LANDLORD_POINTS" :key="point" class="flex items-center gap-2.5 text-[14.5px] text-white/[.86]">
+                  <span class="grid h-5 w-5 flex-none place-items-center rounded-pill bg-white/[.12] text-clay-300"><Check class="h-3 w-3" :stroke-width="3" /></span>
+                  {{ point }}
+                </li>
+              </ul>
+            </div>
+            <NuxtLink
+              to="/louer"
+              class="inline-flex items-center gap-2 self-start whitespace-nowrap rounded-md bg-clay-500 px-7 py-4 text-[15px] font-bold text-white shadow-accent transition-transform hover:scale-[1.03] lg:self-auto"
+            >Publier une annonce<ArrowRight class="h-4 w-4" :stroke-width="2.2" /></NuxtLink>
+          </div>
+        </div>
+      </section>
+    </div>
   </div>
 </template>

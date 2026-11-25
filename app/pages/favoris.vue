@@ -3,6 +3,7 @@ import { Heart } from '@lucide/vue'
 import type { FavoriteEntry } from '~/composables/useFavoritesApi'
 import { flattenSearchResults, type ListingCard } from '~/utils/propertyListing'
 import { classifyRental, displayPrice, mapLimited, type RentalMode } from '~/utils/rentalMode'
+import { displayName } from '~/utils/displayName'
 
 const route = useRoute()
 const router = useRouter()
@@ -141,7 +142,7 @@ function openListing(l: ListingCard) {
 
     <template v-else>
       <div v-if="removed" class="mb-4.5 flex flex-wrap items-center gap-3 rounded-md border border-ok-border bg-ok-bg px-3.5 py-2.5">
-        <p class="m-0 flex-1 text-[13px] font-semibold text-green-900">« {{ removed.property?.name ?? 'Ce logement' }} » est retiré de vos favoris.</p>
+        <p class="m-0 flex-1 text-[13px] font-semibold text-green-900">« {{ displayName(removed.property?.name) || 'Ce logement' }} » est retiré de vos favoris.</p>
         <button type="button" class="text-[13px] font-bold text-green-700 underline" @click="undoRemove">Annuler</button>
       </div>
       <p v-if="removeError" class="mb-4.5 mt-0 text-[13px] font-semibold text-danger-fg">{{ removeError }}</p>

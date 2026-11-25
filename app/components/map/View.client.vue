@@ -19,7 +19,13 @@ const props = withDefaults(defineProps<{
   singleZoom?: number
   /** Rayon du cercle des zones approximatives, en mètres. */
   zoneRadius?: number
-}>(), { activeId: null, singleZoom: 15, zoneRadius: 2500 })
+  /**
+   * Zoom quand une seule zone approximative est affichée. 12 convient au secteur
+   * d'une ville (2,5 km) ; la fiche publique, qui dessine une zone de 400 m
+   * autour du logement, a besoin d'être plus près pour que le cercle se lise.
+   */
+  zoneZoom?: number
+}>(), { activeId: null, singleZoom: 15, zoneRadius: 2500, zoneZoom: 12 })
 
 const emit = defineEmits<{ select: [id: string]; hover: [id: string | null] }>()
 
@@ -68,12 +74,12 @@ function fit() {
   if (!L || !map || !props.markers.length) return
   if (props.markers.length === 1) {
     const m = props.markers[0]!
-    map.setView([m.lat, m.lng], m.precise ? props.singleZoom : 12)
+    map.setView([m.lat, m.lng], m.precise ? props.singleZoom : props.zoneZoom)
     return
   }
   const focus = focusCluster(props.markers)
   if (focus.length === 1) {
-    map.setView([focus[0]!.lat, focus[0]!.lng], focus[0]!.precise ? props.singleZoom : 12)
+    map.setView([focus[0]!.lat, focus[0]!.lng], focus[0]!.precise ? props.singleZoom : props.zoneZoom)
     return
   }
   const bounds = L.latLngBounds(focus.map(m => [m.lat, m.lng] as [number, number]))

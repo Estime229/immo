@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { ArrowRight, FilePenLine, Mail } from '@lucide/vue'
-import { IMMO_CONTACT } from '~/utils/contact'
+import { ArrowRight, FilePenLine } from '@lucide/vue'
 
 /**
  * Documents légaux. Avant : les trois onglets affichaient le même texte de confidentialité, sous
@@ -91,9 +90,10 @@ const contactLink = { path: '/contact', query: { sujet: 'Conditions et données 
           <h2 class="mb-3 mt-0 font-display text-xl font-bold tracking-[-.02em]">{{ s.heading }}</h2>
           <p v-for="p in s.paras" :key="p" class="mb-3.5 mt-0 text-[15px] leading-[1.75] text-[var(--text-secondary)]">{{ p }}</p>
         </section>
-        <a :href="`mailto:${IMMO_CONTACT.email}`" class="inline-flex items-center gap-2 rounded-pill border border-[var(--border-default)] bg-white px-4 py-[9px] text-[13px] font-bold text-sand-900 hover:border-green-600">
-          <Mail class="h-4 w-4" :stroke-width="1.9" />{{ IMMO_CONTACT.email }}
-        </a>
+        <!-- Plus d'adresse e-mail publique (décision produit) : « Écrivez-nous » mène au formulaire de contact. -->
+        <NuxtLink :to="contactLink" class="inline-flex items-center gap-1.5 rounded-pill border border-[var(--border-default)] bg-white px-4 py-[9px] text-[13px] font-bold text-sand-900 hover:border-green-600">
+          Nous écrire<ArrowRight class="h-4 w-4" :stroke-width="1.9" />
+        </NuxtLink>
       </article>
     </div>
 

@@ -20,11 +20,13 @@ export function validateContact(f: ContactForm): Partial<Record<keyof ContactFor
  * de confidentialité — une seule source, pour les corriger partout d'un coup. À CONFIRMER par
  * l'équipe : jamais validées (INTEGRATION-TESTS.md, « coordonnées à confirmer »), et le pied de
  * page affichait une autre adresse (« Boulevard de la Marina ») ; seule celle de /contact est gardée.
+ *
+ * Pas d'adresse e-mail publique (décision produit) : l'ancienne adresse est retirée partout. On
+ * écrit à Bayo par le formulaire de /contact (`POST /contact`), par WhatsApp ou par téléphone.
  */
 export const IMMO_CONTACT = {
   whatsapp: '+229 97 00 12 12',
   phone: '+229 21 30 45 90',
-  email: 'bonjour@immo.bj',
   addressLines: ['Lot 1247, Fidjrossè Kpota', 'Cotonou, Bénin']
 } as const
 

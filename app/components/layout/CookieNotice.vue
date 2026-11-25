@@ -1,46 +1,53 @@
 <script setup lang="ts">
-import { Cookie } from '@lucide/vue'
-
 /**
- * Information cookies, sur tout le site. Bayo ne dépose que des cookies nécessaires (connexion,
- * préférences d'affichage) : aucun choix à proposer, donc pas de « Refuser ». Si un outil de mesure
- * d'audience ou de publicité est ajouté un jour, ce bandeau devra devenir un vrai consentement
- * (accepter / refuser) et le script ne se charger qu'après acceptation.
+ * Information cookies, sur tout le site : un petit bandeau non bloquant, en bas, qui ne couvre
+ * aucun bouton d'action. Bayo ne dépose aujourd'hui que des cookies nécessaires (connexion,
+ * préférences d'affichage) ; « Refuser » est pourtant proposé, et aussi visible qu'« Accepter »
+ * (même taille, même style) : le choix est gardé (`accepted` / `refused`) pour qu'un futur outil
+ * de mesure d'audience ou de publicité ne se charge qu'après acceptation. Les cookies nécessaires
+ * restent déposés dans les deux cas — le texte le dit.
  *
- * Cookie lu au rendu serveur (comme AppDownloadBanner) : une fois fermé, il ne réapparaît pas avant
- * l'hydratation. Sous le voile des modales (z-80 < z-90) : à la première visite de l'accueil, la
- * modale nuit/mois passe devant et le bandeau apparaît quand elle se ferme.
+ * Cookie lu au rendu serveur (comme AppDownloadBanner) : une fois le choix fait, le bandeau ne
+ * réapparaît pas avant l'hydratation. L'ancienne valeur `1` (« J'ai compris ») vaut un choix fait.
  */
-const acknowledged = useCookie<string | null>('immo_cookie_notice', {
+const choice = useCookie<string | null>('immo_cookie_notice', {
   default: () => null,
   sameSite: 'lax',
   maxAge: 60 * 60 * 24 * 395
 })
+
+const route = useRoute()
+/**
+ * Sous lg, la fiche d'un logement a sa propre barre « prix + Réserver » collée au-dessus de la
+ * barre d'onglets : le bandeau se pose au-dessus d'elle (≈ 76 px) au lieu de la recouvrir.
+ */
+const aboveListingBar = computed(() => route.path.startsWith('/biens/'))
 </script>
 
 <template>
   <div
-    v-if="!acknowledged"
+    v-if="!choice"
     role="region"
     aria-label="Cookies"
-    class="fixed inset-x-4 bottom-[calc(var(--mobile-tabbar-space)+8px)] z-[80] animate-[im-rise_.3s_var(--ease-standard)_both] rounded-2xl border border-[var(--border-subtle)] bg-white p-5 shadow-overlay sm:left-6 sm:right-auto sm:w-[440px] lg:bottom-6"
+    class="fixed inset-x-3 z-[60] animate-[im-rise_.3s_var(--ease-standard)_both] rounded-xl border border-[var(--border-subtle)] bg-white px-3.5 py-3 shadow-panel sm:left-4 sm:right-auto sm:w-[400px] lg:bottom-4"
+    :class="aboveListingBar ? 'bottom-[calc(var(--mobile-tabbar-space)+84px)]' : 'bottom-[calc(var(--mobile-tabbar-space)+8px)]'"
   >
-    <div class="flex items-start gap-3.5">
-      <span class="grid h-10 w-10 flex-none place-items-center rounded-lg bg-clay-100 text-clay-700"><Cookie class="h-5 w-5" :stroke-width="1.9" /></span>
-      <div class="min-w-0">
-        <p class="m-0 font-display text-[16px] font-bold tracking-[-.01em] text-[var(--text-primary)]">Seulement les cookies nécessaires</p>
-        <p class="mb-0 mt-1.5 text-[13.5px] leading-[1.55] text-[var(--text-secondary)]">
-          Bayo utilise uniquement les cookies indispensables au site : rester connecté et retenir vos préférences d'affichage. Aucun cookie publicitaire ni de mesure d'audience.
-        </p>
-      </div>
-    </div>
-    <div class="mt-4 flex items-center justify-end gap-4">
-      <NuxtLink to="/legal?doc=confidentialite#cookies" class="text-[13px] font-bold text-[var(--text-secondary)] underline underline-offset-4 hover:text-green-700">En savoir plus</NuxtLink>
+    <p class="m-0 text-[12.5px] leading-[1.45] text-[var(--text-secondary)]">
+      Bayo n'utilise que des cookies nécessaires (connexion, préférences d'affichage), déposés dans tous les cas. Votre choix vaudra pour une éventuelle mesure d'audience, aujourd'hui absente.
+      <NuxtLink to="/legal?doc=confidentialite#cookies" class="font-bold text-[var(--text-primary)] underline underline-offset-2 hover:text-green-700">En savoir plus</NuxtLink>
+    </p>
+    <!-- Deux boutons strictement identiques : refuser ne doit pas être plus difficile qu'accepter. -->
+    <div class="mt-2.5 grid grid-cols-2 gap-2">
       <button
         type="button"
-        class="rounded-pill bg-green-800 px-5 py-2.5 text-[13.5px] font-bold text-white transition-colors hover:bg-green-900"
-        @click="acknowledged = '1'"
-      >J'ai compris</button>
+        class="rounded-pill border border-[var(--border-default)] bg-white py-2 text-[13px] font-bold text-[var(--text-primary)] transition-colors hover:border-green-600 hover:text-green-700"
+        @click="choice = 'refused'"
+      >Refuser</button>
+      <button
+        type="button"
+        class="rounded-pill border border-[var(--border-default)] bg-white py-2 text-[13px] font-bold text-[var(--text-primary)] transition-colors hover:border-green-600 hover:text-green-700"
+        @click="choice = 'accepted'"
+      >Accepter</button>
     </div>
   </div>
 </template>

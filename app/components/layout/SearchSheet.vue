@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ChevronDown } from '@lucide/vue'
 import { buildSearchQuery, digitsOnly, draftFromQuery, mergeSearchQuery, type SearchRentalMode, type SearchDraft } from '~/utils/searchPill'
+import { displayName } from '~/utils/displayName'
 
 /**
  * Recherche plein écran ouverte depuis la pilule de l'en-tête mobile. Mène à
@@ -22,10 +23,23 @@ const MODES: { key: SearchRentalMode; label: string }[] = [
   { key: 'mois', label: 'Au mois' }
 ]
 
+/**
+ * Mode nuit / mois choisi sur l'accueil (même cookie que `pages/index.vue`) : la feuille part de
+ * ce choix au lieu de « Tous », pour qu'une recherche lancée depuis l'accueil montre les mêmes
+ * logements que la page.
+ */
+const rentalChoice = useCookie<string | null>('immo_rental_mode', { default: () => null, readonly: true })
+/**
+ * Sur /recherche, la page a déjà son propre sélecteur de mode, visible au-dessus des résultats :
+ * la feuille ne le répète pas (un seul contrôle nuit / mois par écran) et garde le mode affiché.
+ */
+const onSearchPage = computed(() => route.path === '/recherche')
+
 /** À chaque ouverture : on repart de la recherche affichée (si l'on est sur /recherche), sinon d'un formulaire vide. */
 watch(open, async isOpen => {
   if (!isOpen) return
-  Object.assign(draft, route.path === '/recherche' ? draftFromQuery(route.query) : { q: '', city: '', budget: '', mode: 'tous' })
+  const remembered: SearchRentalMode = rentalChoice.value === 'nuit' || rentalChoice.value === 'mois' ? rentalChoice.value : 'tous'
+  Object.assign(draft, onSearchPage.value ? draftFromQuery(route.query) : { q: '', city: '', budget: '', mode: remembered })
   if (!cities.value.length) {
     try {
       cities.value = await refData.fetchCities()
@@ -41,7 +55,8 @@ function onBudgetInput(e: Event) {
 const budgetDisplay = computed(() => (draft.budget ? Number(draft.budget).toLocaleString('fr-FR') : ''))
 
 function reset() {
-  Object.assign(draft, { q: '', city: '', budget: '', mode: 'tous' })
+  // Sur /recherche, le mode n'est pas affiché ici : « Effacer » ne doit pas le changer en douce.
+  Object.assign(draft, { q: '', city: '', budget: '', mode: onSearchPage.value ? draft.mode : 'tous' })
 }
 
 function submit() {
@@ -53,7 +68,7 @@ function submit() {
 <template>
   <LayoutBottomSheet v-model:open="open" title="Rechercher un logement">
     <form class="flex flex-col gap-3 pt-1" @submit.prevent="submit">
-      <div class="grid grid-cols-3 gap-1 rounded-pill bg-sand-200 p-1" role="radiogroup" aria-label="Type de location">
+      <div v-if="!onSearchPage" class="grid grid-cols-3 gap-1 rounded-pill bg-sand-200 p-1" role="radiogroup" aria-label="Type de location">
         <button
           v-for="m in MODES"
           :key="m.key"
@@ -75,7 +90,7 @@ function submit() {
         <span class="block text-[11px] font-black uppercase tracking-[.05em] text-[var(--text-faint)]">Ville</span>
         <select v-model="draft.city" class="mt-1 w-full cursor-pointer appearance-none border-0 bg-transparent text-[16px] font-semibold text-[var(--text-primary)] outline-none">
           <option value="">Toutes les villes</option>
-          <option v-for="c in cities" :key="c.id" :value="c.name">{{ c.name }}</option>
+          <option v-for="c in cities" :key="c.id" :value="c.name">{{ displayName(c.name) }}</option>
         </select>
         <ChevronDown class="pointer-events-none absolute bottom-3.5 right-4 h-4 w-4 text-[var(--text-faint)]" :stroke-width="1.9" />
       </label>

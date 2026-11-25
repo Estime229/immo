@@ -2,9 +2,14 @@
 import { BedDouble, ChevronLeft, ChevronRight, Heart, ImageOff, MapPin } from '@lucide/vue'
 import type { ListingCard } from '~/utils/propertyListing'
 import { listingStatusLabel } from '~/utils/propertyListing'
+import { displayName } from '~/utils/displayName'
 
 const props = defineProps<{ listing: ListingCard; favorite: boolean; priceSuffix?: string }>()
 const emit = defineEmits<{ open: []; favorite: []; hover: []; unhover: [] }>()
+
+/** Noms saisis en capitales (« AKASSATO », « Résidence DOSSOU ») ramenés en casse lisible — affichage seulement. */
+const title = computed(() => displayName(props.listing.title))
+const place = computed(() => [props.listing.neighborhoodName, props.listing.cityName].filter(Boolean).map(displayName).join(', '))
 
 /** Libellé français de l'état (jamais le code brut) — vide pour un logement libre. */
 const statusLabel = computed(() => listingStatusLabel(props.listing.status))
@@ -39,7 +44,7 @@ function onTouchEnd(e: TouchEvent) {
     :class="{ 'opacity-70': listing.virtual }"
     role="link"
     tabindex="0"
-    :aria-label="listing.title"
+    :aria-label="title"
     @click="!listing.virtual && emit('open')"
     @keydown.enter.self="!listing.virtual && emit('open')"
     @mouseenter="emit('hover')"
@@ -99,10 +104,10 @@ function onTouchEnd(e: TouchEvent) {
       <CoreBadge v-if="statusLabel" tone="onPhoto" class="absolute bottom-2.5 left-2.5 !text-clay-700">{{ statusLabel }}</CoreBadge>
     </div>
     <div class="p-4">
-      <p class="m-0 truncate text-sm font-bold">{{ listing.title }}</p>
+      <p class="m-0 truncate text-sm font-bold">{{ title }}</p>
       <p class="mb-0 mt-1 flex items-center gap-1 truncate text-[12.5px] text-[var(--text-muted)]">
         <MapPin class="h-3.5 w-3.5 flex-none" :stroke-width="1.9" />
-        <span class="truncate">{{ [listing.neighborhoodName, listing.cityName].filter(Boolean).join(', ') || 'Localisation non précisée' }}</span>
+        <span class="truncate">{{ place || 'Localisation non précisée' }}</span>
       </p>
       <p class="mb-0 mt-1 flex items-center gap-1 text-xs text-[var(--text-faint)]">
         <BedDouble class="h-3.5 w-3.5 flex-none" :stroke-width="1.9" />

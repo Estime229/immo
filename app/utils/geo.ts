@@ -118,6 +118,38 @@ export function resolveLocation(p: { gps_latitude?: string | number | null; gps_
   return center ? { ...center, precise: false } : null
 }
 
+/**
+ * Adresse masquée jusqu'à la visite (promesse faite aux propriétaires) : les
+ * cartes publiques ne montrent jamais le GPS exact d'un bien, mais le centre de
+ * la maille de ≈ 555 m qui le contient. Le décalage est déterministe (même zone
+ * à chaque visite, impossible de « moyenner » plusieurs affichages) et non
+ * réversible (tous les biens d'une maille donnent le même point). La
+ * demi-diagonale d'une maille (≈ 392 m au Bénin) reste sous le rayon du cercle
+ * affiché : le bien est toujours dans la zone dessinée.
+ */
+const AREA_CELL_DEG = 0.005
+export const APPROX_AREA_RADIUS_M = 400
+
+export function approximateArea(p: GeoPoint): GeoPoint {
+  const snap = (v: number) => Math.round((Math.floor(v / AREA_CELL_DEG) + 0.5) * AREA_CELL_DEG * 1e6) / 1e6
+  return { lat: snap(p.lat), lng: snap(p.lng) }
+}
+
+/**
+ * Distance d'un point d'intérêt affichée sur la fiche publique, par tranches. Une distance au
+ * mètre vers un lieu nommé (« Église Saint-Michel · 50 m ») permettait de retrouver la position
+ * du logement par recoupement, et annulait le floutage de `approximateArea`. Les tranches de
+ * 500 m restent du même ordre que la zone dessinée sur la carte.
+ * @param meters - distance saisie par le propriétaire (null ou invalide : rien à afficher)
+ * @returns libellé de tranche, ou chaîne vide
+ */
+export function poiDistanceBand(meters: number | null | undefined): string {
+  if (meters === null || meters === undefined || !Number.isFinite(meters) || meters < 0) return ''
+  if (meters <= 500) return 'à moins de 500 m'
+  if (meters <= 1000) return 'entre 500 m et 1 km'
+  return 'à plus de 1 km'
+}
+
 /** Distance approximative en km (équirectangulaire — largement suffisant à l'échelle d'un pays). */
 export function distanceKm(a: GeoPoint, b: GeoPoint) {
   const rad = Math.PI / 180

@@ -65,7 +65,7 @@ const title = computed(() => (notVerified.value ? "Vérifiez votre identité d'a
     </template>
 
     <template v-else-if="!created">
-      <p class="m-0 text-sm font-bold">{{ [unit.name, propertyName].filter(Boolean).join(' — ') }}</p>
+      <p class="m-0 text-sm font-bold">{{ [unit.name, propertyName].filter(Boolean).map(displayName).join(' — ') }}</p>
       <p class="mb-0 mt-1.5 text-[13.5px] leading-[1.55] text-[var(--text-muted)]">
         Le propriétaire voit votre nom, votre identité vérifiée et votre note de confiance. S'il vous retient, il prépare le bail : vous le relirez et le signerez en ligne.
       </p>

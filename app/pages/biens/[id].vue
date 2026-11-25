@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowLeft, ArrowRight, BadgeCheck, BedDouble, Check, ChevronLeft, ChevronRight, Church, CircleCheck, Clock, Droplets, ExternalLink, Heart, House, ImageOff, Images, Landmark, Layers, MapPin, MessageCircle, Ruler, School, Share2, ShoppingBasket, Sofa, Star, Volume2, Wine, X, Zap } from '@lucide/vue'
+import { ArrowLeft, ArrowRight, BadgeCheck, BedDouble, Check, ChevronLeft, ChevronRight, Church, CircleCheck, Clock, Droplets, Heart, House, ImageOff, Images, Landmark, Layers, MapPin, MessageCircle, Ruler, School, Share2, ShoppingBasket, Sofa, Star, Volume2, Wine, X, Zap } from '@lucide/vue'
 import type { Component } from 'vue'
 import type { AvailabilityBlock, OwnerProfile, PointOfInterest, PropertySearchResult, ReviewItem, ReviewStats, UnitPricing, UnitSearchResult } from '~/types/property'
 import type { BookingSummary, RentalRequestSummary } from '~/types/tenant'
@@ -8,13 +8,15 @@ import { flattenSearchResults, type ListingCard } from '~/utils/propertyListing'
 import { ApiRequestError } from '~/utils/authenticatedFetcher'
 import { errorText } from '~/utils/apiErrors'
 import { latestRequestFor } from '~/utils/rentalRequests'
-import { resolveLocation } from '~/utils/geo'
+import { APPROX_AREA_RADIUS_M, approximateArea, poiDistanceBand, resolveLocation } from '~/utils/geo'
 import { deriveHoldCountdown } from '~/utils/bookingHold'
 import { localTodayIso } from '~/utils/dateRangeCalendar'
 import { recallSearch } from '~/utils/searchPill'
 import { roleHomePath } from '~/utils/roleRoutes'
 import { personName } from '~/utils/avatar'
 import { classifyRental, displayPrice, mapLimited } from '~/utils/rentalMode'
+import { displayName } from '~/utils/displayName'
+import { groupFeatures, hasFeatureCategories, type FeatureRefEntry } from '~/utils/featureGroups'
 
 const route = useRoute()
 const router = useRouter()
@@ -91,7 +93,10 @@ function goBack() {
 const waterRef = ref<{ code: string; labels: Record<string, string> }[]>([])
 const meterRef = ref<{ code: string; labels: Record<string, string> }[]>([])
 const furnishedRef = ref<{ code: string; labels: Record<string, string> }[]>([])
-const featureRef = ref<{ code: string; labels: Record<string, string> }[]>([])
+/** Entrées complètes (et pas seulement code + libellé) : la catégorie de chaque équipement est dans `metadata`. */
+const featureRef = ref<FeatureRefEntry[]>([])
+/** Libellés des catégories (référentiel `FEATURE_CATEGORY`) — facultatif : sans lui, les catégories connues gardent leur nom français. */
+const featureCategoryLabels = ref<Record<string, string>>({})
 onMounted(async () => {
   try {
     const [w, m, f, feat] = await Promise.all([refData.fetchRef('WATER_SOURCE'), refData.fetchRef('METER_TYPE'), refData.fetchRef('FURNISHED_LEVEL'), refData.fetchRef('FEATURE')])
@@ -103,16 +108,31 @@ onMounted(async () => {
     // Sans référentiels, les caractéristiques s'affichent avec leur code : la fiche reste utilisable.
   }
 })
+onMounted(async () => {
+  try {
+    const cats = await refData.fetchRef('FEATURE_CATEGORY')
+    featureCategoryLabels.value = Object.fromEntries(cats.map(c => [c.code, c.labels.fr ?? c.code]))
+  } catch {
+    // Catégorie = simple intertitre : sans ce référentiel, les noms français connus suffisent.
+  }
+})
 function labelOf(list: { code: string; labels: Record<string, string> }[], code: string | null) {
   if (!code) return null
   return list.find(e => e.code === code)?.labels.fr ?? code
 }
 
-/** Équipements de l'unité choisie — saisis à la création (`pro/biens/ajouter.vue`) mais jamais affichés jusqu'ici. */
-const features = computed(() => {
-  const codes = selectedUnit.value?.resolved_features?.map(f => f.code) ?? []
-  return codes.map(code => labelOf(featureRef.value, code) ?? code)
-})
+/**
+ * Équipements de l'unité choisie, regroupés par catégorie (Essentiel, Confort, Sécurité,
+ * Extérieur, Autres). Une trentaine de pastilles à plat formaient un mur : la fiche en montre
+ * `FEATURE_PREVIEW`, les plus importantes d'abord, et la liste complète s'ouvre dans une fenêtre.
+ */
+const FEATURE_PREVIEW = 8
+const featureGroups = computed(() => groupFeatures(selectedUnit.value?.resolved_features?.map(f => f.code) ?? [], featureRef.value, featureCategoryLabels.value))
+const featureCount = computed(() => featureGroups.value.reduce((n, g) => n + g.items.length, 0))
+const featurePreview = computed(() => featureGroups.value.flatMap(g => g.items).slice(0, FEATURE_PREVIEW))
+/** Aucune catégorie connue (référentiel absent ou sans catégories) : une seule liste, sans intertitre « Autres ». */
+const featureHeadings = computed(() => hasFeatureCategories(featureGroups.value))
+const featuresOpen = ref(false)
 
 const specs = computed(() => {
   const u = selectedUnit.value
@@ -209,15 +229,25 @@ watch(() => property.value?.id, async id => {
   }
 })
 
-const placeLabel = computed(() => [property.value?.neighborhood?.name, property.value?.city?.name].filter(Boolean).join(', '))
-/** GPS s'il est valable (au Bénin), sinon centre de la ville présenté comme zone approximative. */
+/** Quartier et ville seulement : l'adresse exacte n'est jamais affichée sur la fiche publique. */
+const placeLabel = computed(() => [property.value?.neighborhood?.name, property.value?.city?.name].filter(Boolean).map(displayName).join(', '))
+const unitTitle = computed(() => displayName(selectedUnit.value?.name))
+/**
+ * Promesse faite aux propriétaires : l'adresse reste masquée jusqu'à la visite ou la réservation.
+ * Avec un GPS valable, la carte montre une zone de ≈ 400 m autour d'un point décalé de façon
+ * déterministe (`approximateArea`), jamais le repère exact ; sans GPS, le secteur de la ville.
+ * Le lien « Ouvrir dans Maps », qui menait au point exact, est retiré pour la même raison.
+ */
 const geoLocation = computed(() => (property.value ? resolveLocation(property.value) : null))
 const mapMarkers = computed(() => {
   const loc = geoLocation.value
   if (!loc || !property.value) return []
-  return [{ id: property.value.id, lat: loc.lat, lng: loc.lng, precise: loc.precise, label: loc.precise ? (placeLabel.value || property.value.name) : `Secteur · ${property.value.city?.name}` }]
+  const center = loc.precise ? approximateArea(loc) : loc
+  const sector = displayName(loc.precise ? (property.value.neighborhood?.name || property.value.city?.name) : property.value.city?.name)
+  return [{ id: property.value.id, lat: center.lat, lng: center.lng, precise: false, label: sector ? `Secteur · ${sector}` : 'Secteur approximatif' }]
 })
-const mapsUrl = computed(() => (geoLocation.value?.precise ? `https://www.google.com/maps?q=${geoLocation.value.lat},${geoLocation.value.lng}` : null))
+/** Zone resserrée autour d'un GPS connu ; secteur de ville (réglages par défaut de la carte) sinon. */
+const mapZone = computed(() => (geoLocation.value?.precise ? { radius: APPROX_AREA_RADIUS_M, zoom: 15 } : { radius: undefined, zoom: undefined }))
 
 const POI_ICONS: Record<string, Component> = { mosque: Landmark, mosquee: Landmark, bar: Wine, school: School, ecole: School, noise: Volume2, bruit: Volume2, church: Church, eglise: Church, market: ShoppingBasket, marche: ShoppingBasket }
 function poiIcon(type: string) {
@@ -738,7 +768,7 @@ async function onFavoriteSimilar(l: { propertyId: string | null }) {
         <div class="min-w-0">
           <div v-reveal="{ y: 16 }" class="flex flex-wrap items-start justify-between gap-x-5 gap-y-3">
             <div class="min-w-0">
-              <h1 class="m-0 font-display text-title-1 font-bold tracking-title-1">{{ selectedUnit.name }}</h1>
+              <h1 class="m-0 font-display text-title-1 font-bold tracking-title-1">{{ unitTitle }}</h1>
               <p class="mb-0 mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[15px] text-[var(--text-secondary)]">
                 <span class="inline-flex items-center gap-1.5"><MapPin class="h-4 w-4 text-[var(--text-faint)]" :stroke-width="1.9" />{{ placeLabel || 'Localisation non précisée' }}</span>
                 <template v-if="reviewStats && reviewStats.count > 0">
@@ -762,18 +792,39 @@ async function onFavoriteSimilar(l: { propertyId: string | null }) {
             </div>
           </div>
 
-          <template v-if="features.length">
+          <template v-if="featureCount">
             <div class="my-[30px] h-px bg-sand-300" />
             <h2 class="mb-3 mt-0 font-display text-[19px] font-bold tracking-[-.02em]">Équipements</h2>
-            <div class="flex flex-wrap gap-2">
-              <span v-for="f in features" :key="f" class="inline-flex items-center gap-1.5 rounded-pill border border-[var(--border-subtle)] bg-white px-3.5 py-2 text-[13px] font-semibold text-[var(--text-secondary)]"><Check class="h-3.5 w-3.5 text-green-600" :stroke-width="2.4" />{{ f }}</span>
-            </div>
+            <!-- Aperçu : les premiers équipements (Essentiel d'abord), la liste complète dans la fenêtre. -->
+            <ul class="m-0 grid list-none grid-cols-1 gap-x-6 gap-y-2.5 p-0 sm:grid-cols-2">
+              <li v-for="f in featurePreview" :key="f.code" class="flex items-center gap-2.5 text-[14px] text-[var(--text-secondary)]">
+                <Check class="h-4 w-4 flex-none text-green-600" :stroke-width="2.4" />{{ f.label }}
+              </li>
+            </ul>
+            <button
+              v-if="featureCount > FEATURE_PREVIEW"
+              type="button"
+              class="mt-4 inline-flex items-center gap-1.5 rounded-pill border border-[var(--border-default)] bg-white px-4 py-[9px] text-[13.5px] font-bold text-sand-900 transition-colors hover:border-green-600 hover:text-green-700"
+              @click="featuresOpen = true"
+            >Voir les {{ featureCount }} équipements</button>
           </template>
+
+          <CoreModal :open="featuresOpen" :title="`${featureCount} équipements`" width="620px" @close="featuresOpen = false">
+            <section v-for="g in featureGroups" :key="g.key" class="border-b border-[var(--border-subtle)] py-4 first:pt-1 last:border-b-0 last:pb-1">
+              <h3 v-if="featureHeadings" class="mb-2.5 mt-0 text-label font-bold uppercase tracking-label text-[var(--text-faint)]">{{ g.label }}</h3>
+              <ul class="m-0 grid list-none grid-cols-1 gap-x-6 gap-y-2.5 p-0 sm:grid-cols-2">
+                <li v-for="f in g.items" :key="f.code" class="flex items-center gap-2.5 text-[14px] text-[var(--text-secondary)]">
+                  <Check class="h-4 w-4 flex-none text-green-600" :stroke-width="2.4" />{{ f.label }}
+                </li>
+              </ul>
+            </section>
+          </CoreModal>
 
           <template v-if="description">
             <div class="my-[30px] h-px bg-sand-300" />
             <h2 class="mb-3 mt-0 font-display text-[19px] font-bold tracking-[-.02em]">À propos du logement</h2>
-            <p class="m-0 max-w-[640px] whitespace-pre-line text-[15px] leading-[1.65] text-[var(--text-secondary)]">{{ description }}</p>
+            <!-- Markdown léger des propriétaires (**gras**, puces) mis en forme, sans HTML injecté. -->
+            <DataRichText :text="description" class="max-w-[640px] text-[15px] leading-[1.65] text-[var(--text-secondary)]" />
           </template>
 
           <template v-if="owner">
@@ -812,14 +863,17 @@ async function onFavoriteSimilar(l: { propertyId: string | null }) {
           <div class="my-[30px] h-px bg-sand-300" />
           <h2 class="mb-4 mt-0 font-display text-[19px] font-bold tracking-[-.02em]">Localisation</h2>
           <div v-if="mapMarkers.length" class="relative isolate h-[280px] overflow-hidden rounded-2xl border border-[var(--border-subtle)]">
-            <MapView :markers="mapMarkers" :active-id="property.id" :single-zoom="15" />
-            <a v-if="mapsUrl" :href="mapsUrl" target="_blank" rel="noopener" class="absolute bottom-7 right-3.5 z-[1000] inline-flex items-center gap-1.5 rounded-pill bg-white/[.94] px-3.5 py-2 text-[12.5px] font-bold text-green-700 shadow-card">Ouvrir dans Maps <ExternalLink class="h-3.5 w-3.5" :stroke-width="2" /></a>
+            <MapView :markers="mapMarkers" :active-id="property.id" :zone-radius="mapZone.radius" :zone-zoom="mapZone.zoom" />
           </div>
           <div v-else class="grid h-[120px] place-items-center rounded-2xl border border-dashed border-[var(--border-default)] bg-white px-6 text-center text-[13.5px] text-[var(--text-muted)]">
             {{ placeLabel || 'Localisation non précisée' }}
           </div>
-          <p v-if="geoLocation && !geoLocation.precise" class="mb-0 mt-2.5 text-xs text-[var(--text-faint)]">Position approximative : l'emplacement exact de ce bien n'est pas disponible. La zone correspond au secteur de {{ property.city?.name }}.</p>
-          <p v-if="property.address" class="mb-0 mt-2.5 text-[13.5px] text-[var(--text-muted)]">{{ property.address }}</p>
+          <p v-if="placeLabel" class="mb-0 mt-2.5 flex items-center gap-1.5 text-[13.5px] font-semibold text-[var(--text-secondary)]"><MapPin class="h-4 w-4 flex-none text-[var(--text-faint)]" :stroke-width="1.9" />{{ placeLabel }}</p>
+          <p class="mb-0 mt-1.5 text-[13px] leading-[1.5] text-[var(--text-muted)]">
+            <template v-if="geoLocation?.precise">La zone indiquée situe le logement à quelques centaines de mètres près.</template>
+            <template v-else-if="geoLocation">La zone indiquée correspond au secteur de {{ displayName(property.city?.name) }}.</template>
+            L'adresse exacte vous est communiquée après confirmation de la visite ou de la réservation.
+          </p>
 
           <p class="mb-2.5 mt-5 text-label font-bold uppercase tracking-label text-[var(--text-faint)]">Aux alentours</p>
           <p v-if="!pois.length" class="m-0 text-[13.5px] text-[var(--text-muted)]">Aucun point d'intérêt signalé pour l'instant.</p>
@@ -828,7 +882,8 @@ async function onFavoriteSimilar(l: { propertyId: string | null }) {
               <span class="grid h-8 w-8 flex-none place-items-center rounded-pill bg-sand-100 text-[var(--text-secondary)]"><component :is="poiIcon(p.poi_type)" class="h-4 w-4" :stroke-width="1.9" /></span>
               <div class="min-w-0 flex-1">
                 <p class="m-0 text-[13.5px] font-semibold">{{ p.name }} <span class="font-normal text-[var(--text-faint)]">· {{ poiLabel(p.poi_type) }}</span></p>
-                <p v-if="p.distance_meters !== null" class="mb-0 mt-0.5 font-mono text-xs text-[var(--text-faint)]">{{ p.distance_meters }} m</p>
+                <!-- Par tranches, jamais au mètre : une distance exacte à un lieu nommé révélerait l'adresse masquée (voir poiDistanceBand). -->
+                <p v-if="poiDistanceBand(p.distance_meters)" class="mb-0 mt-0.5 text-xs text-[var(--text-faint)]">{{ poiDistanceBand(p.distance_meters) }}</p>
               </div>
               <CoreBadge v-if="p.verified" tone="ok" bordered><Check class="h-3 w-3" :stroke-width="2.6" />Vérifié</CoreBadge>
             </div>
@@ -848,7 +903,7 @@ async function onFavoriteSimilar(l: { propertyId: string | null }) {
                   :class="u.id === selectedUnit.id ? 'border-green-600 bg-green-50 text-green-800' : 'border-[var(--border-default)] bg-white text-[var(--text-secondary)] hover:border-green-400'"
                   :aria-pressed="u.id === selectedUnit.id"
                   @click="pickUnit(u)"
-                >{{ u.name }}</button>
+                >{{ displayName(u.name) }}</button>
               </div>
             </div>
             <div v-if="hasBothModes" class="mb-3.5 grid grid-cols-2 gap-1 rounded-pill bg-[var(--surface-sunken)] p-1" role="radiogroup" aria-label="Type de location">
@@ -984,7 +1039,7 @@ async function onFavoriteSimilar(l: { propertyId: string | null }) {
       <TenantCandidatureModal
         v-if="candidatureOpen && selectedUnit"
         :unit="selectedUnit"
-        :property-name="property.name"
+        :property-name="displayName(property.name)"
         @close="candidatureOpen = false"
         @created="onCandidatureCreated"
       />
@@ -992,7 +1047,7 @@ async function onFavoriteSimilar(l: { propertyId: string | null }) {
       <TenantVisitRequestModal
         v-if="visitModalOpen && selectedUnit"
         :unit-id="selectedUnit.id"
-        :unit-name="selectedUnit.name"
+        :unit-name="unitTitle"
         @close="visitModalOpen = false"
         @requested="visitModalOpen = false"
       />
@@ -1026,7 +1081,7 @@ async function onFavoriteSimilar(l: { propertyId: string | null }) {
                 <span class="text-[12.5px] font-semibold text-[var(--text-muted)]"> {{ panelSuffix }}</span>
               </p>
               <p class="m-0 truncate text-xs text-[var(--text-faint)]">
-                {{ holdActive ? 'Dates gardées, en attente de paiement' : isShortStay && nights ? `${nights} nuit${nights > 1 ? 's' : ''} · du ${shortDay(checkIn!)} au ${shortDay(checkOut!)}` : selectedUnit.name }}
+                {{ holdActive ? 'Dates gardées, en attente de paiement' : isShortStay && nights ? `${nights} nuit${nights > 1 ? 's' : ''} · du ${shortDay(checkIn!)} au ${shortDay(checkOut!)}` : unitTitle }}
               </p>
             </div>
             <CoreButton @click="barAction.run()">{{ barAction.label }}</CoreButton>
@@ -1036,9 +1091,9 @@ async function onFavoriteSimilar(l: { propertyId: string | null }) {
 
       <!-- Galerie plein écran -->
       <Teleport to="body">
-        <div v-if="lightboxOpen" class="fixed inset-0 z-[95] flex animate-[im-veil_.2s_ease_both] flex-col bg-[rgba(14,12,10,.96)] text-white" role="dialog" aria-modal="true" :aria-label="`Photos — ${selectedUnit.name}`">
+        <div v-if="lightboxOpen" class="fixed inset-0 z-[95] flex animate-[im-veil_.2s_ease_both] flex-col bg-[rgba(14,12,10,.96)] text-white" role="dialog" aria-modal="true" :aria-label="`Photos — ${unitTitle}`">
           <div class="flex flex-none items-center justify-between gap-3 px-4 pb-2 pt-[calc(12px+env(safe-area-inset-top))] sm:px-6">
-            <p class="m-0 min-w-0 truncate text-[13px] font-semibold text-white/80">{{ selectedUnit.name }}</p>
+            <p class="m-0 min-w-0 truncate text-[13px] font-semibold text-white/80">{{ unitTitle }}</p>
             <div class="flex items-center gap-3">
               <span class="font-mono text-[13px] font-bold">{{ lightboxIndex + 1 }} / {{ photos.length }}</span>
               <button type="button" class="grid h-10 w-10 place-items-center rounded-pill bg-white/10 transition-colors hover:bg-white/20" aria-label="Fermer la galerie" @click="lightboxOpen = false">
